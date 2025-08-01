@@ -1,0 +1,42 @@
+{
+  "name": "dynamic-mcp",
+  "version": "1.0.0",
+  "description": "Backend for Dynamic MCP management",
+  "main": "app.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/app.js",
+    "dev": "fastify start -w -l info -P dist/app.js",
+    "test": "node --test test/**/*.test.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/autoload": "^5.9.0",
+    "@fastify/sensible": "^5.6.0",
+    "@fastify/type-provider-typebox": "^4.0.0",
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^5.17.0",
+    "dotenv": "^17.2.1",
+    "fastify": "^4.28.1",
+    "fastify-cli": "^6.2.1",
+    "fastify-plugin": "^4.5.1",
+    "json-schema-to-ts": "^3.1.1",
+    "openai": "^5.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.13",
+    "prisma": "^6.13.0",
+    "typescript": "^5.5.4"
+  },
+  "prisma": {
+    "schema": "../prisma/schema.prisma"
+  }
+}
