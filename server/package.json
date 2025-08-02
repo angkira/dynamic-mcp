@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/app.js",
-    "dev": "fastify start -w -l info -P dist/app.js",
+    "dev": "nodemon",
+    "dev:watch": "concurrently \"tsc -w\" \"nodemon --delay 1000ms dist/app.js\"",
     "test": "node --test test/**/*.test.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -20,6 +21,7 @@
   "license": "ISC",
   "dependencies": {
     "@fastify/autoload": "^5.9.0",
+    "@fastify/cors": "^9.0.0",
     "@fastify/sensible": "^5.6.0",
     "@fastify/type-provider-typebox": "^4.0.0",
     "@google/generative-ai": "^0.24.1",
@@ -33,6 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.13",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2",
     "prisma": "^6.13.0",
     "typescript": "^5.5.4"
   },

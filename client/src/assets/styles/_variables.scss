@@ -1,0 +1,89 @@
+// Variables
+:root {
+  // Colors
+  --color-primary: #52b597;
+  --color-primary-hover: #5cdcbc;
+  --color-primary-light: #7be3be;
+  --color-primary-dark: #329272;
+
+  --color-secondary: #6b7280;
+  --color-secondary-hover: #4b5563;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  --color-background: #ffffff;
+  --color-surface: #f9fafb;
+  --color-border: #e5e7eb;
+  --color-border-light: #f3f4f6;
+
+  // Dark mode colors
+  --color-dark-text: #f9fafb;
+  --color-dark-text-secondary: #d1d5db;
+  --color-dark-text-muted: #9ca3af;
+
+  --color-dark-background: #111827;
+  --color-dark-surface: #1f2937;
+  --color-dark-border: #374151;
+  --color-dark-border-light: #4b5563;
+
+  // Spacing
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+
+  // Border radius
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  // Shadows
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  // Transitions
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.2s ease-in-out;
+  --transition-slow: 0.3s ease-in-out;
+
+  // Z-index
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-fixed: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+  --z-toast: 80;
+}
+
+// Dark mode
+.dark {
+  --color-text: var(--color-dark-text);
+  --color-text-secondary: var(--color-dark-text-secondary);
+  --color-text-muted: var(--color-dark-text-muted);
+  --color-background: var(--color-dark-background);
+  --color-surface: var(--color-dark-surface);
+  --color-border: var(--color-dark-border);
+  --color-border-light: var(--color-dark-border-light);
+}
+
+// Responsive breakpoints
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;

@@ -1,0 +1,217 @@
+@use 'variables' as *;
+
+// Responsive breakpoint mixins
+@mixin mobile {
+  @media (max-width: #{$breakpoint-md - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: #{$breakpoint-md}) and (max-width: #{$breakpoint-lg - 1px}) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: #{$breakpoint-lg}) {
+    @content;
+  }
+}
+
+// Button mixins
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  text-decoration: none;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@mixin button-primary {
+  @include button-base;
+  background-color: var(--color-primary);
+  color: white;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+@mixin button-secondary {
+  @include button-base;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-border-light);
+  }
+}
+
+// Input mixins
+@mixin input-base {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  transition: border-color var(--transition-normal);
+
+  &::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--color-surface);
+  }
+}
+
+// Card mixin
+@mixin card {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+// Loading spinner mixin
+@mixin loading-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: spin 1s linear infinite;
+}
+
+// Text utilities
+@mixin text-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// Flex utilities
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// Focus styles
+@mixin focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+// Icon sizing mixins for Font Awesome
+@mixin icon-xs {
+  font-size: 0.75rem; // 12px
+}
+
+@mixin icon-sm {
+  font-size: 1rem; // 16px
+}
+
+@mixin icon-md {
+  font-size: 1.25rem; // 20px
+}
+
+@mixin icon-lg {
+  font-size: 1.5rem; // 24px
+}
+
+@mixin icon-xl {
+  font-size: 2rem; // 32px
+}
+
+@mixin icon-2xl {
+  font-size: 3rem; // 48px
+}
+
+@mixin icon-3xl {
+  font-size: 4rem; // 64px
+}
+
+// For legacy SVG icons (if any remain)
+@mixin svg-icon-xs {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+@mixin svg-icon-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+@mixin svg-icon-md {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+@mixin svg-icon-lg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+@mixin svg-icon-xl {
+  width: 2rem;
+  height: 2rem;
+}
+
+@mixin svg-icon-2xl {
+  width: 3rem;
+  height: 3rem;
+}
+
+@mixin svg-icon-3xl {
+  width: 4rem;
+  height: 4rem;
+}

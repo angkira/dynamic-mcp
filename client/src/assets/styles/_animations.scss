@@ -1,0 +1,300 @@
+// Animation keyframes
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOutDown {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Streaming word animation
+@keyframes streamingWordFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Chain of thoughts animation
+@keyframes thoughtsPulse {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+}
+
+// Bounce animation
+@keyframes bounce {
+
+  0%,
+  20%,
+  53%,
+  80%,
+  100% {
+    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+    transform: translate3d(0, 0, 0);
+  }
+
+  40%,
+  43% {
+    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+    transform: translate3d(0, -30px, 0);
+  }
+
+  70% {
+    animation-timing-function: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+    transform: translate3d(0, -15px, 0);
+  }
+
+  90% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+// Shake animation
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-10px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(10px);
+  }
+}
+
+// Scale animation
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+// Animation mixins
+@mixin animate-fade-in($duration: var(--transition-normal)) {
+  animation: fadeIn $duration ease-in-out;
+}
+
+@mixin animate-fade-out($duration: var(--transition-normal)) {
+  animation: fadeOut $duration ease-in-out;
+}
+
+@mixin animate-slide-in-left($duration: var(--transition-normal)) {
+  animation: slideInLeft $duration ease-out;
+}
+
+@mixin animate-slide-in-right($duration: var(--transition-normal)) {
+  animation: slideInRight $duration ease-out;
+}
+
+@mixin animate-slide-in-up($duration: var(--transition-normal)) {
+  animation: slideInUp $duration ease-out;
+}
+
+@mixin animate-pulse($duration: 2s) {
+  animation: pulse $duration infinite;
+}
+
+@mixin animate-spin($duration: 1s) {
+  animation: spin $duration linear infinite;
+}
+
+@mixin animate-bounce($duration: 1s) {
+  animation: bounce $duration;
+}
+
+@mixin animate-shake($duration: 0.5s) {
+  animation: shake $duration ease-in-out;
+}
+
+@mixin animate-scale-in($duration: var(--transition-normal)) {
+  animation: scaleIn $duration ease-out;
+}
+
+@mixin animate-scale-out($duration: var(--transition-normal)) {
+  animation: scaleOut $duration ease-in;
+}
+
+// Streaming animation classes
+.streaming-word {
+  display: inline;
+
+  &.animating {
+    animation: streamingWordFadeIn var(--transition-fast) ease-out;
+  }
+}
+
+// Chain of thoughts animation
+.thoughts-content {
+  opacity: 0.6;
+  font-style: italic;
+  color: var(--color-text-muted);
+  animation: thoughtsPulse 2s infinite;
+}
+
+// Transition classes for Vue
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-normal);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-fade-enter-active {
+  transition: all var(--transition-normal);
+}
+
+.slide-fade-leave-active {
+  transition: all var(--transition-normal);
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+.bounce-enter-active {
+  animation: bounce var(--transition-slow);
+}
+
+.bounce-leave-active {
+  animation: bounce var(--transition-slow) reverse;
+}

@@ -1,0 +1,13 @@
+// Main SCSS file - Import order is important!
+
+// 1. Variables first (no mixins dependency)
+@use 'variables';
+
+// 2. Mixins (depends on variables) 
+@use 'mixins';
+
+// 3. Animations (depends on variables)
+@use 'animations';
+
+// 4. Base styles (depends on mixins and variables)
+@use 'base';

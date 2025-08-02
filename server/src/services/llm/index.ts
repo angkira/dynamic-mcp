@@ -4,6 +4,6 @@ import { OpenAiService } from './openai'
 import { GeminiService } from './gemini'
 
 export const llmServices = new Map<LlmProvider, LlmService>([
-  [LlmProvider.OpenAI, new OpenAiService()],
   [LlmProvider.Gemini, new GeminiService()],
+  [LlmProvider.OpenAI, new OpenAiService()],
 ]);

@@ -17,4 +17,24 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler', // Use modern Sass API
+        additionalData: `@use "@/assets/styles/variables" as *; @use "@/assets/styles/mixins" as *;`
+      }
+    }
+  },
+  server: {
+    // Fix MIME type issues for Firefox
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control'
+    },
+    fs: {
+      // Allow serving files from one level up to the project root
+      allow: ['..']
+    }
+  }
 })
