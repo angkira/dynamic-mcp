@@ -15,11 +15,8 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      LLM_PROVIDER: ${LLM_PROVIDER}
+    environment_file:
+      - .env
     depends_on:
       - db
     ports:
@@ -34,9 +31,8 @@ services:
       dockerfile: Dockerfile
       args:
         - VUE_API_URL=${VUE_API_URL}
-    environment:
-      - VUE_API_URL=${VUE_API_URL}
-      - NODE_ENV=development
+    environment_file:
+      - .env
     depends_on:
       - server
     ports:

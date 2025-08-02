@@ -6,11 +6,7 @@
         <FontAwesomeIcon icon="bars" class="mobile-menu-icon" />
       </button>
 
-      <!-- Chat Title -->
-      <div class="chat-title">
-        <h1 v-if="chats.currentChat">{{ chats.currentChat.title || 'Chat' }}</h1>
-        <h1 v-else>New Chat</h1>
-      </div>
+      <h1 class="chat-title">{{ chats?.currentChat?.title || 'Chat' }}</h1>
 
       <!-- Model Selector -->
       <div class="model-selector-container">
@@ -71,16 +67,16 @@ function handleModelSelect(value: string) {
 function renderModelLabel(option: any) {
   // For group headers, just return the label
   if (option.type === 'group') {
-    return option.label
+    return h('span', {}, option.label)
   }
 
   // For individual options, just return the model name since the group shows the provider
-  return option.label
+  return h('span', {}, option.label)
 }
 
 function renderSelectedTag({ option }: { option: any }) {
   // For the selected value display, show provider and model in two lines
-  return option.label
+  return h('span', {}, option.label)
 }
 </script>
 
@@ -116,12 +112,9 @@ function renderSelectedTag({ option }: { option: any }) {
 
 .chat-title {
   max-width: 30rem;
-}
-
-.chat-title h1 {
+  color: var(--color-primary);
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

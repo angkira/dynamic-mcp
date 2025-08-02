@@ -13,7 +13,7 @@
         <!-- Send/Stop button -->
         <button v-if="!messages.isStreaming" @click="sendMessage" :disabled="!canSend" class="send-btn"
           :class="{ 'active': canSend }" type="button">
-          <FontAwesomeIcon icon="paper-plane" class="send-icon" />
+          <FontAwesomeIcon icon="arrow-right" class="send-icon" />
         </button>
         <button v-else @click="stopGeneration" class="send-btn active" type="button">
           <FontAwesomeIcon icon="stop" class="stop-icon" />

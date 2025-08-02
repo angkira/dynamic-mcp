@@ -5,6 +5,7 @@ import { useModelStore } from './models'
 import { ChatAPIService } from '@/services/ChatAPIService'
 import { buildApiUrl } from '@/config/api'
 import type { Message, StreamingMessage, StreamingChunk, StreamingWord } from '@/types'
+import { StreamingChunkType } from '@/types'
 
 export const useMessagesStore = defineStore('messages', () => {
   // State
@@ -123,21 +124,21 @@ export const useMessagesStore = defineStore('messages', () => {
     // Only detect explicit thinking markers from the API
     if (chunk.includes('<thinking>') || chunk.includes('</thinking>') ||
         chunk.includes('<thought>') || chunk.includes('</thought>')) {
-      return { text: chunk, type: 'thought', isComplete: false }
+      return { text: chunk, type: StreamingChunkType.Reasoning, isComplete: false }
     }
     
     // Detect markdown code blocks
     if (chunk.includes('```')) {
-      return { text: chunk, type: 'code', isComplete: false }
+      return { text: chunk, type: StreamingChunkType.Code, isComplete: false }
     }
     
     // Detect markdown patterns
     if (chunk.match(/[#*_`]/)) {
-      return { text: chunk, type: 'markdown', isComplete: false }
+      return { text: chunk, type: StreamingChunkType.Markdown, isComplete: false }
     }
     
     // Default to content
-    return { text: chunk, type: 'content', isComplete: false }
+    return { text: chunk, type: StreamingChunkType.Content, isComplete: false }
   }
 
   async function addStreamingChunk(chunk: string) {
@@ -146,105 +147,9 @@ export const useMessagesStore = defineStore('messages', () => {
     // Increment chunk counter so UI can know when first chunk arrived
     streamingMessage.value.chunkCount = (streamingMessage.value.chunkCount || 0) + 1
 
-    // Process the chunk character by character to handle streaming tags properly
-    let processedContent = ''
-    let i = 0
-
-    while (i < chunk.length) {
-      const remaining = chunk.slice(i)
-      
-      // Check for opening thought tag - switch to thinking mode
-      if (remaining.startsWith('<thought>') && !streamingMessage.value.insideThoughtTag) {
-        // If this is a new chat and title hasn't been extracted, extract it from content so far
-        const chatsStore = useChatsStore()
-        const isNewChat = !chatsStore.currentChatId || chatsStore.currentChatId === 0
-        
-        if (isNewChat && !streamingMessage.value.titleExtracted) {
-          const contentSoFar = streamingMessage.value.content + processedContent
-          // Split at the first <thought>
-          const [maybeTitle] = contentSoFar.split('<thought>')
-          const title = maybeTitle.split('\n').find(l => l.trim())?.trim() ?? ''
-
-          if (title && title.length <= 100) {
-            streamingMessage.value.chatTitle = title
-            streamingMessage.value.titleExtracted = true
-
-            // Remove the title text and any leading \n
-            const remainder = contentSoFar.replace(title, '').replace(/^\n+/, '')
-            streamingMessage.value.content = remainder
-            processedContent = ''
-          }
-        }
-        
-        streamingMessage.value.insideThoughtTag = true
-        streamingMessage.value.isThinking = true
-        streamingMessage.value.thoughtBuffer = ''
-        i += 9 // Skip '<thought>' - don't include in content
-        continue
-      }
-      
-      // Check for closing thought tag - switch back to content mode
-      if (remaining.startsWith('</thought>') && streamingMessage.value.insideThoughtTag) {
-        streamingMessage.value.insideThoughtTag = false
-        streamingMessage.value.isThinking = false
-        streamingMessage.value.thoughtsCompleted = true
-        // Process any remaining thought buffer with animation
-        if (streamingMessage.value && streamingMessage.value.thoughtBuffer) {
-          await processThoughtWordsAnimation(streamingMessage.value.thoughtBuffer)
-          streamingMessage.value.thoughtContent += streamingMessage.value.thoughtBuffer
-          streamingMessage.value.thoughtBuffer = ''
-        }
-        i += 10 // Skip '</thought>' - don't include in content
-        continue
-      }
-      
-      // Check for opening thinking tag (backward compatibility)
-      if (remaining.startsWith('<thinking>') && !streamingMessage.value.insideThoughtTag) {
-        streamingMessage.value.insideThoughtTag = true
-        streamingMessage.value.isThinking = true
-        streamingMessage.value.thoughtBuffer = ''
-        i += 10 // Skip '<thinking>' - don't include in content
-        continue
-      }
-      
-      // Check for closing thinking tag (backward compatibility)
-      if (remaining.startsWith('</thinking>') && streamingMessage.value.insideThoughtTag) {
-        streamingMessage.value.insideThoughtTag = false
-        streamingMessage.value.isThinking = false
-        streamingMessage.value.thoughtsCompleted = true
-        // Process any remaining thought buffer with animation
-        if (streamingMessage.value && streamingMessage.value.thoughtBuffer) {
-          await processThoughtWordsAnimation(streamingMessage.value.thoughtBuffer)
-          streamingMessage.value.thoughtContent += streamingMessage.value.thoughtBuffer
-          streamingMessage.value.thoughtBuffer = ''
-        }
-        i += 11 // Skip '</thinking>' - don't include in content
-        continue
-      }
-
-      // If we're inside thought tags, add to thought buffer (not regular content)
-      if (streamingMessage.value && streamingMessage.value.insideThoughtTag) {
-        streamingMessage.value.thoughtBuffer += chunk[i]
-        // Process thought chunks only when we have enough characters
-        if (streamingMessage.value.thoughtBuffer.length > 0 && streamingMessage.value.thoughtBuffer.length % 20 === 0) {
-          const bufferToProcess = streamingMessage.value.thoughtBuffer
-          streamingMessage.value.thoughtBuffer = ''
-          await processThoughtWordsAnimation(bufferToProcess)
-          streamingMessage.value.thoughtContent += bufferToProcess
-        }
-      } else {
-        // Regular content - add to processed content for animation
-        processedContent += chunk[i]
-      }
-      
-      i++
-    }
-
-    // Only process regular content for animation if we have any
-    if (processedContent) {
-      streamingMessage.value.content += processedContent
-      await processWordsAnimation(processedContent)
-    }
+    // Simply add content and animate - no tag parsing since backend handles it
+    streamingMessage.value.content += chunk
+    await processWordsAnimation(chunk)
   }
 
   async function processWordsAnimation(chunk: string) {
@@ -410,6 +315,8 @@ export const useMessagesStore = defineStore('messages', () => {
     try {
       // Initialize streaming message
       initializeStreamingMessage()
+      // Track ongoing thought parsing across chunks
+      let insideThought = false
 
       // Build URL with query parameters instead of path parameters
       const url = buildApiUrl(chatId ? `/message?chatId=${chatId}` : '/message')
@@ -462,7 +369,7 @@ export const useMessagesStore = defineStore('messages', () => {
                 case 'chatId':
                   // Update current chat if it was newly created
                   if (!chatId) {
-                    chatsStore.setCurrentChat(data.chatId)
+                    chatsStore.setCurrentChat(data.chatId as number)
                   }
                   break
                   
@@ -472,17 +379,31 @@ export const useMessagesStore = defineStore('messages', () => {
                   // Clear the stored user message since it's now saved successfully
                   lastUserMessage.value = ''
                   break
+
+                case 'reasoning':
+                  // Process reasoning chunks (thoughts)
+                  if (streamingMessage.value) {
+                    await processThoughtWordsAnimation(data.content)
+                    streamingMessage.value.thoughtContent += data.content
+                  }
+                  break
+
+                case 'code':
+                case 'markdown':
+                  // Process code or markdown chunks
+                  await addStreamingChunk(data.content)
+                  break
+
+                case 'content':
+                  // Process regular content chunks (should not happen with new backend)
+                  await addStreamingChunk(data.content)
+                  break
                   
                 case 'title':
                   // Set chat title if it doesn't have one
-                  if (chatsStore.currentChatId && !chatsStore.currentChat?.title) {
-                    chatsStore.updateChat(chatsStore.currentChatId, { title: data.title })
+                  if (chatsStore.currentChatId && !chatsStore.currentChat?.title) { 
+                    chatsStore.updateChat(chatsStore.currentChatId, { title: data.title as string })
                   }
-                  break
-                  
-                case 'chunk':
-                  // Process streaming chunk with animation
-                  await addStreamingChunk(data.content)
                   break
                   
                 case 'complete':
@@ -505,8 +426,8 @@ export const useMessagesStore = defineStore('messages', () => {
                     // Update chat last message
                     if (chatsStore.currentChatId) {
                       chatsStore.updateChatLastMessage(
-                        chatsStore.currentChatId, 
-                        data.aiMessage.content.text
+                        chatsStore.currentChatId as number,
+                        data.aiMessage.content.text as string
                       )
                     }
                   }
@@ -516,7 +437,7 @@ export const useMessagesStore = defineStore('messages', () => {
                   break
                   
                 case 'error':
-                  throw new Error(data.error)
+                  throw new Error(data.error as string)
               }
             } catch (parseError) {
               console.error('Failed to parse SSE data:', parseError)
@@ -531,7 +452,7 @@ export const useMessagesStore = defineStore('messages', () => {
         return
       }
       
-      error.value = err instanceof Error ? err.message : 'Unknown error'
+      error.value = (err instanceof Error ? err.message : 'Unknown error') as string
       console.error('Failed to send message:', err)
       
       // Clear streaming state on error

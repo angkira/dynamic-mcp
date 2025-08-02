@@ -1,4 +1,4 @@
-import type { PaginationParams, GetMessagesResponse, SendMessageRequest, SendMessageResponse, GetChatsResponse, CreateChatRequest, CreateChatResponse, DeleteChatResponse, GetModelsResponse, GetDefaultConfigResponse, UpdateDefaultConfigRequest, UpdateDefaultConfigResponse } from '@/types';
+import type { PaginationParams, GetMessagesResponse, SendMessageRequest, SendMessageResponse, GetChatsResponse, CreateChatRequest, CreateChatResponse, DeleteChatResponse, GetModelsResponse, GetDefaultConfigResponse, UpdateDefaultConfigRequest, UpdateDefaultConfigResponse, GetSettingsResponse, UpdateSettingsRequest, UpdateSettingsResponse } from '@/types';
 import { httpClient } from './api';
 
 /**
@@ -65,6 +65,16 @@ export const ChatAPIService = {
     },
     async updateDefaultConfig(request: UpdateDefaultConfigRequest): Promise<UpdateDefaultConfigResponse> {
       return httpClient.put<UpdateDefaultConfigResponse>('/config/default', request);
+    },
+  },
+
+  // Settings endpoints
+  settings: {
+    async getSettings(): Promise<GetSettingsResponse> {
+      return httpClient.get<GetSettingsResponse>('/settings');
+    },
+    async updateSettings(request: UpdateSettingsRequest): Promise<UpdateSettingsResponse> {
+      return httpClient.put<UpdateSettingsResponse>('/settings', request);
     },
   },
 };

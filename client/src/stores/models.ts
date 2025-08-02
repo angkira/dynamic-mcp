@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { ChatAPIService } from '@/services/ChatAPIService'
+import { useSettingsStore } from './settings'
 
 import type { ModelGroup } from '@/types'
 
@@ -32,32 +33,36 @@ export const useModelStore = defineStore('models', () => {
     error.value = null
     
     try {
-      // Fetch default configuration from server
-      const defaultConfig = await ChatAPIService.config.getDefaultConfig()
-
-      const response = await ChatAPIService.models.getModels()
+      // Get settings store to use user preferences
+      const settingsStore = useSettingsStore()
+      
+      // Fetch user settings and available models
+      const [settingsResponse, modelsResponse] = await Promise.all([
+        ChatAPIService.settings.getSettings(),
+        ChatAPIService.models.getModels()
+      ])
 
       // Convert providers to model groups format
-      const modelGroups: ModelGroup[] = response.map(provider => ({
+      const modelGroups: ModelGroup[] = modelsResponse.map(provider => ({
         provider: provider.provider, // Correctly map backend's 'provider' to frontend's 'provider' key in ModelGroup
         models: provider.models.map(m => ({ id: m.model, name: m.model, model: m.model })) // Map backend's 'model' to 'id', 'name', and 'model' for ModelInfo
       }))
 
       availableModels.value = modelGroups
 
-      // Use server default configuration or fallback to first available
+      // Use user settings for default model selection
       if (modelGroups.length > 0) {
-        // Check if the server's default provider exists in available models
-        const defaultProviderGroup = modelGroups.find(group => group.provider === defaultConfig.provider)
+        // Check if the user's default provider exists in available models
+        const defaultProviderGroup = modelGroups.find(group => group.provider === settingsResponse.defaultProvider)
 
         if (defaultProviderGroup) {
-          // Use server's default provider
-          currentProvider.value = defaultConfig.provider
+          // Use user's default provider
+          currentProvider.value = settingsResponse.defaultProvider
 
-          // Check if the server's default model exists in the provider
-          const defaultModelExists = defaultProviderGroup.models.some(model => model.id === defaultConfig.model)
+          // Check if the user's default model exists in the provider
+          const defaultModelExists = defaultProviderGroup.models.some(model => model.id === settingsResponse.defaultModel)
           if (defaultModelExists) {
-            currentModel.value = defaultConfig.model
+            currentModel.value = settingsResponse.defaultModel
           } else {
             // Fallback to first model of the default provider
             currentModel.value = defaultProviderGroup.models[0]?.id || ''
@@ -95,12 +100,13 @@ export const useModelStore = defineStore('models', () => {
     currentModel.value = model;
 
     try {
-      await ChatAPIService.config.updateDefaultConfig({
-        provider,
-        model,
+      // Update user settings instead of config
+      await ChatAPIService.settings.updateSettings({
+        defaultProvider: provider,
+        defaultModel: model,
       });
     } catch (err) {
-      console.error('Failed to update default model on server:', err);
+      console.error('Failed to update default model in settings:', err);
       // Optionally, revert the client-side selection or show an error message
     }
   }

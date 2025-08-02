@@ -66,7 +66,7 @@
 
           <!-- Static markdown content for completed messages -->
           <VueMarkdown v-else-if="message.content.text" :markdown="message.content.text" :remark-plugins="[remarkGfm]"
-            :sanitize="true" class="markdown-content" />
+            :rehype-plugins="[rehypeRemovePTagsInLi]" :sanitize="true" class="markdown-content" />
         </div>
       </div>
 
@@ -93,6 +93,7 @@ import type { Message } from '@/types'
 import { VueMarkdown } from '@crazydos/vue-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageRole } from '@prisma/client'
+import { rehypeRemovePTagsInLi } from '@/utils/rehypePlugins'
 
 interface Props {
   message: Message
@@ -181,6 +182,12 @@ function regenerateResponse() {
   .message-actions {
     justify-content: flex-end;
   }
+
+  .message-text {
+    background-color: var(--color-primary-light);
+    margin-left: auto;
+    border-bottom-right-radius: var(--radius-sm);
+  }
 }
 
 .message-avatar {
@@ -261,13 +268,6 @@ function regenerateResponse() {
   word-break: break-words;
   line-height: 1.5;
   border: 1px solid var(--color-border);
-}
-
-.user-message .message-text {
-  background-color: var(--color-primary);
-  color: white;
-  margin-left: auto;
-  border-bottom-right-radius: var(--radius-sm);
 }
 
 .ai-message .message-text {

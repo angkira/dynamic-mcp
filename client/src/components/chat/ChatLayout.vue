@@ -15,9 +15,7 @@
     </div>
 
     <!-- Sidebar -->
-    <Transition name="sidebar">
-      <ChatSidebar v-if="ui.sidebarState !== 'closed'" />
-    </Transition>
+    <ChatSidebar v-if="ui.sidebarState !== 'closed'" />
 
     <!-- Mobile Overlay -->
     <Transition name="overlay">

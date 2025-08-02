@@ -19,4 +19,5 @@ export interface LlmService {
   sendMessageStreamWithHistory(message: string, history: ConversationMessage[]): AsyncIterable<string>
   getModels(): Promise<{ provider: string; model: string }[]>
   setModel(model: string): void
+  setBudgets(thinkingBudget: number, responseBudget: number): void
 }

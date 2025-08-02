@@ -5,6 +5,18 @@ import { LlmProvider } from '../../../services/llm/interface';
 import { MessageRole } from '@prisma/client';
 import { LlmError, LlmAuthError, LlmBadRequestError, LlmRateLimitError, LlmInternalError } from '../../../utils/errors';
 
+enum StreamingMessageType {
+  ChatId = 'chatId',
+  UserMessage = 'userMessage',
+  Reasoning = 'reasoning',
+  Code = 'code',
+  Markdown = 'markdown',
+  Content = 'content',
+  Title = 'title',
+  Complete = 'complete',
+  Error = 'error',
+}
+
 const sendMessageBodySchema = {
   type: 'object',
   properties: {
@@ -131,10 +143,42 @@ export default async function (fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'Invalid LLM provider specified.' });
       }
 
+      // Fetch user settings for budgets (using userId = 1 for now)
+      const settingsUserId = 1;
+      let userSettings;
+      try {
+        userSettings = await fastify.prisma.settings.findUnique({
+          where: { userId: settingsUserId }
+        });
+        
+        // If no settings exist, create default ones
+        if (!userSettings) {
+          userSettings = await fastify.prisma.settings.create({
+            data: {
+              userId: settingsUserId,
+              defaultProvider: 'openai',
+              defaultModel: 'o3-mini',
+              thinkingBudget: 2048,
+              responseBudget: 8192
+            }
+          });
+        }
+      } catch (error) {
+        fastify.log.error('Failed to fetch user settings:', error);
+        // Use default budgets as fallback
+        userSettings = {
+          thinkingBudget: 2048,
+          responseBudget: 8192
+        };
+      }
+
       // Set model if provided
       if (model) {
         llmService.setModel(model);
       }
+      
+      // Set user-specific budgets
+      llmService.setBudgets(userSettings.thinkingBudget, userSettings.responseBudget);
 
       // Create or get chat
       if (!chatId) {
@@ -182,9 +226,13 @@ export default async function (fastify: FastifyInstance) {
 
         let fullResponse = '';
         let extractedTitle: string | undefined;
+          let extractedThoughts: string[] = [];
+          let inThought = false;
+          let inTitle = false;
+          let titleBuffer = '';
         try {
           // Send chat ID first
-          reply.raw.write(`data: ${JSON.stringify({ type: 'chatId', chatId })}\n\n`);
+          reply.raw.write(`data: ${JSON.stringify({ type: StreamingMessageType.ChatId, chatId })}\n\n`);
 
           // Fetch conversation history from Chat's messages field for context
           const chat = await fastify.prisma.chat.findUnique({
@@ -197,31 +245,78 @@ export default async function (fastify: FastifyInstance) {
           // Stream AI response with conversation context
           for await (const chunk of llmService.sendMessageStreamWithHistory(content, conversationHistory)) {
             let contentChunk = chunk;
-            const titleMatch = contentChunk.match(/<title>([\s\S]*?)<\/title>/);
-            if (titleMatch) {
-              const rawTitle = titleMatch[1]!.trim();
-              if (rawTitle.length <= 100) {
-                extractedTitle = rawTitle;
-                reply.raw.write(`data: ${JSON.stringify({ type: 'title', title: rawTitle })}\n\n`);
+
+            // --- Title extraction supporting split chunks ---
+              if (!extractedTitle) {
+                const titleSegments = contentChunk.split(/(<\/?title>)/i);
+                contentChunk = '';
+                for (const seg of titleSegments) {
+                  if (seg === '') continue;
+                  const lower = seg.toLowerCase();
+                  if (lower === '<title>') { inTitle = true; continue; }
+                  if (lower === '</title>') {
+                    inTitle = false;
+                    if (titleBuffer.trim()) {
+                      extractedTitle = titleBuffer.trim();
+                      reply.raw.write(`data: ${JSON.stringify({ type: StreamingMessageType.Title, title: extractedTitle })}\n\n`);
+                    }
+                    titleBuffer = '';
+                    continue;
+                  }
+                  if (inTitle) {
+                    titleBuffer += seg;
+                  } else {
+                    contentChunk += seg;
+                  }
+                }
+                // If we're still inside title, wait for closing tag (skip rest processing)
+                if (inTitle) {
+                  continue;
+                }
               }
-              contentChunk = contentChunk.replace(titleMatch[0], '');
+
+              // Robust reasoning parsing supporting <thought> or <thoughts> tags and mixed content
+            // Split chunk by <thought> tags to handle mixed reasoning and answer in the *same* chunk
+            const segments = contentChunk.split(/(<\/?thoughts?>)/i);
+            for (const seg of segments) {
+              if (seg === '') continue;
+              const lower = seg.toLowerCase();
+              if (lower === '<thought>' || lower === '<thoughts>') { inThought = true; continue; }
+              if (lower === '</thought>' || lower === '</thoughts>') { inThought = false; continue; }
+
+              if (inThought) {
+                const reasoningText = seg.trim();
+                if (reasoningText) {
+                  extractedThoughts.push(reasoningText);
+                  reply.raw.write(`data: ${JSON.stringify({ type: StreamingMessageType.Reasoning, content: reasoningText })}\n\n`);
+                }
+              } else {
+                const normalText = seg;
+                fullResponse += normalText;
+                const chunkType = normalText.includes('```') ? StreamingMessageType.Code : StreamingMessageType.Markdown;
+                if (normalText) {
+                  reply.raw.write(`data: ${JSON.stringify({ type: chunkType, content: normalText })}\n\n`);
+                }
+              }
             }
-            fullResponse += contentChunk;
-            reply.raw.write(`data: ${JSON.stringify({ type: 'chunk', content: contentChunk })}\n\n`);
+            continue;
           }
+
           // Only save messages to DB after successful streaming completion
           const userMessage = await fastify.prisma.message.create({
             data: userMessageData,
           });
-          
+
           // Save complete AI message
           const aiMessage = await fastify.prisma.message.create({
             data: {
               content: { text: fullResponse, metadata: { provider: selectedProvider, model: model || 'default' } },
+              thoughts: extractedThoughts,
               chatId,
               role: MessageRole.AI,
             },
           });
+
           // Update chat title if we extracted one
           if (extractedTitle) {
             await fastify.prisma.chat.update({
@@ -231,8 +326,8 @@ export default async function (fastify: FastifyInstance) {
           }
           
           // Send user message and completion signal
-          reply.raw.write(`data: ${JSON.stringify({ type: 'userMessage', message: userMessage })}\n\n`);
-          reply.raw.write(`data: ${JSON.stringify({ type: 'complete', aiMessage })}\n\n`);
+          reply.raw.write(`data: ${JSON.stringify({ type: StreamingMessageType.UserMessage, message: userMessage })}\n\n`);
+          reply.raw.write(`data: ${JSON.stringify({ type: StreamingMessageType.Complete, aiMessage })}\n\n`);
           reply.raw.end();
         } catch (error: unknown) {
           console.error('Streaming LLM error:', error);
@@ -257,7 +352,7 @@ export default async function (fastify: FastifyInstance) {
           }
           
           const errorDetails = {
-            type: 'error',
+            type: StreamingMessageType.Error,
             error: errorMessage,
             code: errorCode,
             details: error instanceof Error ? {

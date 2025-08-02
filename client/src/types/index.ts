@@ -47,6 +47,20 @@ export interface PaginationParams {
   order?: SortOrder
 }
 
+// Settings types
+export interface Settings {
+  defaultProvider: string
+  defaultModel: string
+  thinkingBudget: number
+  responseBudget: number
+}
+
+export interface GetSettingsResponse extends Settings {}
+
+export interface UpdateSettingsRequest extends Partial<Settings> {}
+
+export interface UpdateSettingsResponse extends Settings {}
+
 export interface PaginatedResponse<T> {
   items: T[]
   total: number

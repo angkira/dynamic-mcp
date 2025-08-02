@@ -1,73 +1,81 @@
 <template>
-  <aside class="chat-sidebar" :style="{ width: ui.sidebarWidth }">
-    <div class="sidebar-header">
-      <button v-if="!ui.isMobile" @click="ui.toggleSidebar" class="collapse-btn"
-        :title="isCollapsed ? 'Expand' : 'Collapse'">
-        <FontAwesomeIcon icon="bars" class="collapse-icon" :class="{ 'rotate-180': isCollapsed }" />
-      </button>
-    </div>
+  <div>
+    <aside class="chat-sidebar" :style="{ width: ui.sidebarWidth }">
+      <div class="sidebar-header">
+        <button v-if="!ui.isMobile" @click="ui.toggleSidebar" class="collapse-btn"
+          :title="isCollapsed ? 'Expand' : 'Collapse'">
+          <FontAwesomeIcon icon="bars" class="collapse-icon" :class="{ 'rotate-180': isCollapsed }" />
+        </button>
+        <!-- Settings Button -->
+        <button @click="openSettingsModal" class="settings-btn" :class="{ 'collapsed': isCollapsed }" title="Settings">
+          <FontAwesomeIcon icon="fa-solid fa-gear" class="settings-icon" />
+          <span v-if="!isCollapsed">Settings</span>
+        </button>
+      </div>
 
-    <div class="sidebar-content">
-      <!-- New Chat Button -->
+      <div class="sidebar-content">
+        <!-- Chat List -->
+        <div v-if="!isCollapsed" class="chat-list-container">
+          <div class="section-header">
+            Recent Chats
+          </div>
 
+          <div class="chat-list">
+            <Transition name="loading" mode="out-in">
+              <div v-if="chats.isLoading" class="loading-state">
+                <div class="loading-spinner"></div>
+                <span v-if="!isCollapsed">Loading chats...</span>
+              </div>
 
-      <!-- Chat List -->
-      <div v-if="!isCollapsed" class="chat-list-container">
-        <div class="section-header">
-          Recent Chats
-        </div>
+              <div v-else-if="!chats.hasChats" class="empty-state">
+                <FontAwesomeIcon icon="comments" class="empty-state-icon" />
+                <p v-if="!isCollapsed">No chats yet. Start a conversation!</p>
+              </div>
 
-        <div class="chat-list">
-          <Transition name="loading" mode="out-in">
-            <div v-if="chats.isLoading" class="loading-state">
-              <div class="loading-spinner"></div>
-              <span v-if="!isCollapsed">Loading chats...</span>
-            </div>
-
-            <div v-else-if="!chats.hasChats" class="empty-state">
-              <FontAwesomeIcon icon="comments" class="empty-state-icon" />
-              <p v-if="!isCollapsed">No chats yet. Start a conversation!</p>
-            </div>
-
-            <TransitionGroup v-else name="chat-item" tag="div">
-              <ChatItem v-for="chat in chats.sortedChats" :key="`chat-${chat.id}`" :chat="chat"
-                :is-active="chats.currentChatId === chat.id" :is-collapsed="isCollapsed" @select="selectChat"
-                @delete="deleteChat" />
-            </TransitionGroup>
-          </Transition>
+              <TransitionGroup v-else name="chat-item" tag="div">
+                <ChatItem v-for="chat in chats.sortedChats" :key="`chat-${chat.id}`" :chat="chat"
+                  :is-active="chats.currentChatId === chat.id" :is-collapsed="isCollapsed" @select="selectChat"
+                  @delete="deleteChat" />
+              </TransitionGroup>
+            </Transition>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- User Profile Section -->
-    <div class="user-section">
-      <div class="user-info">
-        <div class="user-avatar">
-          {{ user.userInitials }}
-        </div>
-        <div v-if="ui.sidebarState === 'open'" class="user-details">
-          <div class="user-name">{{ user.userName }}</div>
-          <div class="user-email">{{ user.user?.email }}</div>
+      <!-- User Profile Section -->
+      <div class="user-section">
+        <div class="user-info">
+          <div class="user-avatar">
+            {{ user.userInitials }}
+          </div>
+          <div v-if="ui.sidebarState === 'open'" class="user-details">
+            <div class="user-name">{{ user.userName }}</div>
+            <div class="user-email">{{ user.user?.email }}</div>
+          </div>
         </div>
       </div>
-    </div>
-  </aside>
+    </aside>
+    <ChatSettings v-model:show="showSettingsModal" />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useUserStore } from '@/stores/user'
 import { useChatsStore } from '@/stores/chats'
 import { useMessagesStore } from '@/stores/messages'
 import ChatItem from './ChatItem.vue'
+import ChatSettings from './ChatSettings.vue'
 
 const ui = useUIStore()
 const user = useUserStore()
 const chats = useChatsStore()
 const messages = useMessagesStore()
 const router = useRouter()
+
+const showSettingsModal = ref(false)
 
 const isCollapsed = computed(() => ui.sidebarState === 'collapsed')
 
@@ -83,6 +91,10 @@ async function selectChat(chatId: number) {
 
 async function deleteChat(chatId: number) {
   await chats.deleteChat(chatId)
+}
+
+function openSettingsModal() {
+  showSettingsModal.value = true
 }
 </script>
 
@@ -159,6 +171,9 @@ async function deleteChat(chatId: number) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
 }
 
 .collapse-btn {
@@ -184,6 +199,43 @@ async function deleteChat(chatId: number) {
   &.rotate-180 {
     transform: rotate(180deg);
   }
+}
+
+.settings-btn {
+  @include button-secondary;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  white-space: nowrap;
+
+  &.collapsed {
+    flex-direction: column;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: var(--spacing-xs);
+    justify-content: center;
+
+    .collapsed-text {
+      font-size: 0.6rem;
+      line-height: 1;
+      white-space: wrap;
+      /* Ensure text wraps */
+      text-align: center;
+      margin-top: 2px;
+    }
+  }
+
+  &:hover {
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface);
+  }
+}
+
+.settings-icon {
+  @include icon-sm;
 }
 
 .new-chat-btn {

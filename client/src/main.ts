@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { NMessageProvider } from 'naive-ui'
 
 import App from './App.vue'
 import router from './router'
@@ -12,5 +13,8 @@ app.use(router)
 
 // Register Font Awesome globally
 app.component('FontAwesomeIcon', FontAwesomeIcon)
+
+// Wrap the App component with NMessageProvider
+app.component('NMessageProvider', NMessageProvider)
 
 app.mount('#app')

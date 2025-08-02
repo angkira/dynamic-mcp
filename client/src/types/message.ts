@@ -22,9 +22,23 @@ export interface Message {
 }
 
 // Streaming-related types
+
+export enum StreamingChunkType {
+  Thought = 'thought',
+  Content = 'content',
+  Markdown = 'markdown',
+  Code = 'code',
+  Reasoning = 'reasoning',
+  Title = 'title',
+  ChatId = 'chatId',
+  UserMessage = 'userMessage',
+  Complete = 'complete',
+  Error = 'error',
+}
+
 export interface StreamingChunk {
   text: string
-  type: 'thought' | 'content' | 'markdown' | 'code'
+  type: StreamingChunkType
   isComplete: boolean
 }
 

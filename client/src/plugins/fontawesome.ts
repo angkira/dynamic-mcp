@@ -11,6 +11,8 @@ import {
   faArrowDown,
   faPaperPlane,
   faStop,
+  faGear,
+  faArrowRight,
   
   // Chat & Communication
   faComments,
@@ -50,7 +52,8 @@ library.add(
   faArrowDown,
   faPaperPlane,
   faStop,
-  
+  faGear,
+  faArrowRight,
   // Chat & Communication
   faComments,
   faComment,

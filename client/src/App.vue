@@ -12,7 +12,9 @@ onMounted(() => {
 
 <template>
   <div id="app">
-    <RouterView />
+    <NMessageProvider>
+      <RouterView />
+    </NMessageProvider>
   </div>
 </template>
 

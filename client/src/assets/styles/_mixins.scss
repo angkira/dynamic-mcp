@@ -50,18 +50,31 @@
 
   &:focus-visible {
     outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline-offset: 0;
+    /* Remove offset for a flatter look */
   }
 }
 
 @mixin button-secondary {
   @include button-base;
-  background-color: var(--color-surface);
+  background-color: transparent;
+  /* Make background transparent by default */
   color: var(--color-text);
-  border: 1px solid var(--color-border);
+  /* Default text color */
+  border: none;
+  /* Ensure no border */
 
   &:hover:not(:disabled) {
-    background-color: var(--color-border-light);
+    background-color: var(--color-surface-hover);
+    /* Lighter hover for secondary */
+    color: var(--color-text-secondary);
+    /* Slightly darker text on hover */
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-text-muted);
+    /* Subtle focus ring */
+    outline-offset: 0;
   }
 }
 

@@ -6,6 +6,8 @@ import { getSystemPrompt } from '../../constants/systemPrompts';
 export class OpenAiService implements LlmService {
   private openai: OpenAI;
   private model = 'o3-mini';
+  private thinkingBudget: number = 2048;
+  private responseBudget: number = 8192;
 
   constructor() {
     this.openai = new OpenAI({
@@ -40,6 +42,7 @@ export class OpenAiService implements LlmService {
           { role: 'user', content: message }
         ],
         model: this.model,
+        max_tokens: this.responseBudget,
       });
 
       if (!completion.choices[0]) {
@@ -63,6 +66,7 @@ export class OpenAiService implements LlmService {
             { role: 'user', content: message }
           ],
           model: this.model,
+          max_tokens: this.responseBudget,
         });
 
         const responseContent = completion.choices[0]?.message?.content || '';
@@ -117,6 +121,7 @@ export class OpenAiService implements LlmService {
             { role: 'user', content: message }
           ],
           model: this.model,
+          max_tokens: this.responseBudget,
           stream: true,
         });
 
@@ -167,6 +172,7 @@ export class OpenAiService implements LlmService {
         const completion = await this.openai.chat.completions.create({
           messages,
           model: this.model,
+          max_tokens: this.responseBudget,
         });
 
         const responseContent = completion.choices[0]?.message?.content || '';
@@ -218,6 +224,7 @@ export class OpenAiService implements LlmService {
         const stream = await this.openai.chat.completions.create({
           messages,
           model: this.model,
+          max_tokens: this.responseBudget,
           stream: true,
         });
 
@@ -268,5 +275,15 @@ export class OpenAiService implements LlmService {
 
   setModel(model: string): void {
     this.model = model;
+  }
+
+  setBudgets(thinkingBudget: number, responseBudget: number): void {
+    // Note: OpenAI models (o1/o3) handle thinking internally, no direct API control
+    // We store thinkingBudget for interface consistency but don't use it in API calls
+    this.thinkingBudget = thinkingBudget;
+    this.responseBudget = responseBudget;
+    
+    // Log the budget settings for debugging
+    console.debug(`OpenAI budgets set: thinking=${this.thinkingBudget}, response=${this.responseBudget}`);
   }
 }

@@ -6,6 +6,8 @@ import { getSystemPrompt } from '../../constants/systemPrompts';
 export class GeminiService implements LlmService {
   private genAI: GoogleGenerativeAI;
   private model = 'gemini-2.5-flash';
+  private thinkingBudget: number = 2048;
+  private responseBudget: number = 8192;
 
   constructor() {
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
@@ -56,12 +58,12 @@ export class GeminiService implements LlmService {
         systemInstruction: getSystemPrompt(false, true), // Assume stream without history is first message
         generationConfig: {
           // For thinking models, allow longer responses
-          maxOutputTokens: this.model.includes('2.5') ? 2048 : 1024,
+          maxOutputTokens: this.responseBudget,
         },
         // Enable thinking for Gemini 2.5 models - separate from generationConfig
         ...(this.model.includes('2.5') && {
           thinkingConfig: {
-            thinkingBudget: 512, // Allow reasonable thinking tokens
+            thinkingBudget: this.thinkingBudget, // Use user-configured thinking budget
             includeThoughts: true, // Include thought summaries in response
           }
         })
@@ -124,12 +126,12 @@ export class GeminiService implements LlmService {
         systemInstruction: getSystemPrompt(history.length > 0, history.length === 0),
         generationConfig: {
           // For thinking models, allow longer responses
-          maxOutputTokens: this.model.includes('2.5') ? 8192 : 4096,
+          maxOutputTokens: this.responseBudget,
         },
         // Enable thinking for Gemini 2.5 models - separate from generationConfig
         ...(this.model.includes('2.5') && {
           thinkingConfig: {
-            thinkingBudget: 2048, // Allow reasonable thinking tokens
+            thinkingBudget: this.thinkingBudget, // Use user-configured thinking budget
             includeThoughts: true, // Include thought summaries in response
           }
         })
@@ -185,5 +187,10 @@ export class GeminiService implements LlmService {
 
   setModel(model: string): void {
     this.model = model;
+  }
+
+  setBudgets(thinkingBudget: number, responseBudget: number): void {
+    this.thinkingBudget = thinkingBudget;
+    this.responseBudget = responseBudget;
   }
 }

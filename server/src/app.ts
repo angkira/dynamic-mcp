@@ -35,4 +35,8 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   await fastify.register(chatsRoute, { prefix: '/api/chats' });
   await fastify.register(configRoute, { prefix: '/api/config' });
   await fastify.register(messageRoute, { prefix: '/api/message' });
+  
+  // Import and register settings route
+  const settingsRoute = await import('./routes/api/settings');
+  await fastify.register(settingsRoute.default, { prefix: '/api/settings' });
 }
