@@ -6,17 +6,17 @@ import toolRestrictionsBrick from './bricks/toolRestrictions';
 import generalAssistantBrick from './bricks/generalAssistant';
 
 export interface PromptOptions {
-  isFirstMessage?: boolean; // default false
-  hasHistory?: boolean; // default false
-  enableReasoning?: boolean; // default true
-  restrictToMCP?: boolean; // default false
+  isFirstMessage?: boolean;
+  hasHistory?: boolean;
+  enableReasoning?: boolean;
+  restrictToMCP?: boolean;
 }
 
 export function buildSystemPrompt(opts?: PromptOptions): string {
   const options = {
     isFirstMessage: false,
     hasHistory: false,
-    enableReasoning: true,
+    enableReasoning: false,
     restrictToMCP: false,
     ...opts,
   };
@@ -28,5 +28,7 @@ export function buildSystemPrompt(opts?: PromptOptions): string {
     options.restrictToMCP ? toolRestrictionsBrick : generalAssistantBrick,
   ];
 
-  return parts.filter(Boolean).join('\n\n');
+  const result = parts.filter(Boolean).join('\n\n');
+  
+  return result;
 }

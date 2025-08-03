@@ -67,14 +67,20 @@ export class OpenAiService implements LlmService {
     
     // Determine if it's the first message in the chat for prompt building
     const isFirstMessageInChat = history.length === 0;
+    const promptOptions = {
+        isFirstMessage: isFirstMessageInChat,
+        hasHistory: history.length > 0,
+        enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
+        restrictToMCP: false, // Allow general assistance, not restricted to MCP tools only
+    };
+    console.debug(` OpenAI prompt options:`, promptOptions);
+    
+    const systemPrompt = buildSystemPrompt(promptOptions);
+    console.debug(` OpenAI system prompt preview: "${systemPrompt.substring(0, 100)}..."`);
+    
     messages.push({ 
         role: 'system', 
-        content: buildSystemPrompt({
-            isFirstMessage: isFirstMessageInChat,
-            hasHistory: history.length > 0,
-            enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
-            restrictToMCP: false, // Allow general assistance, not restricted to MCP tools only
-        })
+        content: systemPrompt
     });
     
     history.forEach(msg => {

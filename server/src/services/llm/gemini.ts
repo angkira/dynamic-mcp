@@ -112,13 +112,17 @@ export class GeminiService implements LlmService {
       const contents = this.convertHistoryToGeminiFormat(history, message);
       const formattedTools = tools.length > 0 ? this.formatTools(tools) : [];
 
+      const promptOptions = {
+          hasHistory: history.length > 0,
+          isFirstMessage: history.length === 0,
+          enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
+      };
+      
+      const systemPrompt = buildSystemPrompt(promptOptions);
+
       const model = this.genAI.getGenerativeModel({
         model: this.model,
-        systemInstruction: buildSystemPrompt({
-            hasHistory: history.length > 0,
-            isFirstMessage: history.length === 0,
-            enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
-        }),
+        systemInstruction: systemPrompt,
         ...(formattedTools.length > 0 ? { tools: [{ functionDeclarations: formattedTools }] } : {}),
         generationConfig: {
           maxOutputTokens: this.responseBudget,

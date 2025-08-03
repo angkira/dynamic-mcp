@@ -40,6 +40,8 @@ export class MessagingService {
       appendFileSync(rawLogFile, `=== RAW LLM CHUNKS - Chat ${chatId} ===\n`);
       appendFileSync(streamLogFile, `=== STREAM EVENTS - Chat ${chatId} ===\n`);
 
+      console.debug(` MessageService.sendMessage - isThinking: ${isThinking}`);
+      
       const availableTools = await this.mcpService.getAvailableToolsForLLM();
       const responseStream = this.llmService.sendMessageStreamWithTools(content, history, availableTools, isThinking);
 

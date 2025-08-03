@@ -24,9 +24,11 @@
     "@fortawesome/free-solid-svg-icons": "^7.0.0",
     "@fortawesome/vue-fontawesome": "^3.1.1",
     "pinia": "^3.0.3",
+    "rehype": "^13.0.2",
     "rehype-rewrite": "^4.0.2",
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.1",
+    "unist-util-visit": "^5.0.0",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"
   },

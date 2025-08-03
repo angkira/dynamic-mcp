@@ -224,6 +224,16 @@ function regenerateResponse() {
 }
 </script>
 
+<style lang="scss">
+.message-body {
+  li > p {
+    display: inline;
+    margin: 0;
+    padding: 0;
+  }
+}
+</style>
+
 <style lang="scss" scoped>
 .message-item {
   display: flex;
@@ -338,6 +348,126 @@ function regenerateResponse() {
   border: 1px solid var(--color-border);
 }
 
+/* Markdown content styling */
+.markdown-content {
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  :deep(li) {
+    margin: 0.25em 0;
+    line-height: 1.6;
+
+    /* Fix for <li><p> issue: make single paragraph inline */
+    > p:only-child {
+      display: inline;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* For multiple paragraphs, reduce spacing */
+    > p:first-child {
+      margin-top: 0;
+    }
+
+    > p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Ensure proper spacing for paragraphs in lists */
+    > p + p {
+      margin-top: 0.5em;
+    }
+  }
+
+  :deep(ul) {
+    list-style-type: disc;
+  }
+
+  :deep(ol) {
+    list-style-type: decimal;
+  }
+
+  /* Nested lists */
+  :deep(li ul),
+  :deep(li ol) {
+    margin: 0.25em 0;
+    padding-left: 1.2em;
+  }
+
+  :deep(li ul) {
+    list-style-type: circle;
+  }
+
+  :deep(li li ul) {
+    list-style-type: square;
+  }
+
+  /* Other markdown elements */
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin: 0.75em 0 0.5em 0;
+    font-weight: 600;
+  }
+
+  :deep(p) {
+    margin: 0.5em 0;
+  }
+
+  :deep(code) {
+    background-color: var(--color-surface);
+    padding: 0.125em 0.25em;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  :deep(pre) {
+    background-color: var(--color-surface);
+    padding: 1em;
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: 0.75em 0;
+  }
+
+  :deep(pre code) {
+    background: none;
+    padding: 0;
+  }
+
+  :deep(blockquote) {
+    border-left: 3px solid var(--color-primary);
+    padding-left: 1em;
+    margin: 0.75em 0;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75em 0;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid var(--color-border);
+    padding: 0.5em;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background-color: var(--color-surface);
+    font-weight: 600;
+  }
+}
+
 .streaming .message-text {
   background-color: var(--color-background);
   border: 1px solid var(--color-border);
@@ -429,15 +559,12 @@ function regenerateResponse() {
 
 @keyframes pulse {
   0% {
-    transform: scale(1);
     opacity: 1;
   }
   50% {
-    transform: scale(1.05);
     opacity: 0.5;
   }
   100% {
-    transform: scale(1);
     opacity: 1;
   }
 }

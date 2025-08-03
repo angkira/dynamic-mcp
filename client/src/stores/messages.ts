@@ -413,7 +413,6 @@ export const useMessagesStore = defineStore('messages', () => {
       };
 
       const messageChunkHandler = (data: { content: string; chatId: number }) => {
-        console.log(`[DEBUG] Received MessageChunk:`, data);
         if (!streamingMessages.value.has(data.chatId)) {
           initializeStreamingMessage(data.chatId);
         }
@@ -421,7 +420,6 @@ export const useMessagesStore = defineStore('messages', () => {
       };
 
       const reasoningHandler = (data: { content: string; chatId: number }) => {
-        console.log(`[DEBUG] Received Reasoning:`, data);
         if (!streamingMessages.value.has(data.chatId)) {
           initializeStreamingMessage(data.chatId);
         }
@@ -429,7 +427,6 @@ export const useMessagesStore = defineStore('messages', () => {
       };
 
       const titleHandler = (data: { title: string; chatId: number }) => {
-        console.log(`[DEBUG] Received Title:`, data);
         if (!streamingMessages.value.has(data.chatId)) {
           initializeStreamingMessage(data.chatId);
         }
@@ -459,7 +456,6 @@ export const useMessagesStore = defineStore('messages', () => {
       };
 
       const messageCompleteHandler = (data: { aiMessage: Message; chatId: number }) => {
-        console.log(`[DEBUG] Received MessageComplete:`, data);
         // Finalize streaming for the specific chat
         finalizeStreamingMessage(data.chatId);
         const streamingMessage = streamingMessages.value.get(data.chatId);

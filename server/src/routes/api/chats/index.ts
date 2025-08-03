@@ -52,9 +52,10 @@ export default async function (fastify: FastifyInstance) {
       const formattedChats = chats.map(chat => {
         const lastMsg = chat.messages[0];
         const messageText = lastMsg ? (lastMsg.content as any).text : null;
+        
         return {
           id: chat.id,
-          title: messageText ?? '',
+          title: chat.title,
           userId: chat.userId,
           createdAt: chat.createdAt.toISOString(),
           updatedAt: chat.updatedAt.toISOString(),

@@ -3,6 +3,7 @@ export default `YOU MUST FOLLOW THIS FORMAT EXACTLY:
 1. ALWAYS start your response with <thought> tag
 2. Put ALL your reasoning, analysis, and step-by-step thinking between <thought> and </thought> tags
 3. After the closing </thought> tag, provide your final answer
+4. Keep your chain-of-thought reasoning clear and structured, but not long.
 
 MANDATORY FORMAT:
 <thought>
