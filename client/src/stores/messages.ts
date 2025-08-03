@@ -328,11 +328,8 @@ export const useMessagesStore = defineStore('messages', () => {
     const streamingMessage = streamingMessages.value.get(chatId)
     if (!streamingMessage) return
 
-    // Clean up HTML by removing all streaming spans and keeping just text
-    const tempDiv = document.createElement('div')
-    tempDiv.innerHTML = streamingMessage.html
-    streamingMessage.content = tempDiv.textContent || tempDiv.innerText || ''
-
+    // Don't overwrite the content - it's already correct from streaming chunks
+    // Just mark the message as complete
     streamingMessage.isComplete = true
     streamingMessage.isStreaming = false
     streamingMessage.isThinking = false

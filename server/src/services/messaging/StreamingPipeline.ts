@@ -18,6 +18,7 @@ export class StreamingPipeline {
   private titleBuffer = '';
   private currentType = ContentType.REGULAR;
   private fullResponse = '';
+  private streamedContent = ''; // Track only content that was actually streamed
   private thoughts: string[] = [];
   private title?: string;
   private rawBuffer = '';
@@ -58,14 +59,11 @@ export class StreamingPipeline {
         // Handle the tag
         this.handleTag(tag);
         
-        // Move past the processed content
+        // Move past the processed content (before tag + tag itself)
         processedUpTo += beforeTag.length + tag.length;
         
-        // If there's content after the tag, we'll process it in the next iteration
-        if (afterTag) {
-          // Continue processing remaining content
-          continue;
-        }
+        // Continue processing - the while loop will handle any remaining content
+        continue;
       } else {
         // No complete tag found in remaining content
         // Check if we might have a partial tag at the end
@@ -186,6 +184,8 @@ export class StreamingPipeline {
         content: this.regularBuffer,
         chatId: this.chatId,
       });
+      // Track the content that was actually streamed
+      this.streamedContent += this.regularBuffer;
       this.regularBuffer = '';
     }
   }
@@ -205,7 +205,7 @@ export class StreamingPipeline {
     if (this.titleBuffer.trim()) {
       // Remove XML tags from title
       this.title = this.titleBuffer.trim().replace(/<\/?title>/gi, '');
-      
+
       this.stream(ServerWebSocketEvent.Title, {
         title: this.title,
         chatId: this.chatId,
@@ -254,7 +254,7 @@ export class StreamingPipeline {
     console.debug(` Finalization complete. Thoughts: ${this.thoughts.length}, Title: ${this.title || 'none'}`);
 
     return {
-      fullResponse: this.fullResponse,
+      fullResponse: this.streamedContent, // Return only the content that was actually streamed
       thoughts: this.thoughts,
       title: this.title
     };
