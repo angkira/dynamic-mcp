@@ -40,9 +40,9 @@ export class StreamingPipeline {
       const potentialTag = this.rawBuffer + char;
       const tagMatch = potentialTag.match(/(<\/?(?:title|thought|thoughts)>)$/i);
       
-      if (tagMatch) {
+      if (tagMatch && tagMatch[1]) {
         // We found a complete tag, handle it
-        this.handleTag(tagMatch[1]);
+        this.handleTag(tagMatch[1]!);
         this.rawBuffer = '';
       } else if (potentialTag.match(/<\/?(?:title|thought|thoughts)$/i)) {
         // We're in the middle of a tag, keep building

@@ -121,7 +121,6 @@
             <div v-else class="streaming-placeholder">
               <span class="pulse">Assistant is thinking...</span>
             </div>
-            <span v-if="!streamingMessage?.isThinking" class="typing-cursor">|</span>
           </div>
 
           <!-- Static markdown content for completed messages -->
@@ -345,6 +344,12 @@ function regenerateResponse() {
   animation: pulse-border 2s infinite;
 }
 
+.streaming-placeholder {
+  animation: pulse 1.5s infinite;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .thoughts-content {
   margin-bottom: var(--spacing-md);
   padding: var(--spacing-sm);
@@ -419,6 +424,21 @@ function regenerateResponse() {
       opacity: 0;
       animation-fill-mode: forwards;
     }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 
