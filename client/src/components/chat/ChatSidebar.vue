@@ -67,7 +67,7 @@ import { useUserStore } from '@/stores/user'
 import { useChatsStore } from '@/stores/chats'
 import { useMessagesStore } from '@/stores/messages'
 import ChatItem from './ChatItem.vue'
-import ChatSettings from './ChatSettings.vue'
+import ChatSettings from '../settings/Settings.vue'
 
 const ui = useUIStore()
 const user = useUserStore()

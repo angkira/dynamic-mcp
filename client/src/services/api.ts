@@ -117,6 +117,13 @@ class HttpClient {
     })
   }
 
+  async patch<T>(endpoint: string, data?: object): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  }
+
   /**
    * Create SSE connection for streaming
    */

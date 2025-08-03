@@ -1,5 +1,8 @@
 <template>
   <div class="chat-input-container">
+    <div class="chat-input-header">
+      <n-checkbox v-model:checked="isThinking" label="Thinking mode" />
+    </div>
 
     <!-- Input form -->
     <form @submit.prevent="sendMessage" class="input-form">
@@ -39,6 +42,7 @@ import { useMessagesStore } from '@/stores/messages'
 import { useChatsStore } from '@/stores/chats'
 import { useUserStore } from '@/stores/user'
 import { useUIStore } from '@/stores/ui'
+import { NCheckbox } from 'naive-ui';
 
 const messages = useMessagesStore()
 const chats = useChatsStore()
@@ -47,6 +51,7 @@ const ui = useUIStore()
 
 const textareaRef = ref<HTMLTextAreaElement>()
 const inputText = ref('')
+const isThinking = ref(false);
 
 const inputPlaceholder = computed(() => {
   if (messages.isStreaming) return 'AI is thinking...'
@@ -71,7 +76,7 @@ async function sendMessage() {
   }
 
   try {
-    await messages.sendMessage(messageText, user.userId, chats.currentChatId || undefined)
+    await messages.sendMessage(messageText, user.userId, chats.currentChatId || undefined, isThinking.value)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     ui.addNotification(`Failed to send message: ${errorMessage}`, 'error');
@@ -129,6 +134,12 @@ onMounted(() => {
   width: 100%;
 }
 
+.chat-input-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: var(--spacing-md);
+}
 
 .stop-icon {
   @include icon-sm;

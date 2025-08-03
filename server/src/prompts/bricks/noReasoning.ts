@@ -1,0 +1,1 @@
+export default `Do not reveal chain-of-thought; answer directly.`;

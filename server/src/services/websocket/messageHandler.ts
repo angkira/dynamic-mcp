@@ -1,0 +1,104 @@
+import { FastifyInstance } from 'fastify';
+import { Socket } from 'socket.io';
+import { llmServices } from '../llm';
+import type { ConversationMessage } from '@shared/types';
+import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@shared/types';
+import { MessagingService } from '../messaging';
+import { McpService } from '../mcp/mcpService';
+import { Settings } from '@prisma/client';
+import { getMCPSystemInfo, isMCPAvailable } from '../../utils/mcpIntegration';
+
+export class WebSocketMessageHandlerService {
+  private fastify: FastifyInstance;
+  private mcpService: McpService; // Add mcpService as a private member
+
+  constructor(fastify: FastifyInstance) {
+    this.fastify = fastify;
+    this.mcpService = new McpService(fastify); // Instantiate McpService here
+  }
+
+  public async handleSendMessage(socket: Socket, payload: { content: string; userId: number; chatId?: number; provider?: LlmProvider; model?: string; stream: boolean; isThinking?: boolean }) {
+    const { content, userId, provider, model, /* stream, */ isThinking } = payload;
+    let { chatId } = payload;
+
+    const selectedProvider = (provider as LlmProvider) || (process.env.LLM_PROVIDER as LlmProvider);
+    const llmService = llmServices.get(selectedProvider);
+    if (!llmService) {
+      socket.emit(ServerWebSocketEvent.Error, { error: 'Invalid LLM provider specified.' });
+      return;
+    }
+
+    const settingsUserId = userId || 1;
+    let userSettings: Settings | null;
+    try {
+      userSettings = await this.fastify.prisma.settings.findUnique({
+        where: { userId: settingsUserId }
+      });
+      if (!userSettings) {
+        throw new Error('User settings not found');
+      }
+    } catch (error) {
+      this.fastify.log.error('Failed to fetch user settings:', error);
+      socket.emit(ServerWebSocketEvent.Error, { error: 'Failed to fetch user settings' });
+      return;
+    }
+
+    if (model) {
+      llmService.setModel(model);
+    }
+    llmService.setBudgets(userSettings.responseBudget);
+
+    let enhancedContent = content;
+    try {
+      if (isMCPAvailable(this.fastify)) {
+        const mcpSystemInfo = await getMCPSystemInfo(this.fastify);
+        if (mcpSystemInfo) {
+          enhancedContent = mcpSystemInfo + content;
+        }
+      }
+    } catch (error) {
+      this.fastify.log.warn('Failed to get MCP context:', error);
+    }
+
+    if (!chatId) {
+      const chat = await this.fastify.prisma.chat.create({
+        data: { userId },
+      });
+      chatId = chat.id;
+    }
+
+    const messagingService = new MessagingService(llmService, this.mcpService, this.fastify);
+
+    const streamCallback = (type: ServerWebSocketEvent, data: any) => {
+      // Ensure every WebSocket message includes chatId for proper routing
+      const messageData = { ...data, chatId };
+      socket.emit(type, messageData);
+    };
+
+    // Send Chat ID immediately
+    streamCallback(ServerWebSocketEvent.ChatId, { chatId });
+
+    const chat = await this.fastify.prisma.chat.findUnique({
+        where: { id: chatId },
+        include: { messages: { orderBy: { createdAt: 'asc' } } }
+    });
+    // Convert Prisma messages to ConversationMessage format
+    const conversationHistory: ConversationMessage[] = (chat?.messages || []).map(msg => ({
+      id: msg.id,
+      content: msg.content,
+      role: MessageRole[msg.role as keyof typeof MessageRole],
+      chatId: msg.chatId,
+      createdAt: msg.createdAt,
+      updatedAt: msg.updatedAt,
+      thoughts: msg.thoughts
+    }));
+
+    try {
+        await messagingService.sendMessage(enhancedContent, chatId, conversationHistory, streamCallback, selectedProvider, model, isThinking);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during streaming.';
+        this.fastify.log.error('Error in messaging service:', error);
+        streamCallback(ServerWebSocketEvent.Error, { error: errorMessage });
+    }
+  }
+}

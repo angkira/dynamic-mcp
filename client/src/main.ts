@@ -5,6 +5,7 @@ import { NMessageProvider } from 'naive-ui'
 import App from './App.vue'
 import router from './router'
 import FontAwesomeIcon from './plugins/fontawesome'
+import { socketService } from './services/socket';
 
 const app = createApp(App)
 
@@ -16,5 +17,7 @@ app.component('FontAwesomeIcon', FontAwesomeIcon)
 
 // Wrap the App component with NMessageProvider
 app.component('NMessageProvider', NMessageProvider)
+
+socketService.connect();
 
 app.mount('#app')

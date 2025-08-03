@@ -1,12 +1,14 @@
-import { GoogleGenerativeAI, GoogleGenerativeAIFetchError } from '@google/generative-ai';
+import { GoogleGenerativeAI, GoogleGenerativeAIFetchError, FunctionDeclaration, Schema, SchemaType } from '@google/generative-ai';
 import type { LlmService, ConversationMessage } from './interface';
 import { LlmAuthError, LlmBadRequestError, LlmRateLimitError, LlmInternalError } from '../../utils/errors';
-import { getSystemPrompt } from '../../constants/systemPrompts';
+import { buildSystemPrompt } from '../../prompts';
+import { MCPToolForLLM } from '../../types/mcp.types';
+
 
 export class GeminiService implements LlmService {
   private genAI: GoogleGenerativeAI;
-  private model = 'gemini-2.5-flash';
-  private thinkingBudget: number = 2048;
+  private model = 'gemini-2.5-flash-lite'; // Changed to a model that supports tools
+
   private responseBudget: number = 8192;
 
   constructor() {
@@ -15,8 +17,6 @@ export class GeminiService implements LlmService {
 
   private handleError(error: unknown): never {
     if (error instanceof GoogleGenerativeAIFetchError) {
-      // The GoogleGenerativeAIFetchError might not have a direct statusCode property.
-      // We can infer it from the error message or default to 500.
       const statusCode = error.status || 500;
       const errorMessage = error.message;
 
@@ -40,7 +40,7 @@ export class GeminiService implements LlmService {
     try {
       const model = this.genAI.getGenerativeModel({ 
         model: this.model,
-        systemInstruction: getSystemPrompt(false, true) // Assume single message is first message
+        systemInstruction: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false })
       });
       const result = await model.generateContent(message);
       const response = await result.response;
@@ -55,42 +55,18 @@ export class GeminiService implements LlmService {
     try {
       const model = this.genAI.getGenerativeModel({ 
         model: this.model,
-        systemInstruction: getSystemPrompt(false, true), // Assume stream without history is first message
+        systemInstruction: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false }),
         generationConfig: {
-          // For thinking models, allow longer responses
           maxOutputTokens: this.responseBudget,
         },
-        // Enable thinking for Gemini 2.5 models - separate from generationConfig
-        ...(this.model.includes('2.5') && {
-          thinkingConfig: {
-            thinkingBudget: this.thinkingBudget, // Use user-configured thinking budget
-            includeThoughts: true, // Include thought summaries in response
-          }
-        })
       });
       
       const result = await model.generateContentStream(message);
       
       for await (const chunk of result.stream) {
-        // Check if this chunk has parts with thinking content
-        if (chunk.candidates?.[0]?.content?.parts) {
-          for (const part of chunk.candidates[0].content.parts) {
-            // Type assertion for thinking parts since TypeScript doesn't know about this yet
-            const partWithThought = part as any;
-            if (partWithThought.thought && part.text) {
-              // This is a thought summary - send with thinking markers
-              yield `<thinking>${part.text}</thinking>`;
-            } else if (part.text) {
-              // Regular content
-              yield part.text;
-            }
-          }
-        } else {
-          // Fallback for regular text chunks
-          const chunkText = chunk.text();
-          if (chunkText) {
+        const chunkText = chunk.text();
+        if (chunkText) {
             yield chunkText;
-          }
         }
       }
     } catch (error) {
@@ -101,66 +77,66 @@ export class GeminiService implements LlmService {
   private convertHistoryToGeminiFormat(history: ConversationMessage[], currentMessage: string) {
     const contents = [];
     
-    // Add conversation history
     history.forEach(msg => {
       const messageText = msg.content?.text || String(msg.content);
       if (msg.role === 'USER') {
         contents.push({ role: 'user', parts: [{ text: messageText }] });
       } else if (msg.role === 'AI') {
-        contents.push({ role: 'model', parts: [{ text: messageText }] });
+        // Handle tool calls in AI messages
+        if (msg.content?.toolCalls) {
+            contents.push({ role: 'model', parts: [{ functionCall: msg.content.toolCalls[0] }] });
+        } else {
+            contents.push({ role: 'model', parts: [{ text: messageText }] });
+        }
+      } else if (msg.role === 'TOOL') {
+        contents.push({ role: 'function', parts: [{ functionResponse: { name: msg.content.name, response: { content: msg.content.result }}}]});
       }
     });
     
-    // Add current message
     contents.push({ role: 'user', parts: [{ text: currentMessage }] });
     
     return contents;
   }
 
   async *sendMessageStreamWithHistory(message: string, history: ConversationMessage[]): AsyncIterable<string> {
+    // This can now be a simplified version of sendMessageStreamWithTools
+    for await (const chunk of this.sendMessageStreamWithTools(message, history, [])) {
+        if (typeof chunk === 'string') {
+            yield chunk;
+        }
+    }
+  }
+  
+  async *sendMessageStreamWithTools(message: string, history: ConversationMessage[], tools: any[], isThinking?: boolean): AsyncIterable<any> {
     try {
       const contents = this.convertHistoryToGeminiFormat(history, message);
-      
+      const formattedTools = tools.length > 0 ? this.formatTools(tools) : [];
+
       const model = this.genAI.getGenerativeModel({
         model: this.model,
-        systemInstruction: getSystemPrompt(history.length > 0, history.length === 0),
+        systemInstruction: buildSystemPrompt({
+            hasHistory: history.length > 0,
+            isFirstMessage: history.length === 0,
+            enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
+        }),
+        ...(formattedTools.length > 0 ? { tools: [{ functionDeclarations: formattedTools }] } : {}),
         generationConfig: {
-          // For thinking models, allow longer responses
           maxOutputTokens: this.responseBudget,
         },
-        // Enable thinking for Gemini 2.5 models - separate from generationConfig
-        ...(this.model.includes('2.5') && {
-          thinkingConfig: {
-            thinkingBudget: this.thinkingBudget, // Use user-configured thinking budget
-            includeThoughts: true, // Include thought summaries in response
-          }
-        })
       });
 
-      const result = await model.generateContentStream({
-        contents,
-      });
+      const result = await model.generateContentStream({ contents });
 
       for await (const chunk of result.stream) {
-        // Check if this chunk has parts with thinking content
         if (chunk.candidates?.[0]?.content?.parts) {
-          for (const part of chunk.candidates[0].content.parts) {
-            // Type assertion for thinking parts since TypeScript doesn't know about this yet
-            const partWithThought = part as any;
-            if (partWithThought.thought && part.text) {
-              // This is a thought summary - send with thinking markers
-              yield `<thinking>${part.text}</thinking>`;
-            } else if (part.text) {
-              // Regular content
-              yield part.text;
+            for (const part of chunk.candidates[0].content.parts) {
+                if (part.text) {
+                    yield { type: 'text', content: part.text };
+                }
+                if (part.functionCall) {
+                    yield { type: 'toolCall', call: part.functionCall };
+                }
             }
-          }
-        } else {
-          // Fallback for regular text chunks
-          const chunkText = chunk.text();
-          if (chunkText) {
-            yield chunkText;
-          }
         }
       }
     } catch (error) {
@@ -170,15 +146,10 @@ export class GeminiService implements LlmService {
 
   async getModels(): Promise<{ provider: string; model: string }[]> {
     try {
-      // The Google Generative AI API does not currently support listing models.
-      // We will return a hardcoded list of a few popular models for now.
       return Promise.resolve([
         { provider: 'google', model: 'gemini-2.5-pro' },
         { provider: 'google', model: 'gemini-2.5-flash' },
         { provider: 'google', model: 'gemini-2.5-flash-lite' },
-        { provider: 'google', model: 'gemini-2.0-flash' },
-        { provider: 'google', model: 'gemini-1.5-pro' },
-        { provider: 'google', model: 'gemini-1.5-flash' },
       ]);
     } catch (error) {
       this.handleError(error);
@@ -189,8 +160,58 @@ export class GeminiService implements LlmService {
     this.model = model;
   }
 
-  setBudgets(thinkingBudget: number, responseBudget: number): void {
-    this.thinkingBudget = thinkingBudget;
+  setBudgets(responseBudget: number): void {
     this.responseBudget = responseBudget;
+  }
+
+  formatTools(tools: MCPToolForLLM[]): FunctionDeclaration[] {
+    return tools.map(tool => {
+      const { metadata, parameters, ...rest } = tool;
+
+      const properties = Object.entries(parameters).reduce((acc, [key, value]) => {
+        const { optional, type, ...paramProps } = value as any;
+        
+        // Map common type strings to SchemaType enum values
+        let schemaType: SchemaType;
+        switch (type?.toLowerCase()) {
+          case 'string':
+            schemaType = SchemaType.STRING;
+            break;
+          case 'number':
+          case 'integer':
+            schemaType = SchemaType.NUMBER;
+            break;
+          case 'boolean':
+            schemaType = SchemaType.BOOLEAN;
+            break;
+          case 'array':
+            schemaType = SchemaType.ARRAY;
+            break;
+          case 'object':
+            schemaType = SchemaType.OBJECT;
+            break;
+          default:
+            console.warn(`Unknown parameter type: ${type}, defaulting to STRING`);
+            schemaType = SchemaType.STRING;
+        }
+        
+        acc[key] = { ...paramProps, type: schemaType };
+        return acc;
+      }, {} as Record<string, Schema>);
+
+      const required = Object.entries(parameters)
+          .filter(([, value]) => !(value as { optional?: boolean }).optional)
+          .map(([key]) => key);
+
+      return {
+        name: rest.name,
+        description: rest.description,
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties,
+          required,
+        },
+      };
+    }) as FunctionDeclaration[];
   }
 }

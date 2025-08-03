@@ -125,7 +125,7 @@ async function handleRouteChange() {
 .messages-container {
   flex: 1;
   overflow: hidden;
-  margin-bottom: 120px;
+  margin-bottom: 170px;
   /* Height of ChatInput */
 }
 

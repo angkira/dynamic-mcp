@@ -18,7 +18,7 @@
 
     <!-- Messages -->
     <div
-      v-if="messages.allMessages.length || (messages.isStreaming && (messages.streamingMessage?.chunkCount ?? 0) > 0)"
+      v-if="messages.allMessages.length || (messages.isStreaming && (messages.currentStreamingMessage?.chunkCount ?? 0) > 0)"
       class="messages-wrapper">
       <div class="messages-container">
         <MessageItem v-for="message in messages.allMessages" :key="`message-${message.id}-${message.role}`"
@@ -92,7 +92,7 @@ watch(
 
 // Watch streaming content changes
 watch(
-  () => messages.streamingMessage?.content,
+  () => messages.currentStreamingMessage?.content,
   async () => {
     if (messages.isStreaming && !isUserScrolled.value) {
       await nextTick()
@@ -107,8 +107,12 @@ watch(
   () => chats.currentChatId,
   async (newChatId) => {
     if (newChatId) {
-      // Fetch messages for the selected chat
-      await messages.fetchMessages(newChatId)
+      // Only fetch messages for existing chats (not new/temporary ones)
+      // New chats already have messages locally and will be synced via WebSocket
+      const existingChat = chats.chats.find(chat => chat.id === newChatId)
+      if (existingChat && existingChat.id !== -1) {
+        await messages.fetchMessages(newChatId)
+      }
       await nextTick()
       scrollToBottom()
       isUserScrolled.value = false
