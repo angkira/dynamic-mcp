@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:mcp-servers": "tsc src/mcp-servers/memory-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true --skipLibCheck true && tsc src/mcp-servers/dynamic-mcp-api-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true --skipLibCheck true",
+    "build:all": "npm run build && npm run build:mcp-servers",
     "start": "node dist/app.js",
     "dev": "nodemon",
     "dev:watch": "concurrently \"tsc -w\" \"nodemon --delay 1000ms dist/app.js\"",
@@ -54,7 +56,7 @@
     "typescript": "^5.5.4"
   },
   "prisma": {
-    "schema": "./prisma/schema.prisma"
+    "schema": "../prisma/schema.prisma"
   },
   "_moduleAliases": {
     "@shared": "../shared/dist"

@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo 'Choose: npm run dev:server or npm run dev:client'",
+    "dev": "echo 'Choose: npm run dev:server or npm run dev:client or npm run docker:dev'",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "dev:full": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -21,7 +21,20 @@
     "clean": "npm run clean:shared && npm run clean:server && npm run clean:client",
     "clean:shared": "cd shared && npm run clean",
     "clean:server": "cd server && npm run clean || true",
-    "clean:client": "cd client && npm run clean || true"
+    "clean:client": "cd client && npm run clean || true",
+    "docker:dev": "docker compose up --build",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up --build",
+    "docker:down": "docker compose down",
+    "docker:clean": "docker compose down -v --rmi all --remove-orphans",
+    "mcp:start": "./scripts/mcp-manager.sh start",
+    "mcp:stop": "./scripts/mcp-manager.sh stop",
+    "mcp:restart": "./scripts/mcp-manager.sh restart",
+    "mcp:status": "./scripts/mcp-manager.sh status",
+    "mcp:build": "./scripts/mcp-manager.sh build",
+    "mcp:test": "./scripts/test-mcp-daemons.sh",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:studio": "npx prisma studio"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

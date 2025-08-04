@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "build-mcp-servers": "npx tsc src/mcp-servers/memory-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true && npx tsc src/mcp-servers/dynamic-mcp-api-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true",
+    "start-memory-server": "node dist/mcp-servers/memory-server.js",
+    "start-mcp-api-server": "node dist/mcp-servers/dynamic-mcp-api-server.js"
+  }
+}

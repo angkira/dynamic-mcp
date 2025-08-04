@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client'
 import type { MCPServer, MCPServerStatus } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
-import MemoryService from '../memory/memoryService'
 import type { 
   MCPServerUpdateData,
   MCPToolForLLM,
@@ -22,18 +21,19 @@ import type {
 export class McpService {
   private prisma: PrismaClient
   private connectionManager: McpConnectionManager
-  private memoryService: MemoryService
 
   constructor(fastify?: FastifyInstance) {
     this.prisma = new PrismaClient()
     this.connectionManager = new McpConnectionManager(fastify)
-    this.memoryService = new MemoryService()
   }
 
-    /**
+  /**
    * Initialize the service and connection manager
    */
   async initialize() {
+    // Ensure the default internal servers exist in the database
+    await this.ensureDefaultServers()
+    
     // Load global settings and pass them to connection manager
     const settings = await this.getUserSettings()
     this.connectionManager.updateGlobalSettings({
@@ -383,7 +383,6 @@ export class McpService {
    */
   async executeMCPTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
     // Parse server and tool name from format "serverName__toolName"
-    // Also handle legacy format for internal tools
     let serverName: string;
     let originalToolName: string;
     
@@ -395,9 +394,8 @@ export class McpService {
       serverName = parts[0];
       originalToolName = parts[1];
     } else {
-      // Handle legacy internal tool names without prefix
-      serverName = 'dynamic-mcp-api';
-      originalToolName = toolName;
+      // Legacy format - try to find which server has this tool
+      throw new Error('Legacy tool format not supported. Use "serverName__toolName" format.');
     }
 
     // Find the server by name
@@ -413,12 +411,7 @@ export class McpService {
       throw new Error(`MCP server "${serverName}" not found or not enabled`)
     }
 
-    // If this is an internal server, handle it directly
-    if (server.transportCommand === 'internal') {
-      return await this.executeInternalTool(originalToolName, arguments_)
-    }
-
-    // Execute the tool
+    // All tools now go through the connection manager - no more internal handling
     return await this.connectionManager.callTool(server.id, originalToolName, arguments_)
   }
 
@@ -453,18 +446,90 @@ export class McpService {
   }
 
   /**
-   * Ensure the default server exists in the database
+   * Ensure the default servers exist in the database
    */
-  private async ensureDefaultServer() {
-    const existingDefault = await this.prisma.mCPServer.findFirst({
+  private async ensureDefaultServers() {
+    await this.ensureMemoryServer()
+    await this.ensureDynamicMCPAPIServer()
+  }
+
+  /**
+   * Ensure the memory server exists in the database
+   */
+  private async ensureMemoryServer() {
+    const existingMemory = await this.prisma.mCPServer.findFirst({
+      where: { 
+        name: 'memory',
+        userId: 1
+      }
+    })
+
+    if (!existingMemory) {
+      console.log('🔧 Creating memory MCP server entry...')
+      
+      await this.prisma.mCPServer.create({
+        data: {
+          userId: 1,
+          name: 'memory',
+          version: '1.0.0',
+          description: 'Persistent memory system that allows AI to remember and recall information across conversations',
+          isEnabled: true,
+          status: 'DISCONNECTED',
+          transportType: 'STDIO',
+          transportCommand: 'node',
+          transportArgs: [
+            'dist/mcp-servers/memory-server.js'
+          ],
+          transportEnv: {},
+          authType: 'NONE',
+          configAutoConnect: true,
+          configConnectionTimeout: 10000,
+          configMaxRetries: 3,
+          configRetryDelay: 2000,
+          configValidateCertificates: true,
+          configDebug: false,
+          capabilities: {
+            tools: [
+              {
+                name: 'memory_remember',
+                description: '💾 REMEMBER information that should be recalled later. Use this to store facts, preferences, context, or any important information.',
+                labels: ['memory', 'storage', 'persistence']
+              },
+              {
+                name: 'memory_recall',
+                description: '🧠 RECALL previously stored memories. Use this to retrieve information that was stored earlier.',
+                labels: ['memory', 'retrieval', 'search']
+              },
+              {
+                name: 'memory_reset',
+                description: '🗑️ DELETE stored memories. Use with caution! Can delete all memories or just those with a specific key.',
+                labels: ['memory', 'cleanup', 'deletion']
+              }
+            ],
+            resources: [],
+            prompts: []
+          },
+          lastConnected: null
+        }
+      })
+      
+      console.log('✅ Memory MCP server created')
+    }
+  }
+
+  /**
+   * Ensure the dynamic MCP API server exists in the database  
+   */
+  private async ensureDynamicMCPAPIServer() {
+    const existingAPI = await this.prisma.mCPServer.findFirst({
       where: { 
         name: 'dynamic-mcp-api',
         userId: 1
       }
     })
 
-    if (!existingDefault) {
-      console.log('🔧 Creating default MCP server entry...')
+    if (!existingAPI) {
+      console.log('🔧 Creating dynamic MCP API server entry...')
       
       await this.prisma.mCPServer.create({
         data: {
@@ -473,11 +538,15 @@ export class McpService {
           version: '1.0.0',
           description: 'Internal MCP server for managing the Dynamic MCP system via chat',
           isEnabled: true,
-          status: 'CONNECTED',
+          status: 'DISCONNECTED',
           transportType: 'STDIO',
-          transportCommand: 'internal',
+          transportCommand: 'node',
+          transportArgs: [
+            'dist/mcp-servers/dynamic-mcp-api-server.js'
+          ],
+          transportEnv: {},
           authType: 'NONE',
-          configAutoConnect: false, // Don't auto-connect the internal server
+          configAutoConnect: true,
           configConnectionTimeout: 10000,
           configMaxRetries: 3,
           configRetryDelay: 2000,
@@ -545,11 +614,11 @@ export class McpService {
               }
             ]
           },
-          lastConnected: new Date()
+          lastConnected: null
         }
       })
       
-      console.log('✅ Default MCP server created')
+      console.log('✅ Dynamic MCP API server created')
     }
   }
 
@@ -607,469 +676,6 @@ export class McpService {
         resources: [],
         prompts: []
       }
-    }
-  }
-
-  /**
-   * Cleanup resources
-   */
-  /**
-   * Execute internal MCP management tools
-   */
-  private async executeInternalTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
-    const args = arguments_ as Record<string, any> || {};
-    
-    try {
-      switch (toolName) {
-        // Unified internal tool name
-        case 'mcp_list_servers':
-        // Legacy alias kept for backward compatibility
-        case 'list_mcp_servers':
-          return await this.handleListServers();
-          
-        case 'mcp_create_server':
-          return await this.handleCreateServer(args);
-          
-        case 'mcp_update_server':
-          return await this.handleUpdateServer(args);
-          
-        case 'mcp_delete_server':
-          return await this.handleDeleteServer(args);
-          
-        case 'mcp_toggle_server':
-          return await this.handleToggleServer(args);
-          
-        case 'mcp_connect_server':
-          return await this.handleConnectServer(args);
-          
-        case 'mcp_disconnect_server':
-          return await this.handleDisconnectServer(args);
-          
-        case 'mcp_get_server_tools':
-          return await this.handleGetServerTools(args);
-          
-        case 'memory_remember':
-          return await this.handleMemoryRemember(args);
-          
-        case 'memory_recall':
-          return await this.handleMemoryRecall(args);
-          
-        case 'memory_reset':
-          return await this.handleMemoryReset(args);
-          
-        case 'list_mcp_servers':
-          return await this.handleListServers();
-          
-        default:
-          throw new Error(`Unknown internal tool: ${toolName}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error executing ${toolName}: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  private async handleListServers(): Promise<CallToolResult> {
-    const servers = await this.getServers();
-    const serverList = servers.map((server: any) => ({
-      id: server.id,
-      name: server.name,
-      description: server.description,
-      status: server.status,
-      isEnabled: server.isEnabled,
-      transportType: server.transportType,
-      lastConnected: server.lastConnected,
-      capabilities: server.capabilities
-    }));
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        servers: serverList,
-        total: serverList.length
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleCreateServer(args: Record<string, any>): Promise<CallToolResult> {
-    const required = ['name', 'transportType', 'transportCommand'];
-    for (const field of required) {
-      if (!args[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
-
-    const server = await this.prisma.mCPServer.create({
-      data: {
-        userId: args.userId || 1,
-        name: args.name,
-        version: args.version || '1.0.0',
-        description: args.description || '',
-        isEnabled: args.isEnabled ?? true,
-        status: 'DISCONNECTED',
-        transportType: args.transportType,
-        transportCommand: args.transportCommand,
-        transportArgs: args.transportArgs || [],
-        transportEnv: args.transportEnv || {},
-        authType: args.authType || 'NONE',
-        configAutoConnect: args.configAutoConnect ?? true,
-        configConnectionTimeout: args.configConnectionTimeout || 10000,
-        configMaxRetries: args.configMaxRetries || 3,
-        configRetryDelay: args.configRetryDelay || 2000,
-        configValidateCertificates: args.configValidateCertificates ?? true,
-        configDebug: args.configDebug ?? false,
-        capabilities: args.capabilities || { tools: [], resources: [], prompts: [] }
-      }
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' created successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          status: server.status,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleUpdateServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    let whereClause: any;
-    if (args.id) {
-      whereClause = { id: Number(args.id) };
-    } else {
-      whereClause = { name: String(args.name) };
-    }
-    
-    const updateData: any = {};
-
-    // Build update data from provided args
-    const updateableFields = [
-      'name', 'version', 'description', 'isEnabled', 'transportType', 
-      'transportCommand', 'transportArgs', 'transportEnv', 'authType',
-      'configAutoConnect', 'configConnectionTimeout', 'configMaxRetries',
-      'configRetryDelay', 'configValidateCertificates', 'configDebug', 'capabilities'
-    ];
-
-    for (const field of updateableFields) {
-      if (args[field] !== undefined) {
-        updateData[field] = args[field];
-      }
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      throw new Error('No update fields provided');
-    }
-
-    const server = await this.prisma.mCPServer.update({
-      where: whereClause,
-      data: updateData
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' updated successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          status: server.status,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleDeleteServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    
-    // Check if server exists and get its name
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    // Don't allow deletion of the internal server
-    if (server.transportCommand === 'internal') {
-      throw new Error('Cannot delete the internal MCP management server');
-    }
-
-    await this.prisma.mCPServer.delete({ where: { id: server.id } });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' deleted successfully`
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleToggleServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    let whereClause: any;
-    if (args.id) {
-      whereClause = { id: Number(args.id) };
-    } else {
-      whereClause = { name: String(args.name) };
-    }
-    
-    const enabled = args.enabled;
-
-    if (typeof enabled !== 'boolean') {
-      throw new Error('enabled field must be a boolean value');
-    }
-
-    const server = await this.prisma.mCPServer.update({
-      where: whereClause,
-      data: { isEnabled: enabled }
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' ${enabled ? 'enabled' : 'disabled'} successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleConnectServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    const connectionResult = await this.connectionManager.connectToServer(server);
-    const result = {
-      success: connectionResult !== null,
-      message: connectionResult ? 'Connected successfully' : 'Connection failed'
-    };
-
-    return {
-      stdout: JSON.stringify({
-        success: result.success,
-        message: result.success ? 
-          `Successfully connected to MCP server '${server.name}'` :
-          `Failed to connect to MCP server '${server.name}': ${result.message}`,
-        server: {
-          id: server.id,
-          name: server.name,
-          connected: result.success
-        }
-      }, null, 2),
-      stderr: result.success ? '' : result.message || '',
-      success: result.success
-    };
-  }
-
-  private async handleDisconnectServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    await this.connectionManager.disconnectFromServer(server.id);
-    const result = {
-      success: true,
-      message: 'Disconnected successfully'
-    };
-
-    return {
-      stdout: JSON.stringify({
-        success: result.success,
-        message: result.success ? 
-          `Successfully disconnected from MCP server '${server.name}'` :
-          `Failed to disconnect from MCP server '${server.name}': ${result.message}`,
-        server: {
-          id: server.id,
-          name: server.name,
-          connected: false
-        }
-      }, null, 2),
-      stderr: result.success ? '' : result.message || '',
-      success: result.success
-    };
-  }
-
-  private async handleGetServerTools(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    // Get tools from the server's capabilities or connection manager
-    const capabilities = server.capabilities as any;
-    const tools = capabilities?.tools || [];
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        server: {
-          id: server.id,
-          name: server.name
-        },
-        tools: tools,
-        totalTools: tools.length
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  /**
-   * Handle memory_remember tool call
-   */
-  private async handleMemoryRemember(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      if (!args.content) {
-        throw new Error('Missing required field: content');
-      }
-
-      const memory = await this.memoryService.remember({
-        content: args.content,
-        key: args.key,
-        metadata: args.metadata,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          memory: {
-            id: memory.id,
-            content: memory.content,
-            key: memory.key,
-            createdAt: memory.createdAt
-          },
-          message: 'Memory stored successfully'
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error storing memory: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  /**
-   * Handle memory_recall tool call
-   */
-  private async handleMemoryRecall(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      const result = await this.memoryService.recall({
-        key: args.key,
-        search: args.search,
-        limit: args.limit,
-        offset: args.offset,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          memories: result.memories,
-          total: result.total,
-          hasMore: result.hasMore,
-          message: `Retrieved ${result.memories.length} memories`
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error recalling memories: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  /**
-   * Handle memory_reset tool call
-   */
-  private async handleMemoryReset(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      const result = await this.memoryService.reset({
-        key: args.key,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          deletedCount: result.deletedCount,
-          message: result.message
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error resetting memories: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
     }
   }
 

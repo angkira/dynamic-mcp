@@ -24,10 +24,25 @@ export class MemoryService {
   /**
    * Store a new memory
    */
-  async remember(data: RememberRequestType): Promise<Memory> {
+  async remember(data: RememberRequestType): Promise<Memory | { error: string }> {
     const userId = data.userId || 1 // Default to user ID 1 for now
 
+    console.log('🔍 MemoryService.remember called with data:', JSON.stringify(data, null, 2));
+    console.log('🔍 Resolved userId:', userId);
+
+    if (!data.content) {
+      console.warn('⚠️ Attempted to store memory with no content');
+      return { error: 'Content is required to store a memory.' }
+    }
+
     try {
+      console.log('🔍 Creating memory in database with data:', {
+        userId,
+        key: data.key || null,
+        content: data.content,
+        metadata: data.metadata || null
+      });
+
       const memory = await this.prisma.memory.create({
         data: {
           userId,
@@ -37,7 +52,8 @@ export class MemoryService {
         }
       })
 
-      console.log(`💾 Memory stored: ${memory.id} for user ${userId}`)
+      console.log(`💾 Memory stored: ${memory.id} for user ${userId}`);
+      console.log('🔍 Created memory object:', JSON.stringify(memory, null, 2));
       return memory
     } catch (error) {
       console.error('❌ Error storing memory:', error)

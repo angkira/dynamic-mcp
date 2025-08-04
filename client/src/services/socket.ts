@@ -10,7 +10,12 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return;
 
-    this.socket = io(import.meta.env.VITE_API_URL || "http://localhost:3000");
+    // Use dedicated socket URL or fallback to API URL without /api suffix
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 
+                     (import.meta.env.VITE_API_URL?.replace('/api', '')) || 
+                     "http://localhost:3000";
+
+    this.socket = io(socketUrl);
 
     this.socket.on('connect', () => {
       this.state.isConnected = true;
