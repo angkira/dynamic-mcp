@@ -11,14 +11,14 @@ export type {
   User,
   Settings,
   MCPServer,
-} from '@shared/types/chat';
+} from '@dynamic-mcp/shared/types/chat';
 
 export type {
   CreateChatRequest,
   CreateChatResponse,
   GetChatsResponse,
   DeleteChatResponse,
-} from '@shared/types/api';
+} from '@dynamic-mcp/shared/types/api';
 
 // Re-declare enums locally to avoid build issues with shared enums
 export enum MCPServerStatus {

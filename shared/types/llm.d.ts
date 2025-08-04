@@ -44,6 +44,7 @@ export interface LlmService {
     }[]>;
     setModel(model: string): void;
     setBudgets(responseBudget: number): void;
+    formatTools(tools: any[]): any[];
 }
 /**
  * Streaming chunk types for real-time communication

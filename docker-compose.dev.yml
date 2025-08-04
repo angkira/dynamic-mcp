@@ -13,33 +13,44 @@ services:
 
   server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
-    environment_file:
+      context: .
+      dockerfile: ./server/Dockerfile
+    env_file:
       - .env
     depends_on:
       - db
     ports:
       - "3000:3000"
     volumes:
-      - ./server:/app
+      # Volume mounts for development hot reload
+      - ./server/src:/app/server/src
+      - ./shared/src:/app/shared/src
+      - ./prisma:/app/prisma
+      # Avoid overwriting node_modules and generated Prisma client
+      - /app/node_modules
+      - /app/server/node_modules
     command: npm run dev
 
   client:
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./client/Dockerfile
       args:
-        - VUE_API_URL=${VUE_API_URL}
-    environment_file:
+        - VITE_API_URL=${VUE_API_URL}
+    env_file:
       - .env
     depends_on:
       - server
     ports:
       - "5173:5173"
     volumes:
-      - ./client:/app
+      # Volume mounts for development hot reload
+      - ./client/src:/app/client/src
+      - ./client/public:/app/client/public
+      - ./shared/src:/app/shared/src
+      # Avoid overwriting node_modules
       - /app/node_modules
+      - /app/client/node_modules
     command: npm run dev
 
 volumes:

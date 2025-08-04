@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { Socket } from 'socket.io';
 import { llmServices } from '../llm';
-import type { ConversationMessage } from '@shared/types';
-import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@shared/types';
+import type { ConversationMessage } from '@dynamic-mcp/shared';
+import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@dynamic-mcp/shared';
 import { MessagingService } from '../messaging';
 import { McpService } from '../mcp/mcpService';
 import { Settings } from '@prisma/client';

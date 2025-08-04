@@ -15,11 +15,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@shared': fileURLToPath(new URL('../shared', import.meta.url))
+      '@dynamic-mcp/shared': fileURLToPath(new URL('../shared', import.meta.url))
     },
   },
   optimizeDeps: {
-    exclude: ['@shared']
+    exclude: ['@dynamic-mcp/shared', '@prisma/client']
   },
   css: {
     preprocessorOptions: {
@@ -39,6 +39,11 @@ export default defineConfig({
     fs: {
       // Allow serving files from one level up to the project root
       allow: ['..']
+    },
+    host: '0.0.0.0', // Allow external connections for Docker
+    port: 5173,
+    watch: {
+      usePolling: true // Better for Docker volume mounts
     }
   }
 })

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 import { Server } from 'socket.io';
 import { WebSocketMessageHandlerService } from '../services/websocket/messageHandler';
-import { LlmProvider, ClientWebSocketEvent } from '@shared/types';
+import { LlmProvider, ClientWebSocketEvent } from '@dynamic-mcp/shared';
 
 declare module 'fastify' {
   interface FastifyInstance {

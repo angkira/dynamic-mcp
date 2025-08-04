@@ -1,26 +1,21 @@
-# Stage 1: build client
-FROM node:18-alpine AS build
+# Development Dockerfile for client
+FROM node:22-alpine
 WORKDIR /app
 
 # Accept build arguments
 ARG VITE_API_URL
-ARG NODE_ENV=production
+ARG NODE_ENV=development
 
 # Set environment variables for Vite
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=${NODE_ENV}
 
+# Copy dependency files
 COPY package*.json ./
+COPY client/package.json ./client/package.json
+
+# Install dependencies
 RUN npm ci
-COPY . ./
-RUN npm run build
 
-# Stage 2: serve via nginx
-FROM nginx:alpine
-
-# Copy custom nginx config if needed
-# COPY nginx.conf /etc/nginx/nginx.conf
-
-COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 5173
+CMD ["npm", "run", "dev"]

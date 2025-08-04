@@ -2,52 +2,23 @@
   "name": "@dynamic-mcp/shared",
   "version": "1.0.0",
   "description": "Shared types and constants for dynamic-mcp monorepo",
-  "main": "types/index.js",
-  "types": "types/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "import": "./types/index.js",
-      "require": "./types/index.js"
-    },
-    "./types": {
-      "types": "./types/index.d.ts",
-      "import": "./types/index.js",
-      "require": "./types/index.js"
-    },
-    "./types/llm": {
-      "types": "./types/llm.d.ts",
-      "import": "./types/llm.js",
-      "require": "./types/llm.js"
-    },
-    "./types/message": {
-      "types": "./types/message.d.ts",
-      "import": "./types/message.js",
-      "require": "./types/message.js"
-    },
-    "./types/chat": {
-      "types": "./types/chat.d.ts",
-      "import": "./types/chat.js",
-      "require": "./types/chat.js"
-    },
-    "./types/api": {
-      "types": "./types/api.d.ts",
-      "import": "./types/api.js",
-      "require": "./types/api.js"
-    },
-    "./constants/websocketEvents": {
-      "types": "./constants/websocketEvents.d.ts",
-      "import": "./constants/websocketEvents.js",
-      "require": "./constants/websocketEvents.js"
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/esm/index.d.ts"
     }
   },
   "files": [
-    "types/",
-    "constants/"
+    "dist/",
+    "src/"
   ],
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf types/*.js types/*.d.ts types/*.js.map types/*.d.ts.map constants/*.js constants/*.d.ts constants/*.js.map constants/*.d.ts.map"
+    "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json",
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

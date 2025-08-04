@@ -1,4 +1,4 @@
-import { ServerWebSocketEvent } from '@shared/types';
+import { ServerWebSocketEvent } from '@dynamic-mcp/shared';
 
 enum ContentType {
   REGULAR = 'regular',

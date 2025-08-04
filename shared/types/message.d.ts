@@ -17,6 +17,9 @@ export interface MessageContent {
     toolCalls?: Array<{
         name: string;
         arguments: any;
+        result?: any;
+        error?: string;
+        status?: 'executing' | 'completed' | 'error';
     }>;
     name?: string;
     result?: any;
@@ -80,5 +83,13 @@ export interface StreamingMessage {
     chatTitle: string;
     titleExtracted: boolean;
     chunkCount?: number;
+    toolCalls?: Array<{
+        name: string;
+        arguments: any;
+        result?: any;
+        error?: string;
+        status?: 'executing' | 'completed' | 'error';
+    }>;
+    isToolExecuting?: boolean;
 }
 //# sourceMappingURL=message.d.ts.map

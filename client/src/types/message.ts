@@ -11,13 +11,13 @@ export type {
   Message,
   StreamingWord,
   StreamingMessage,
-} from '@shared/types/message';
+} from '@dynamic-mcp/shared/types/message';
 
 export type {
   SendMessageRequest,
   SendMessageResponse,
   GetMessagesResponse,
-} from '@shared/types/api';
+} from '@dynamic-mcp/shared/types/api';
 
 // Re-declare enums locally to avoid build issues with shared enums
 export enum MessageRole {
@@ -49,7 +49,7 @@ export enum LlmProvider {
 }
 
 // Import and re-export the streaming chunk type with alias
-import type { StreamingChunk as SharedStreamingChunk } from '@shared/types/message';
+import type { StreamingChunk as SharedStreamingChunk } from '@dynamic-mcp/shared/types/message';
 export interface StreamingChunk {
   text: string;
   type: StreamingChunkType;

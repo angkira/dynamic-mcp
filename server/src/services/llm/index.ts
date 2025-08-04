@@ -1,5 +1,5 @@
-import type { LlmService } from '@shared/types'
-import { LlmProvider } from '@shared/types'
+import type { LlmService } from '@dynamic-mcp/shared'
+import { LlmProvider } from '@dynamic-mcp/shared'
 import { OpenAiService } from './openai'
 import { GeminiService } from './gemini'
 

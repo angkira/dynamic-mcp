@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import type { LlmService, ConversationMessage } from '@shared/types';
-import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@shared/types';
+import type { LlmService, ConversationMessage } from '@dynamic-mcp/shared';
+import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@dynamic-mcp/shared';
 import { McpService } from '../mcp/mcpService';
 import { MessageRole as PrismaMessageRole } from '@prisma/client';
 import { StreamingPipeline, StreamingResults } from './StreamingPipeline';

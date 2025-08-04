@@ -1,0 +1,67 @@
+# Multi-stage build for production server
+FROM node:22-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+WORKDIR /app
+
+# Copy root package.json and prisma schema
+COPY package*.json ./
+COPY prisma/schema.prisma ./prisma/schema.prisma
+
+# Copy workspace package.json files
+COPY shared/package.json ./shared/package.json
+COPY server/package.json ./server/package.json
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Build stage
+FROM base AS builder
+WORKDIR /app
+
+# Copy dependency files
+COPY package*.json ./
+COPY shared/ ./shared/
+COPY prisma/ ./prisma/
+COPY server/package.json ./server/package.json
+COPY server/src/ ./server/src/
+COPY server/tsconfig.json ./server/tsconfig.json
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Build shared package first
+WORKDIR /app/shared
+RUN npm run build
+
+# Generate Prisma client
+WORKDIR /app
+RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Build server
+WORKDIR /app/server  
+RUN npm run build
+
+# Production image
+FROM base AS runner
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 expressjs
+
+# Copy production dependencies and built artifacts
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=deps /app/package*.json ./
+
+USER expressjs
+
+EXPOSE 3000
+ENV NODE_ENV=production
+
+CMD ["node", "server/dist/app.js"]

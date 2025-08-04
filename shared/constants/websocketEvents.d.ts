@@ -10,7 +10,7 @@ export declare enum ServerWebSocketEvent {
     ToolCall = "toolCall",
     ToolResult = "toolResult",
     Title = "title",
-    Complete = "complete",
+    MessageComplete = "messageComplete",
     Error = "error"
 }
 //# sourceMappingURL=websocketEvents.d.ts.map

@@ -1,0 +1,52 @@
+{
+  "include": [
+    "src/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "test"
+  ],
+  "compilerOptions": {
+    // File Layout
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    },
+    // Environment Settings
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2020",
+    "lib": [
+      "ES2020"
+    ],
+    "types": [
+      "node",
+      "jest"
+    ],
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    // Style Options
+    "noImplicitReturns": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    // Recommended Options
+    "strict": true,
+    "isolatedModules": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS"
+    }
+  }
+}

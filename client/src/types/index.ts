@@ -2,7 +2,7 @@
  * Centralized type exports
  */
 
-import type { MCPAuthType, MCPTransportType } from '@shared/types'
+import type { MCPAuthType, MCPTransportType } from '@dynamic-mcp/shared'
 
 // Message types
 export * from './message'

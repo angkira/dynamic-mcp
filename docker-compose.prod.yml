@@ -13,8 +13,8 @@ services:
 
   server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./server/Dockerfile.prod
     environment:
       DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -24,16 +24,11 @@ services:
       - db
     ports:
       - "3000:3000"
-    volumes:
-      - ./server:/app
-      - ./shared:/app/shared
-      - ./prisma:/app/prisma
-      - /app/node_modules
 
   client:
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./client/Dockerfile.prod
       args:
         - VITE_API_URL=${VUE_API_URL}
     environment:
@@ -41,12 +36,7 @@ services:
     depends_on:
       - server
     ports:
-      - "5173:5173"
-    volumes:
-      - ./client:/app
-      - ./shared:/app/shared
-      - ./prisma:/app/prisma
-      - /app/node_modules
+      - "80:80"
 
 volumes:
   db-data:

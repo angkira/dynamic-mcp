@@ -15,7 +15,7 @@ var ServerWebSocketEvent;
     ServerWebSocketEvent["ToolCall"] = "toolCall";
     ServerWebSocketEvent["ToolResult"] = "toolResult";
     ServerWebSocketEvent["Title"] = "title";
-    ServerWebSocketEvent["Complete"] = "complete";
+    ServerWebSocketEvent["MessageComplete"] = "messageComplete";
     ServerWebSocketEvent["Error"] = "error";
 })(ServerWebSocketEvent || (exports.ServerWebSocketEvent = ServerWebSocketEvent = {}));
 //# sourceMappingURL=websocketEvents.js.map

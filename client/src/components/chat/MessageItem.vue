@@ -158,7 +158,7 @@ import { useMessagesStore } from '@/stores/messages'
 import type { Message } from '@/types'
 import { VueMarkdown } from '@crazydos/vue-markdown'
 import remarkGfm from 'remark-gfm'
-import { MessageRole } from '@prisma/client'
+import { MessageRole } from '@dynamic-mcp/shared'
 
 interface Props {
   message: Message

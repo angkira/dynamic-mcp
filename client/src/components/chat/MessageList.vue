@@ -6,9 +6,7 @@
         <FontAwesomeIcon icon="message" class="empty-chat-icon" />
       </div>
       <h3 class="empty-title">Start a conversation</h3>
-      <p class="empty-description">
-        Send a message to begin chatting with the AI assistant.
-      </p>
+      <p class="empty-description">Send a message to begin chatting with the AI assistant.</p>
     </div>
 
     <!-- Sphere Loading Animation -->
@@ -18,11 +16,19 @@
 
     <!-- Messages -->
     <div
-      v-if="messages.allMessages.length || (messages.isStreaming && (messages.currentStreamingMessage?.chunkCount ?? 0) > 0)"
-      class="messages-wrapper">
+      v-if="
+        messages.allMessages.length ||
+        (messages.isStreaming && (messages.currentStreamingMessage?.chunkCount ?? 0) > 0)
+      "
+      class="messages-wrapper"
+    >
       <div class="messages-container">
-        <MessageItem v-for="message in messages.allMessages" :key="`message-${message.id}-${message.role}`"
-          :message="message" :is-streaming="message.id === -1 && messages.isStreaming" />
+        <MessageItem
+          v-for="message in messages.allMessages"
+          :key="`message-${message.id}-${message.role}`"
+          :message="message"
+          :is-streaming="message.id === -1 && messages.isStreaming"
+        />
       </div>
     </div>
 
@@ -48,7 +54,7 @@ const chats = useChatsStore()
 const messagesContainer = ref<HTMLElement>()
 const showScrollButton = ref(false)
 const isUserScrolled = ref(false)
-const streamingScrollInterval = ref<number | null>(null)
+const streamingScrollInterval = ref<NodeJS.Timeout | null>(null)
 
 const showLoaderOverlay = computed(() => {
   // Show water circles overlay when streaming and fewer than three messages
@@ -63,7 +69,7 @@ watch(
       await nextTick()
       scrollToBottom()
     }
-  }
+  },
 )
 
 // Enhanced streaming scroll handling
@@ -75,7 +81,7 @@ watch(
     } else {
       stopStreamingScrollHandler()
     }
-  }
+  },
 )
 
 // Stop auto-scroll when user manually scrolls during streaming
@@ -87,7 +93,7 @@ watch(
     } else if (!userScrolled && messages.isStreaming) {
       startStreamingScrollHandler()
     }
-  }
+  },
 )
 
 // Watch streaming content changes
@@ -99,7 +105,7 @@ watch(
       scrollToBottom()
     }
   },
-  { flush: 'post' }
+  { flush: 'post' },
 )
 
 // Handle chat id changes - fetch messages, scroll to bottom, and clear when no chat selected
@@ -109,7 +115,7 @@ watch(
     if (newChatId) {
       // Only fetch messages for existing chats (not new/temporary ones)
       // New chats already have messages locally and will be synced via WebSocket
-      const existingChat = chats.chats.find(chat => chat.id === newChatId)
+      const existingChat = chats.chats.find((chat) => chat.id === newChatId)
       if (existingChat && existingChat.id !== -1) {
         await messages.fetchMessages(newChatId)
       }
@@ -119,7 +125,7 @@ watch(
     } else {
       messages.clearMessages()
     }
-  }
+  },
 )
 
 function scrollToBottom() {
