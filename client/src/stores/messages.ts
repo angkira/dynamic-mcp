@@ -177,7 +177,7 @@ export const useMessagesStore = defineStore('messages', () => {
     const streamingMessage = streamingMessages.value.get(chatId)
     if (!streamingMessage) return
 
-    streamingMessage.toolCalls.push({
+    streamingMessage.toolCalls?.push({
       ...toolCall,
       status: 'executing',
       result: null

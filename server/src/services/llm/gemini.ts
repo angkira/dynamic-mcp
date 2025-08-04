@@ -152,19 +152,6 @@ export class GeminiService implements LlmService {
       const contents = this.convertHistoryToGeminiFormat(history, message);
       const formattedTools = tools.length > 0 ? this.formatTools(tools) : [];
 
-      console.debug(`🤖 Gemini request - Message: "${message}", History length: ${history.length}, Tools: ${tools.length}`);
-      console.debug(`📝 Gemini contents:`, JSON.stringify(contents, null, 2));
-      
-      // Check for potential conversation format issues
-      if (contents.length >= 2) {
-        const lastTwo = contents.slice(-2);
-        console.debug(`🔍 Last two conversation elements:`, JSON.stringify(lastTwo, null, 2));
-        
-        if (lastTwo[0]?.role === 'model' && lastTwo[1]?.role === 'function') {
-          console.debug(`⚠️  Detected model->function pattern. This should be followed by model response, not user message.`);
-        }
-      }
-
       const promptOptions = {
           hasHistory: history.length > 0,
           isFirstMessage: history.length === 0,

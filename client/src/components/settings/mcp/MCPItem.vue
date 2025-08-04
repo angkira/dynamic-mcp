@@ -174,6 +174,16 @@
             </div>
           </n-collapse-transition>
         </div>
+
+        <!-- Test Result Section -->
+        <div v-if="testResult" class="test-result-section">
+          <span class="test-result" :class="testResult.success ? 'success' : 'error'">
+            <n-icon>
+              <font-awesome-icon :icon="testResult.success ? 'check-circle' : 'times-circle'" />
+            </n-icon>
+            {{ testResult.message }}
+          </span>
+        </div>
       </div>
     </n-card>
   </div>
@@ -193,7 +203,8 @@ import {
   NCollapseTransition,
 } from 'naive-ui'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import type { MCPServer, MCPServerStatus } from '@/types'
+import { useMcpStore } from '@/stores/mcp'
+import type { MCPServer } from '@/types'
 
 // Props
 interface Props {
@@ -215,6 +226,11 @@ const emit = defineEmits<{
 const showTools = ref(false)
 const showResources = ref(false)
 const showPrompts = ref(false)
+const testing = ref(false)
+const testResult = ref<{ success: boolean; message: string } | null>(null)
+
+// Store
+const mcpStore = useMcpStore()
 
 // Computed properties
 const statusTagType = computed(() => {
@@ -264,9 +280,10 @@ const menuOptions = computed(() => [
     icon: () => h(FontAwesomeIcon, { icon: 'edit' }),
   },
   {
-    label: 'Test Connection',
+    label: testing.value ? 'Testing...' : 'Test Connection',
     key: 'test',
-    icon: () => h(FontAwesomeIcon, { icon: 'plug' }),
+    icon: () => h(FontAwesomeIcon, { icon: testing.value ? 'spinner' : 'plug' }),
+    disabled: testing.value,
   },
   {
     type: 'divider',
@@ -280,13 +297,42 @@ const menuOptions = computed(() => [
 ])
 
 // Methods
+const testConnection = async () => {
+  testing.value = true
+  testResult.value = null
+
+  try {
+    const result = await mcpStore.testConnection(props.server.id)
+    testResult.value = result
+
+    // Auto-hide result after 5 seconds
+    setTimeout(() => {
+      testResult.value = null
+    }, 5000)
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Connection test failed with an error.'
+    testResult.value = {
+      success: false,
+      message: errorMessage,
+    }
+
+    // Auto-hide result after 5 seconds
+    setTimeout(() => {
+      testResult.value = null
+    }, 5000)
+  } finally {
+    testing.value = false
+  }
+}
+
 const handleMenuSelect = (key: string) => {
   switch (key) {
     case 'edit':
       emit('edit', props.server)
       break
     case 'test':
-      emit('connect', props.server.id)
+      testConnection()
       break
     case 'delete':
       emit('delete', props.server.id)
@@ -314,10 +360,6 @@ const formatDate = (value: string | Date | undefined | null) => {
 
 .mcp-item.disabled {
   opacity: 0.6;
-}
-
-.mcp-item-content {
-  /* Container for item content */
 }
 
 .mcp-header {
@@ -435,5 +477,27 @@ const formatDate = (value: string | Date | undefined | null) => {
   font-size: 11px;
   color: var(--text-color-3);
   font-style: italic;
+}
+
+.test-result-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.test-result.success {
+  color: var(--success-color);
+}
+
+.test-result.error {
+  color: var(--error-color);
 }
 </style>

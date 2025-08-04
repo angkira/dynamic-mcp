@@ -70,8 +70,8 @@ export class McpService {
       settings = await this.prisma.settings.create({
         data: {
           userId: user.id,
-          defaultProvider: 'openai',
-          defaultModel: 'o3-mini',
+          defaultProvider: 'google',
+          defaultModel: 'gemini-2.5-flash-lite',
           thinkingBudget: 2048,
           responseBudget: 8192,
           mcpEnableDebugLogging: false,
