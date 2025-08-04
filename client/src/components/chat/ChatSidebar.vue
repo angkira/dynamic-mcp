@@ -103,7 +103,8 @@ async function deleteChat(chatId: number) {
   await chats.deleteChat(chatId)
   // Refresh the chat list after deletion
   if (user.user) {
-    await chats.fetchChats(user.user.id)
+    // After deletion, fetch next chat seamlessly (limit 1)
+    await chats.fetchChats(user.user.id, true, 1)
   }
 }
 

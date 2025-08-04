@@ -29,7 +29,12 @@ export const useChatsStore = defineStore('chats', () => {
   const hasChats = computed(() => chats.value.length > 0)
 
   // Actions
-  async function fetchChats(userId: number, loadMore = false) {
+
+  /**
+   * Fetch chats for a user. If loadMore is true, fetch next page; otherwise, initial load.
+   * Optionally pass customTake to fetch only a specific number of items when loading more.
+   */
+  async function fetchChats(userId: number, loadMore = false, customTake?: number) {
     if (isFetching.value || (loadMore && !hasMore.value)) return;
 
     isFetching.value = true;
@@ -45,7 +50,8 @@ export const useChatsStore = defineStore('chats', () => {
     }
 
     try {
-      const response = await ChatAPIService.chats.getChats(userId, page.value, limit)
+      const take = customTake ?? limit
+      const response = await ChatAPIService.chats.getChats(userId, page.value, take)
       if (response.chats && response.chats.length > 0) {
         if (loadMore) {
           chats.value.push(...response.chats)
