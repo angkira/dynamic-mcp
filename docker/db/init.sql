@@ -110,10 +110,25 @@ CREATE TABLE "public"."MCPServer" (
     CONSTRAINT "MCPServer_pkey" PRIMARY KEY ("id")
 );
 
+-- Create Memory table
+CREATE TABLE "public"."Memory" (
+    "id" SERIAL NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "key" TEXT,
+    "content" TEXT NOT NULL,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Memory_pkey" PRIMARY KEY ("id")
+);
+
 -- Create indexes
 CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
 CREATE UNIQUE INDEX "Settings_userId_key" ON "public"."Settings"("userId");
 CREATE INDEX "MCPServer_userId_idx" ON "public"."MCPServer"("userId");
+CREATE INDEX "Memory_userId_idx" ON "public"."Memory"("userId");
+CREATE INDEX "Memory_userId_key_idx" ON "public"."Memory"("userId", "key");
 
 -- Add foreign key constraints
 ALTER TABLE "public"."Chat" ADD CONSTRAINT "Chat_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -121,6 +136,7 @@ ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY 
 ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_responseToId_fkey" FOREIGN KEY ("responseToId") REFERENCES "public"."Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "public"."Settings" ADD CONSTRAINT "Settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "public"."MCPServer" ADD CONSTRAINT "MCPServer_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Memory" ADD CONSTRAINT "Memory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Insert default data
 -- Create default user
@@ -154,7 +170,7 @@ FROM "public"."User" u
 WHERE u.email = 'user@example.com'
 AND NOT EXISTS (SELECT 1 FROM "public"."Settings" s WHERE s."userId" = u.id);
 
--- Create internal MCP API server
+-- Create internal MCP API server for managing MCP servers
 INSERT INTO "public"."MCPServer" (
   "userId",
   "name",
@@ -183,3 +199,33 @@ SELECT
 FROM "public"."User" u 
 WHERE u.email = 'user@example.com'
 AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'dynamic-mcp-api' AND s."userId" = u.id);
+
+-- Create internal Memory MCP server for memory management
+INSERT INTO "public"."MCPServer" (
+  "userId",
+  "name",
+  "version",
+  "description",
+  "isEnabled",
+  "status",
+  "transportType",
+  "transportCommand",
+  "authType",
+  "configAutoConnect",
+  "capabilities"
+)
+SELECT 
+  u.id,
+  'memory',
+  '1.0.0',
+  'Memory management system for storing and retrieving important information',
+  true,
+  'CONNECTED',
+  'STDIO',
+  'internal',
+  'NONE',
+  true,
+  '{"tools": [{"name": "memory_remember", "description": "💾 Store a new memory or important information for future reference"}, {"name": "memory_recall", "description": "🧠 Retrieve stored memories with optional filtering and search"}, {"name": "memory_reset", "description": "🗑️ Delete stored memories, optionally filtered by key"}], "resources": [{"uri": "memory://stats", "name": "Memory Statistics", "description": "Current memory usage statistics and metadata", "mimeType": "application/json"}], "prompts": []}'::jsonb
+FROM "public"."User" u 
+WHERE u.email = 'user@example.com'
+AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'memory' AND s."userId" = u.id);

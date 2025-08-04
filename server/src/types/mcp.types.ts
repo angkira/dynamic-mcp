@@ -8,6 +8,8 @@ export interface MCPToolForLLM {
     serverId: number;
     serverName: string;
     originalName: string;
+    transportType?: string;
+    transportCommand?: string;
   };
 }
 

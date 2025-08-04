@@ -30,7 +30,7 @@ export interface InternalMCPConfig {
 
 export class InternalMCPConfigLoader {
   private static instance: InternalMCPConfigLoader
-  private config: InternalMCPConfig | null = null
+  private configs: Map<string, InternalMCPConfig> = new Map()
 
   private constructor() {}
 
@@ -42,55 +42,61 @@ export class InternalMCPConfigLoader {
   }
 
   /**
-   * Load the internal MCP configuration from JSON
+   * Load a specific internal MCP configuration from JSON
    */
-  async loadConfig(): Promise<InternalMCPConfig> {
-    if (this.config) {
-      return this.config
+  async loadConfigForServer(serverName: string): Promise<InternalMCPConfig> {
+    if (this.configs.has(serverName)) {
+      return this.configs.get(serverName)!
     }
 
     try {
-      const configPath = path.join(__dirname, '../config/internal-mcp-tools.json')
-      const configData = await fs.readFile(configPath, 'utf-8')
-      this.config = JSON.parse(configData)
+      // TODO: Move internal MCP configurations to the database properly instead of JSON files
+      const configFileName = serverName === 'dynamic-mcp-api' 
+        ? 'internal-mcp-tools.json' 
+        : `${serverName}-mcp-tools.json`
       
-      console.log('✅ Loaded internal MCP configuration')
-      return this.config!
+      const configPath = path.join(process.cwd(), 'src/config', configFileName)
+      const configData = await fs.readFile(configPath, 'utf-8')
+      const config = JSON.parse(configData)
+      
+      this.configs.set(serverName, config)
+      console.log(`✅ Loaded internal MCP configuration for ${serverName}`)
+      return config
     } catch (error) {
-      console.error('❌ Failed to load internal MCP configuration:', error)
-      throw new Error('Failed to load internal MCP configuration')
+      console.error(`❌ Failed to load internal MCP configuration for ${serverName}:`, error)
+      throw new Error(`Failed to load internal MCP configuration for ${serverName}`)
     }
   }
 
   /**
-   * Get the server information
+   * Get the server information for a specific server
    */
-  async getServerInfo(): Promise<{ name: string; version: string; description: string }> {
-    const config = await this.loadConfig()
+  async getServerInfoForServer(serverName: string): Promise<{ name: string; version: string; description: string }> {
+    const config = await this.loadConfigForServer(serverName)
     return config.server
   }
 
   /**
-   * Get all tools
+   * Get all tools for a specific server
    */
-  async getTools(): Promise<InternalMCPTool[]> {
-    const config = await this.loadConfig()
+  async getToolsForServer(serverName: string): Promise<InternalMCPTool[]> {
+    const config = await this.loadConfigForServer(serverName)
     return config.tools
   }
 
   /**
-   * Get all resources
+   * Get all resources for a specific server
    */
-  async getResources(): Promise<InternalMCPResource[]> {
-    const config = await this.loadConfig()
+  async getResourcesForServer(serverName: string): Promise<InternalMCPResource[]> {
+    const config = await this.loadConfigForServer(serverName)
     return config.resources
   }
 
   /**
-   * Get capabilities object for database storage
+   * Get capabilities object for database storage for a specific server
    */
-  async getCapabilities(): Promise<object> {
-    const config = await this.loadConfig()
+  async getCapabilitiesForServer(serverName: string): Promise<object> {
+    const config = await this.loadConfigForServer(serverName)
     return {
       tools: config.tools.map(tool => ({
         name: tool.name,
@@ -101,11 +107,32 @@ export class InternalMCPConfigLoader {
     }
   }
 
+  // Legacy methods for backwards compatibility (default to dynamic-mcp-api)
+  async loadConfig(): Promise<InternalMCPConfig> {
+    return this.loadConfigForServer('dynamic-mcp-api')
+  }
+
+  async getServerInfo(): Promise<{ name: string; version: string; description: string }> {
+    return this.getServerInfoForServer('dynamic-mcp-api')
+  }
+
+  async getTools(): Promise<InternalMCPTool[]> {
+    return this.getToolsForServer('dynamic-mcp-api')
+  }
+
+  async getResources(): Promise<InternalMCPResource[]> {
+    return this.getResourcesForServer('dynamic-mcp-api')
+  }
+
+  async getCapabilities(): Promise<object> {
+    return this.getCapabilitiesForServer('dynamic-mcp-api')
+  }
+
   /**
-   * Clear cached config (useful for testing or hot reload)
+   * Clear cached configs (useful for testing or hot reload)
    */
   clearCache(): void {
-    this.config = null
+    this.configs.clear()
   }
 }
 

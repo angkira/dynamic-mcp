@@ -1,0 +1,102 @@
+{
+  "server": {
+    "name": "memory",
+    "version": "1.0.0",
+    "description": "Memory management system for storing and retrieving important information"
+  },
+  "tools": [
+    {
+      "name": "memory_remember",
+      "description": "💾 Store a new memory or important information for future reference",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The memory content to store"
+          },
+          "key": {
+            "type": "string",
+            "description": "Optional categorization key (e.g., 'user-preferences', 'important-facts', 'project-details')",
+            "optional": true
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional metadata like tags, importance level, etc.",
+            "optional": true
+          },
+          "userId": {
+            "type": "number",
+            "description": "User ID (optional, defaults to current user)",
+            "optional": true
+          }
+        },
+        "required": ["content"]
+      }
+    },
+    {
+      "name": "memory_recall",
+      "description": "🧠 Retrieve stored memories with optional filtering and search",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Filter memories by specific key",
+            "optional": true
+          },
+          "search": {
+            "type": "string",
+            "description": "Search for specific text within memory content",
+            "optional": true
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of memories to return (1-100)",
+            "minimum": 1,
+            "maximum": 100,
+            "optional": true
+          },
+          "offset": {
+            "type": "number",
+            "description": "Number of memories to skip (for pagination)",
+            "minimum": 0,
+            "optional": true
+          },
+          "userId": {
+            "type": "number",
+            "description": "User ID (optional, defaults to current user)",
+            "optional": true
+          }
+        }
+      }
+    },
+    {
+      "name": "memory_reset",
+      "description": "🗑️ Delete stored memories, optionally filtered by key",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Only delete memories with this specific key (if not provided, deletes ALL memories)",
+            "optional": true
+          },
+          "userId": {
+            "type": "number",
+            "description": "User ID (optional, defaults to current user)",
+            "optional": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "memory://stats",
+      "name": "Memory Statistics",
+      "description": "Current memory usage statistics and metadata",
+      "mimeType": "application/json"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import configRoute from './routes/api/config'; // Import config route handler
 import messageRoute from './routes/api/message'; // Import message route handler
 import settingsRoute from './routes/api/settings'; // Import settings route handler
 import mcpRoute from './routes/api/mcp'; // Import MCP route handler
+import memoryRoute from './routes/api/memory'; // Import Memory route handler
 import { loggerConfig } from './config/logger';
 import * as dotenv from 'dotenv';
 
@@ -46,4 +47,6 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   await fastify.register(settingsRoute, { prefix: '/api/settings' });
   
   await fastify.register(mcpRoute, { prefix: '/api/mcp' });
+  
+  await fastify.register(memoryRoute, { prefix: '/api/memory' });
 }

@@ -18,6 +18,7 @@ model User {
   chats      Chat[]
   settings   Settings?
   mcpServers MCPServer[]
+  memories   Memory[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 }
@@ -140,4 +141,18 @@ model MCPServer {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model Memory {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  key       String? // Optional categorization key
+  content   String // The memory content
+  metadata  Json?    @db.JsonB // Additional metadata (tags, importance, etc.)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, key])
 }

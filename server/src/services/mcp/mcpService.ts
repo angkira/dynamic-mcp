@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import type { MCPServer, MCPServerStatus } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
+import MemoryService from '../memory/memoryService'
 import type { 
   MCPServerUpdateData,
   MCPToolForLLM,
@@ -21,10 +22,12 @@ import type {
 export class McpService {
   private prisma: PrismaClient
   private connectionManager: McpConnectionManager
+  private memoryService: MemoryService
 
   constructor(fastify?: FastifyInstance) {
     this.prisma = new PrismaClient()
     this.connectionManager = new McpConnectionManager(fastify)
+    this.memoryService = new MemoryService()
   }
 
     /**
@@ -645,6 +648,15 @@ export class McpService {
         case 'mcp_get_server_tools':
           return await this.handleGetServerTools(args);
           
+        case 'memory_remember':
+          return await this.handleMemoryRemember(args);
+          
+        case 'memory_recall':
+          return await this.handleMemoryRecall(args);
+          
+        case 'memory_reset':
+          return await this.handleMemoryReset(args);
+          
         case 'list_mcp_servers':
           return await this.handleListServers();
           
@@ -953,6 +965,112 @@ export class McpService {
       stderr: '',
       success: true
     };
+  }
+
+  /**
+   * Handle memory_remember tool call
+   */
+  private async handleMemoryRemember(args: Record<string, any>): Promise<CallToolResult> {
+    try {
+      if (!args.content) {
+        throw new Error('Missing required field: content');
+      }
+
+      const memory = await this.memoryService.remember({
+        content: args.content,
+        key: args.key,
+        metadata: args.metadata,
+        userId: args.userId
+      });
+
+      return {
+        stdout: JSON.stringify({
+          success: true,
+          memory: {
+            id: memory.id,
+            content: memory.content,
+            key: memory.key,
+            createdAt: memory.createdAt
+          },
+          message: 'Memory stored successfully'
+        }, null, 2),
+        stderr: '',
+        success: true
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        stdout: '',
+        stderr: `Error storing memory: ${errorMessage}`,
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Handle memory_recall tool call
+   */
+  private async handleMemoryRecall(args: Record<string, any>): Promise<CallToolResult> {
+    try {
+      const result = await this.memoryService.recall({
+        key: args.key,
+        search: args.search,
+        limit: args.limit,
+        offset: args.offset,
+        userId: args.userId
+      });
+
+      return {
+        stdout: JSON.stringify({
+          success: true,
+          memories: result.memories,
+          total: result.total,
+          hasMore: result.hasMore,
+          message: `Retrieved ${result.memories.length} memories`
+        }, null, 2),
+        stderr: '',
+        success: true
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        stdout: '',
+        stderr: `Error recalling memories: ${errorMessage}`,
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Handle memory_reset tool call
+   */
+  private async handleMemoryReset(args: Record<string, any>): Promise<CallToolResult> {
+    try {
+      const result = await this.memoryService.reset({
+        key: args.key,
+        userId: args.userId
+      });
+
+      return {
+        stdout: JSON.stringify({
+          success: true,
+          deletedCount: result.deletedCount,
+          message: result.message
+        }, null, 2),
+        stderr: '',
+        success: true
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        stdout: '',
+        stderr: `Error resetting memories: ${errorMessage}`,
+        success: false,
+        error: errorMessage
+      };
+    }
   }
 
   async cleanup() {

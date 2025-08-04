@@ -235,52 +235,39 @@ export class McpConnectionManager {
   async getAllAvailableTools(): Promise<MCPToolForLLM[]> {
     const allTools: MCPToolForLLM[] = []
     
-    // Check if internal server tools should be included
-    const internalServer = await this.prisma.mCPServer.findFirst({
+    // Get ALL enabled servers from database (both internal and external)
+    const enabledServers = await this.prisma.mCPServer.findMany({
       where: { 
-        name: 'dynamic-mcp-api',
-        isEnabled: true
+        isEnabled: true,
+        userId: 1 // TODO: Support multiple users
       }
     })
     
-    if (internalServer) {
-      // Load internal tools from JSON configuration
-      const configLoader = InternalMCPConfigLoader.getInstance()
-      const internalTools = await configLoader.getTools()
-      
-      const mcpToolsForLLM: MCPToolForLLM[] = internalTools.map(tool => ({
-        name: `${internalServer.name}__${tool.name}`,
-        description: tool.description,
-        parameters: tool.parameters,
-        metadata: {
-          serverId: internalServer.id,
-          serverName: internalServer.name,
-          originalName: tool.name
-        }
-      }))
-      
-      allTools.push(...mcpToolsForLLM)
-    }
-    
-    // Add tools from connected external servers
-    for (const [serverId, connection] of this.connections) {
+    for (const server of enabledServers) {
       try {
-        const tools = await connection.client.listTools() as any;
+        // Get tools from server capabilities stored in database
+        const capabilities = server.capabilities as any
+        const tools = capabilities?.tools || []
         
-        for (const tool of tools.tools || []) {
+        // Convert each tool to the LLM format
+        for (const tool of tools) {
           allTools.push({
-            name: `${connection.server.name}__${tool.name}`,
+            name: `${server.name}__${tool.name}`,
             description: tool.description || '',
-            parameters: tool.inputSchema,
+            parameters: tool.inputSchema || tool.parameters || {},
             metadata: {
-              serverId,
-              serverName: connection.server.name,
-              originalName: tool.name
+              serverId: server.id,
+              serverName: server.name,
+              originalName: tool.name,
+              transportType: server.transportType,
+              transportCommand: server.transportCommand || undefined
             }
           })
         }
+        
+        console.log(`📋 Loaded ${tools.length} tools from ${server.name} (${server.transportCommand})`)
       } catch (error) {
-        console.error(`Error getting tools from server ${serverId}:`, error)
+        console.error(`❌ Error getting tools from server ${server.name}:`, error)
       }
     }
     
@@ -293,28 +280,35 @@ export class McpConnectionManager {
   async getAllAvailableResources(): Promise<MCPResourceForLLM[]> {
     const allResources: MCPResourceForLLM[] = []
     
-    // Check if internal server resources should be included
-    const internalServer = await this.prisma.mCPServer.findFirst({
+    // Get internal servers that have resources
+    const internalServers = await this.prisma.mCPServer.findMany({
       where: { 
-        name: 'dynamic-mcp-api',
-        isEnabled: true
+        name: { in: ['dynamic-mcp-api', 'memory'] },
+        isEnabled: true,
+        transportCommand: 'internal'
       }
     })
     
-    if (internalServer) {
-      // Load internal resources from JSON configuration
-      const configLoader = InternalMCPConfigLoader.getInstance()
-      const internalResourceConfigs = await configLoader.getResources()
-      
-      for (const resourceConfig of internalResourceConfigs) {
-        allResources.push({
-          uri: resourceConfig.uri,
-          name: resourceConfig.name,
-          description: resourceConfig.description,
-          mimeType: resourceConfig.mimeType,
-          serverName: internalServer.name,
-          serverId: internalServer.id
-        })
+    for (const internalServer of internalServers) {
+      try {
+        // Load internal resources from JSON configuration
+        const configLoader = InternalMCPConfigLoader.getInstance()
+        const internalResourceConfigs = await configLoader.getResourcesForServer(internalServer.name)
+        
+        for (const resourceConfig of internalResourceConfigs) {
+          allResources.push({
+            uri: resourceConfig.uri,
+            name: resourceConfig.name,
+            description: resourceConfig.description,
+            mimeType: resourceConfig.mimeType,
+            serverName: internalServer.name,
+            serverId: internalServer.id
+          })
+        }
+        
+        console.log(`📋 Loaded ${internalResourceConfigs.length} resources from internal server ${internalServer.name}`)
+      } catch (error) {
+        console.error(`❌ Error loading resources from internal server ${internalServer.name}:`, error)
       }
     }
     
