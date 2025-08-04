@@ -16,6 +16,7 @@ import type {
   ReadResourceResult,
   GetPromptResult
 } from '../../types/mcp.types'
+import InternalMCPConfigLoader from './internalMCPConfigLoader'
 
 
 /**
@@ -243,132 +244,22 @@ export class McpConnectionManager {
     })
     
     if (internalServer) {
-      // Add internal server tools
-      const internalTools: MCPToolForLLM[] = [
-        {
-          name: `${internalServer.name}__mcp_list_servers`,
-          description: '📋 List all registered MCP servers with their connection status, capabilities, and configuration details',
-          parameters: { userId: { type: 'number', optional: true } },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_list_servers'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_create_server`,
-          description: '➕ Register a new MCP server with connection configuration and capabilities',
-          parameters: {
-            name: { type: 'string' },
-            version: { type: 'string', optional: true },
-            description: { type: 'string', optional: true },
-            transportType: { type: 'string', enum: ['STDIO', 'SSE', 'STREAMABLE_HTTP'] },
-            transportCommand: { type: 'string' },
-            transportArgs: { type: 'array', items: { type: 'string' }, optional: true },
-            transportBaseUrl: { type: 'string', optional: true },
-            authType: { type: 'string', enum: ['NONE', 'OAUTH', 'APIKEY', 'BEARER'], optional: true },
-            authApiKey: { type: 'string', optional: true },
-            isEnabled: { type: 'boolean', optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_create_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_update_server`,
-          description: '✏️ Update an existing MCP server configuration, connection settings, or capabilities',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            version: { type: 'string', optional: true },
-            description: { type: 'string', optional: true },
-            isEnabled: { type: 'boolean', optional: true },
-            transportCommand: { type: 'string', optional: true },
-            transportArgs: { type: 'array', items: { type: 'string' }, optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_update_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_delete_server`,
-          description: '🗑️ Permanently remove an MCP server and all its associated data',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_delete_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_toggle_server`,
-          description: '🔄 Enable or disable an MCP server to control its availability for tool calls',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            enabled: { type: 'boolean' },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_toggle_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_connect_server`,
-          description: '🔌 Establish connection to an MCP server and test its availability',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_connect_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_disconnect_server`,
-          description: '🔌 Disconnect from an MCP server while keeping its configuration',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_disconnect_server'
-          }
-        },
-        {
-          name: `${internalServer.name}__mcp_get_server_tools`,
-          description: '🛠️ Get all available tools from a specific MCP server with their schemas',
-          parameters: {
-            id: { type: 'number', optional: true },
-            name: { type: 'string', optional: true },
-            userId: { type: 'number', optional: true }
-          },
-          metadata: {
-            serverId: internalServer.id,
-            serverName: internalServer.name,
-            originalName: 'mcp_get_server_tools'
-          }
+      // Load internal tools from JSON configuration
+      const configLoader = InternalMCPConfigLoader.getInstance()
+      const internalTools = await configLoader.getTools()
+      
+      const mcpToolsForLLM: MCPToolForLLM[] = internalTools.map(tool => ({
+        name: `${internalServer.name}__${tool.name}`,
+        description: tool.description,
+        parameters: tool.parameters,
+        metadata: {
+          serverId: internalServer.id,
+          serverName: internalServer.name,
+          originalName: tool.name
         }
-      ]
-      allTools.push(...internalTools)
+      }))
+      
+      allTools.push(...mcpToolsForLLM)
     }
     
     // Add tools from connected external servers
@@ -411,15 +302,20 @@ export class McpConnectionManager {
     })
     
     if (internalServer) {
-      // Add internal server resources
-      allResources.push({
-        uri: 'mcp://config',
-        name: 'MCP Configuration',
-        description: 'Current MCP system configuration',
-        mimeType: 'application/json',
-        serverName: internalServer.name,
-        serverId: internalServer.id
-      })
+      // Load internal resources from JSON configuration
+      const configLoader = InternalMCPConfigLoader.getInstance()
+      const internalResourceConfigs = await configLoader.getResources()
+      
+      for (const resourceConfig of internalResourceConfigs) {
+        allResources.push({
+          uri: resourceConfig.uri,
+          name: resourceConfig.name,
+          description: resourceConfig.description,
+          mimeType: resourceConfig.mimeType,
+          serverName: internalServer.name,
+          serverId: internalServer.id
+        })
+      }
     }
     
     // Add resources from connected external servers

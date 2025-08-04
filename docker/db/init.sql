@@ -153,3 +153,33 @@ SELECT
 FROM "public"."User" u 
 WHERE u.email = 'user@example.com'
 AND NOT EXISTS (SELECT 1 FROM "public"."Settings" s WHERE s."userId" = u.id);
+
+-- Create internal MCP API server
+INSERT INTO "public"."MCPServer" (
+  "userId",
+  "name",
+  "version",
+  "description",
+  "isEnabled",
+  "status",
+  "transportType",
+  "transportCommand",
+  "authType",
+  "configAutoConnect",
+  "capabilities"
+)
+SELECT 
+  u.id,
+  'dynamic-mcp-api',
+  '1.0.0',
+  'Internal MCP API for managing MCP servers and connections',
+  true,
+  'CONNECTED',
+  'STDIO',
+  'internal',
+  'NONE',
+  true,
+  '{"tools": [{"name": "mcp_list_servers", "description": "📋 List all registered MCP servers with their connection status, capabilities, and configuration details"}, {"name": "mcp_create_server", "description": "➕ Register a new MCP server with connection configuration and capabilities"}, {"name": "mcp_update_server", "description": "✏️ Update an existing MCP server configuration, connection settings, or capabilities"}, {"name": "mcp_delete_server", "description": "🗑️ Permanently remove an MCP server and all its associated data"}, {"name": "mcp_toggle_server", "description": "🔄 Enable or disable an MCP server to control its availability for tool calls"}, {"name": "mcp_connect_server", "description": "🔌 Establish connection to an MCP server and test its availability"}, {"name": "mcp_disconnect_server", "description": "🔌 Disconnect from an MCP server while keeping its configuration"}, {"name": "mcp_get_server_tools", "description": "🛠️ Get all available tools from a specific MCP server with their schemas"}], "resources": [{"uri": "mcp://config", "name": "MCP Configuration", "description": "Current MCP system configuration", "mimeType": "application/json"}], "prompts": []}'::jsonb
+FROM "public"."User" u 
+WHERE u.email = 'user@example.com'
+AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'dynamic-mcp-api' AND s."userId" = u.id);
