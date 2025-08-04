@@ -2,27 +2,28 @@
   "server": {
     "name": "memory",
     "version": "1.0.0",
-    "description": "Memory management system for storing and retrieving important information"
+    "description": "Persistent memory system that allows AI to remember and recall information across conversations"
   },
   "tools": [
     {
       "name": "memory_remember",
-      "description": "💾 Store a new memory or important information for future reference",
+      "description": "💾 REMEMBER information that should be recalled later. Use this to store facts, preferences, context, or any important information. Example: memory_remember with content='User lives in Berlin' and key='location'",
       "parameters": {
         "type": "object",
         "properties": {
           "content": {
             "type": "string",
-            "description": "The memory content to store"
+            "description": "The information to remember. Be specific and detailed. Examples: 'User prefers dark mode', 'User lives in Berlin', 'Project uses React and TypeScript', 'User's favorite color is blue'",
+            "minLength": 1
           },
           "key": {
             "type": "string",
-            "description": "Optional categorization key (e.g., 'user-preferences', 'important-facts', 'project-details')",
+            "description": "Category or tag for organizing memories. Examples: 'user-preferences', 'location', 'project-info', 'personal-facts', 'work-context'",
             "optional": true
           },
           "metadata": {
             "type": "object",
-            "description": "Additional metadata like tags, importance level, etc.",
+            "description": "Additional context like importance level, tags, expiration date, etc.",
             "optional": true
           },
           "userId": {
@@ -36,30 +37,30 @@
     },
     {
       "name": "memory_recall",
-      "description": "🧠 Retrieve stored memories with optional filtering and search",
+      "description": "🧠 RECALL previously stored memories. Use this to retrieve information that was stored earlier. Search by content text or filter by key category.",
       "parameters": {
         "type": "object",
         "properties": {
           "key": {
             "type": "string",
-            "description": "Filter memories by specific key",
+            "description": "Find memories with specific category/tag. Examples: 'location', 'user-preferences', 'project-info'",
             "optional": true
           },
           "search": {
             "type": "string",
-            "description": "Search for specific text within memory content",
+            "description": "Search for memories containing specific text. Examples: 'Berlin', 'dark mode', 'React', 'favorite color'",
             "optional": true
           },
           "limit": {
             "type": "number",
-            "description": "Maximum number of memories to return (1-100)",
+            "description": "Maximum number of memories to return (1-100, default 50)",
             "minimum": 1,
             "maximum": 100,
             "optional": true
           },
           "offset": {
             "type": "number",
-            "description": "Number of memories to skip (for pagination)",
+            "description": "Number of memories to skip (for pagination, default 0)",
             "minimum": 0,
             "optional": true
           },
@@ -73,13 +74,13 @@
     },
     {
       "name": "memory_reset",
-      "description": "🗑️ Delete stored memories, optionally filtered by key",
+      "description": "🗑️ DELETE stored memories. Use with caution! Can delete all memories or just those with a specific key.",
       "parameters": {
         "type": "object",
         "properties": {
           "key": {
             "type": "string",
-            "description": "Only delete memories with this specific key (if not provided, deletes ALL memories)",
+            "description": "Only delete memories with this specific key/category. If not provided, deletes ALL memories for the user!",
             "optional": true
           },
           "userId": {
@@ -95,7 +96,7 @@
     {
       "uri": "memory://stats",
       "name": "Memory Statistics",
-      "description": "Current memory usage statistics and metadata",
+      "description": "Current memory usage statistics, categories, and stored information overview",
       "mimeType": "application/json"
     }
   ]
