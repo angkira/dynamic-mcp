@@ -29,7 +29,7 @@ export default async function (fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{ Querystring: FromSchema<typeof getChatsQuerySchema> }>
     ) => {
-      const { userId, page = 1, limit = 10 } = request.query;
+      const { userId, page = 1, limit = 20 } = request.query;
       const skip = (page - 1) * limit;
 
       const [total, chats] = await Promise.all([

@@ -29,10 +29,11 @@ export const ChatAPIService = {
 
   // Chat endpoints
   chats: {
-    async getChats(userId: number, params?: PaginationParams): Promise<GetChatsResponse> {
+    async getChats(userId: number, page: number, limit: number): Promise<GetChatsResponse> {
       return httpClient.get<GetChatsResponse>('/chats', {
         userId,
-        ...params,
+        page,
+        limit,
       });
     },
 

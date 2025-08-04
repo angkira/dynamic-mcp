@@ -1,6 +1,6 @@
 {
   "name": "@dynamic-mcp/client",
-  "version": "0.0.0", 
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,8 +19,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@dynamic-mcp/shared": "file:../shared",
     "@crazydos/vue-markdown": "^1.1.4",
+    "@dynamic-mcp/shared": "file:../shared",
     "@fortawesome/fontawesome-svg-core": "^7.0.0",
     "@fortawesome/free-regular-svg-icons": "^7.0.0",
     "@fortawesome/free-solid-svg-icons": "^7.0.0",

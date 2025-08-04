@@ -2,44 +2,37 @@
   <div>
     <aside class="chat-sidebar" :style="{ width: ui.sidebarWidth }">
       <div class="sidebar-header">
-        <button v-if="!ui.isMobile" @click="ui.toggleSidebar" class="collapse-btn"
-          :title="isCollapsed ? 'Expand' : 'Collapse'">
-          <FontAwesomeIcon icon="bars" class="collapse-icon" :class="{ 'rotate-180': isCollapsed }" />
+        <button
+          v-if="!ui.isMobile"
+          @click="toggleSidebarAndContent"
+          class="collapse-btn"
+          :title="isCollapsed ? 'Expand' : 'Collapse'"
+        >
+          <FontAwesomeIcon
+            icon="bars"
+            class="collapse-icon"
+            :class="{ 'rotate-180': isCollapsed }"
+          />
         </button>
         <!-- Settings Button -->
-        <button @click="openSettingsModal" class="settings-btn" :class="{ 'collapsed': isCollapsed }" title="Settings">
+        <button
+          @click="openSettingsModal"
+          class="settings-btn"
+          :class="{ collapsed: isCollapsed }"
+          title="Settings"
+        >
           <FontAwesomeIcon icon="fa-solid fa-gear" class="settings-icon" />
           <span v-if="!isCollapsed">Settings</span>
         </button>
       </div>
 
-      <div class="sidebar-content">
-        <!-- Chat List -->
-        <div v-if="!isCollapsed" class="chat-list-container">
-          <div class="section-header">
-            Recent Chats
+      <div class="sidebar-content-wrapper">
+        <transition name="sidebar-content-transition">
+          <div v-if="showContent" class="sidebar-content">
+            <!-- Chat List -->
+            <ChatList :is-collapsed="isCollapsed" @select="selectChat" @delete="deleteChat" />
           </div>
-
-          <div class="chat-list">
-            <Transition name="loading" mode="out-in">
-              <div v-if="chats.isLoading" class="loading-state">
-                <div class="loading-spinner"></div>
-                <span v-if="!isCollapsed">Loading chats...</span>
-              </div>
-
-              <div v-else-if="!chats.hasChats" class="empty-state">
-                <FontAwesomeIcon icon="comments" class="empty-state-icon" />
-                <p v-if="!isCollapsed">No chats yet. Start a conversation!</p>
-              </div>
-
-              <TransitionGroup v-else name="chat-item" tag="div">
-                <ChatItem v-for="chat in chats.sortedChats" :key="`chat-${chat.id}`" :chat="chat"
-                  :is-active="chats.currentChatId === chat.id" :is-collapsed="isCollapsed" @select="selectChat"
-                  @delete="deleteChat" />
-              </TransitionGroup>
-            </Transition>
-          </div>
-        </div>
+        </transition>
       </div>
 
       <!-- User Profile Section -->
@@ -60,24 +53,41 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useUserStore } from '@/stores/user'
 import { useChatsStore } from '@/stores/chats'
-import { useMessagesStore } from '@/stores/messages'
-import ChatItem from './ChatItem.vue'
+import ChatList from './ChatList.vue'
 import ChatSettings from '../settings/Settings.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 const ui = useUIStore()
 const user = useUserStore()
 const chats = useChatsStore()
-const messages = useMessagesStore()
 const router = useRouter()
 
 const showSettingsModal = ref(false)
-
+// Determine if sidebar is collapsed
 const isCollapsed = computed(() => ui.sidebarState === 'collapsed')
+// Show content only when sidebar is not collapsed
+const showContent = ref(!isCollapsed.value)
+
+async function toggleSidebarAndContent() {
+  const collapsing = !isCollapsed.value
+  if (collapsing) {
+    showContent.value = false
+    await nextTick() // Wait for DOM update
+  }
+
+  ui.toggleSidebar()
+
+  if (!collapsing) {
+    setTimeout(() => {
+      showContent.value = true
+    }, 300) // Match transition duration
+  }
+}
 
 async function selectChat(chatId: number) {
   // Navigate to the chat route, which will handle setting current chat and fetching messages
@@ -91,6 +101,10 @@ async function selectChat(chatId: number) {
 
 async function deleteChat(chatId: number) {
   await chats.deleteChat(chatId)
+  // Refresh the chat list after deletion
+  if (user.user) {
+    await chats.fetchChats(user.user.id)
+  }
 }
 
 function openSettingsModal() {
@@ -108,6 +122,13 @@ function openSettingsModal() {
   background-color: var(--color-background);
   border-right: 1px solid var(--color-border);
   transition: all var(--transition-normal);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-content-wrapper {
+  flex: 1;
+  overflow: hidden;
 }
 
 .sidebar-content {
@@ -116,9 +137,19 @@ function openSettingsModal() {
   flex-direction: column;
 }
 
+.sidebar-content-transition-enter-active,
+.sidebar-content-transition-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-content-transition-enter-from,
+.sidebar-content-transition-leave-to {
+  opacity: 0;
+}
+
 .user-section {
   padding: var(--spacing-md);
-  border-bottom: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -174,6 +205,7 @@ function openSettingsModal() {
   flex-direction: row;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .collapse-btn {
@@ -236,98 +268,5 @@ function openSettingsModal() {
 
 .settings-icon {
   @include icon-sm;
-}
-
-.new-chat-btn {
-  @include button-primary;
-  gap: var(--spacing-sm);
-  width: 10rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  &.collapsed {
-    margin: 0 var(--spacing-sm) var(--spacing-md) var(--spacing-sm);
-    padding: var(--spacing-sm);
-    justify-content: center;
-  }
-}
-
-.new-chat-icon {
-  @include icon-md;
-}
-
-.chat-list-container {
-  flex: 1;
-  overflow: hidden;
-}
-
-.section-header {
-  padding: var(--spacing-sm) var(--spacing-md);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.chat-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--spacing-sm);
-}
-
-.loading-state,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.loading-spinner {
-  @include loading-spinner;
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-bottom: var(--spacing-sm);
-}
-
-.empty-state-icon {
-  @include icon-2xl;
-  color: var(--color-text-muted);
-}
-
-/* Transitions */
-.loading-enter-active,
-.loading-leave-active {
-  transition: all var(--transition-normal);
-}
-
-.loading-enter-from,
-.loading-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.chat-item-enter-active,
-.chat-item-leave-active {
-  transition: all var(--transition-normal);
-}
-
-.chat-item-enter-from {
-  opacity: 0;
-  transform: translateX(-20px);
-}
-
-.chat-item-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
-}
-
-.chat-item-move {
-  transition: transform var(--transition-normal);
 }
 </style>
