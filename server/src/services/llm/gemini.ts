@@ -75,39 +75,65 @@ export class GeminiService implements LlmService {
   }
 
   private convertHistoryToGeminiFormat(history: ConversationMessage[], currentMessage: string) {
-    const contents = [];
+    const contents: any[] = [];
     
     history.forEach(msg => {
-      const messageText = msg.content?.text || String(msg.content);
       if (msg.role === 'USER') {
+        const messageText = msg.content?.text || String(msg.content);
         contents.push({ role: 'user', parts: [{ text: messageText }] });
       } else if (msg.role === 'AI') {
-        // Handle tool calls in AI messages
         if (msg.content?.toolCalls) {
-            contents.push({ role: 'model', parts: [{ functionCall: msg.content.toolCalls[0] }] });
+          const toolCall = msg.content.toolCalls[0];
+          contents.push({ 
+            role: 'model', 
+            parts: [{ 
+              functionCall: { 
+                name: toolCall.name, 
+                args: toolCall.arguments || {} 
+              } 
+            }] 
+          });
         } else {
-            contents.push({ role: 'model', parts: [{ text: messageText }] });
+          const messageText = msg.content?.text || String(msg.content);
+          contents.push({ role: 'model', parts: [{ text: messageText }] });
         }
       } else if (msg.role === 'TOOL') {
-        // Handle tool result - the content structure is { toolResult: { name, result } }
         const toolResult = msg.content.toolResult;
         if (toolResult && toolResult.name) {
+          let response = toolResult.result;
+          if (response && typeof response === 'object' && 'stdout' in response) {
+            try {
+              const stdout = response.stdout;
+              if (typeof stdout === 'string' && stdout.trim().startsWith('{')) {
+                response = JSON.parse(stdout);
+              } else {
+                response = stdout;
+              }
+            } catch {
+              response = response.stdout;
+            }
+          }
           contents.push({ 
             role: 'function', 
             parts: [{ 
               functionResponse: { 
                 name: toolResult.name, 
-                response: { content: toolResult.result } 
+                response: response 
               } 
             }] 
           });
-        } else {
-          console.warn('Invalid tool result format:', msg.content);
         }
       }
     });
+
+    // Only add currentMessage if it's not empty and not already in history
+    if (currentMessage && currentMessage.trim()) {
+      contents.push({ role: 'user', parts: [{ text: currentMessage.trim() }] });
+    }
     
-    contents.push({ role: 'user', parts: [{ text: currentMessage }] });
+    if (contents.length === 0) {
+      throw new Error('No valid conversation content to send to Gemini');
+    }
     
     return contents;
   }
@@ -125,6 +151,19 @@ export class GeminiService implements LlmService {
     try {
       const contents = this.convertHistoryToGeminiFormat(history, message);
       const formattedTools = tools.length > 0 ? this.formatTools(tools) : [];
+
+      console.debug(`🤖 Gemini request - Message: "${message}", History length: ${history.length}, Tools: ${tools.length}`);
+      console.debug(`📝 Gemini contents:`, JSON.stringify(contents, null, 2));
+      
+      // Check for potential conversation format issues
+      if (contents.length >= 2) {
+        const lastTwo = contents.slice(-2);
+        console.debug(`🔍 Last two conversation elements:`, JSON.stringify(lastTwo, null, 2));
+        
+        if (lastTwo[0]?.role === 'model' && lastTwo[1]?.role === 'function') {
+          console.debug(`⚠️  Detected model->function pattern. This should be followed by model response, not user message.`);
+        }
+      }
 
       const promptOptions = {
           hasHistory: history.length > 0,
@@ -145,18 +184,29 @@ export class GeminiService implements LlmService {
 
       const result = await model.generateContentStream({ contents });
 
+      let chunkCount = 0;
+      console.debug(`🔄 Starting Gemini stream processing...`);
+      
       for await (const chunk of result.stream) {
+        console.debug(`📦 Received chunk:`, JSON.stringify(chunk, null, 2));
+        
         if (chunk.candidates?.[0]?.content?.parts) {
             for (const part of chunk.candidates[0].content.parts) {
                 if (part.text) {
+                    chunkCount++;
+                    console.debug(`📨 Gemini text chunk ${chunkCount}: "${part.text}"`);
                     yield { type: 'text', content: part.text };
                 }
                 if (part.functionCall) {
+                    console.debug(`🔧 Gemini function call:`, part.functionCall);
                     yield { type: 'toolCall', call: part.functionCall };
                 }
             }
+        } else {
+          console.debug(`⚠️  Chunk has no content parts:`, chunk);
         }
       }
+      console.debug(`✅ Gemini stream completed. Total text chunks: ${chunkCount}`);
     } catch (error) {
       this.handleError(error);
     }

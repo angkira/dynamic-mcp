@@ -83,15 +83,30 @@ export class WebSocketMessageHandlerService {
         include: { messages: { orderBy: { createdAt: 'asc' } } }
     });
     // Convert Prisma messages to ConversationMessage format
-    const conversationHistory: ConversationMessage[] = (chat?.messages || []).map(msg => ({
-      id: msg.id,
-      content: msg.content,
-      role: MessageRole[msg.role as keyof typeof MessageRole],
-      chatId: msg.chatId,
-      createdAt: msg.createdAt,
-      updatedAt: msg.updatedAt,
-      thoughts: msg.thoughts
-    }));
+    const conversationHistory: ConversationMessage[] = (chat?.messages || []).map(msg => {
+      // Clean tool calls for LLM compatibility
+      let cleanContent = msg.content;
+      if (cleanContent && typeof cleanContent === 'object' && !Array.isArray(cleanContent) && 'toolCalls' in cleanContent) {
+        const contentObj = cleanContent as any;
+        cleanContent = {
+          ...cleanContent,
+          toolCalls: contentObj.toolCalls?.map((tc: any) => ({
+            name: tc.name,
+            arguments: tc.arguments
+          })) || []
+        };
+      }
+      
+      return {
+        id: msg.id,
+        content: cleanContent,
+        role: MessageRole[msg.role as keyof typeof MessageRole],
+        chatId: msg.chatId,
+        createdAt: msg.createdAt,
+        updatedAt: msg.updatedAt,
+        thoughts: msg.thoughts
+      };
+    });
 
     try {
         await messagingService.sendMessage(enhancedContent, chatId, conversationHistory, streamCallback, selectedProvider, model, isThinking);

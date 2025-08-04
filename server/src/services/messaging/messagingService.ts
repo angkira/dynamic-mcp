@@ -41,9 +41,23 @@ export class MessagingService {
       appendFileSync(streamLogFile, `=== STREAM EVENTS - Chat ${chatId} ===\n`);
 
       console.debug(` MessageService.sendMessage - isThinking: ${isThinking}`);
+
+      // Add the current user message to the history for this turn.
+      // This ensures the history is consistent for the initial call and any follow-up tool calls.
+      if (content && content.trim()) {
+        history.push({
+          id: 0, // Not a real DB record yet
+          role: MessageRole.USER,
+          content: { text: content },
+          chatId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
       
       const availableTools = await this.mcpService.getAvailableToolsForLLM();
-      const responseStream = this.llmService.sendMessageStreamWithTools(content, history, availableTools, isThinking);
+      // Pass an empty message because the user's message is now the last item in the history array.
+      const responseStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
 
       // Create a streaming pipeline
       const pipeline = new StreamingPipeline(
@@ -77,6 +91,21 @@ export class MessagingService {
           const toolCall = chunk.call;
           stream(ServerWebSocketEvent.ToolCall, { toolCall, chatId });
 
+          // Add the AI message with tool call to history BEFORE executing the tool
+          const cleanToolCall = {
+            name: toolCall.name,
+            arguments: toolCall.arguments
+          };
+          
+          history.push({
+            id: 0,
+            role: MessageRole.AI,
+            content: { toolCalls: [cleanToolCall] },
+            chatId,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+
           // Track tool call
           const trackedToolCall: {
             name: string;
@@ -99,15 +128,7 @@ export class MessagingService {
             trackedToolCall.result = result;
             trackedToolCall.status = 'completed';
 
-            // Add tool interactions to history
-            history.push({
-              id: 0,
-              role: MessageRole.AI,
-              content: { toolCalls: [toolCall] },
-              chatId,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
+            // Add tool result to history
             history.push({
               id: 0,
               role: MessageRole.TOOL,
@@ -118,13 +139,25 @@ export class MessagingService {
             });
 
             // Continue the conversation with the tool result
-            const followUpStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
-            for await (const followUpChunk of followUpStream) {
-              if (followUpChunk.type === 'text') {
-                appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_TEXT: "${followUpChunk.content}"\n`);
-                pipeline.processTextChunk(followUpChunk.content);
+            console.debug(`🔄 Starting follow-up stream for tool result. History length: ${history.length}`);
+            try {
+              // For Gemini, we pass an empty message. The model will see the function response
+              // as the last message and generate a natural language response automatically.
+              const followUpStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
+              let followUpChunkCount = 0;
+              for await (const followUpChunk of followUpStream) {
+                if (followUpChunk.type === 'text') {
+                  followUpChunkCount++;
+                  console.debug(`📝 Follow-up chunk ${followUpChunkCount}: "${followUpChunk.content}"`);
+                  appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_TEXT: "${followUpChunk.content}"\n`);
+                  pipeline.processTextChunk(followUpChunk.content);
+                }
+                // Note: We don't handle nested tool calls in follow-up for simplicity
               }
-              // Note: We don't handle nested tool calls in follow-up for simplicity
+              console.debug(`✅ Follow-up stream completed. Total chunks: ${followUpChunkCount}`);
+            } catch (followUpError) {
+              console.error(`❌ Follow-up stream error:`, followUpError);
+              appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_ERROR: ${followUpError}\n`);
             }
 
           } catch (error: any) {
@@ -149,6 +182,22 @@ export class MessagingService {
       // Save messages to database
       const userMessage = await this.saveMessage(chatId, content, PrismaMessageRole.USER, provider, model || 'default');
       const aiMessage = await this.saveMessage(chatId, results.fullResponse, PrismaMessageRole.AI, provider, model || 'default', results.thoughts.length > 0 ? results.thoughts : undefined, executedToolCalls);
+
+      // Update chat title if one was extracted and the chat doesn't already have a title
+      if (results.title) {
+        const chat = await this.fastify.prisma.chat.findUnique({
+          where: { id: chatId },
+          select: { title: true }
+        });
+        
+        if (chat && !chat.title) {
+          await this.fastify.prisma.chat.update({
+            where: { id: chatId },
+            data: { title: results.title }
+          });
+          this.fastify.log.info(`Updated chat ${chatId} with title: "${results.title}"`);
+        }
+      }
 
       this.fastify.log.info('Sending MessageComplete event', { chatId, aiMessageId: aiMessage.id });
       stream(ServerWebSocketEvent.MessageComplete, {
