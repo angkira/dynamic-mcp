@@ -1,20 +1,68 @@
 # Quick Start Guide
 
-## 🚀 Development with Docker (Recommended)
+## 🚀 Automated Setup (Recommended)
 
-Start everything with separated MCP servers:
+Use our quick start script for automatic setup:
 
 ```bash
-npm run docker:dev
+./quick-start.sh
+```
+
+This script will:
+
+1. Create `.env` file from template (if needed)
+2. Build all Docker containers
+3. Start the complete system
+4. Provide access URLs and monitoring commands
+
+## 🚀 Manual Docker Setup
+
+Start everything with separated MCP daemon services:
+
+```bash
+# Copy environment template
+cp .env.example .env
+# Edit .env and add your API keys
+
+# Start all services
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
 This starts:
 
-- PostgreSQL database (port 5432)
-- Main server (port 3000)
-- Memory MCP daemon (port 3001)
-- API MCP daemon (port 3002)
-- Client frontend (port 5173)
+- **PostgreSQL database** (port 5432) - Data persistence
+- **Main Fastify server** (port 3000) - API and WebSocket server
+- **Memory MCP daemon** (port 3001) - HTTP-based memory service
+- **API MCP daemon** (port 3002) - HTTP-based MCP management service
+- **Vue.js client** (port 5173) - Chat interface for MCP management
+
+## 🎯 First Steps: Register MCP Servers via Chat
+
+Once the system is running, visit http://localhost:5173 and try these conversations:
+
+### View Current Servers
+
+```
+User: "Show me all my MCP servers and their status"
+```
+
+### Register a New MCP Server
+
+```
+User: "I want to add a new MCP server for file operations. It's a local server that I can run with 'npx @modelcontextprotocol/server-filesystem' and it should connect to my documents folder."
+```
+
+### Test Server Connections
+
+```
+User: "Test the connection to the memory server"
+```
+
+### Manage Server Status
+
+```
+User: "Disable the filesystem server temporarily"
+```
 
 ## 🔧 Local Development
 

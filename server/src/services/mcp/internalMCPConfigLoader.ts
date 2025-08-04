@@ -53,6 +53,10 @@ export class InternalMCPConfigLoader {
       // TODO: Move internal MCP configurations to the database properly instead of JSON files
       const configFileName = serverName === 'dynamic-mcp-api' 
         ? 'internal-mcp-tools.json' 
+        : serverName === 'dynamic-mcp-api-daemon'
+        ? 'internal-daemon-mcp-tools.json'
+        : serverName === 'memory-daemon'
+        ? 'memory-daemon-mcp-tools.json'
         : `${serverName}-mcp-tools.json`
       
       const configPath = path.join(process.cwd(), 'src/config', configFileName)

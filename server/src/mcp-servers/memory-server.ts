@@ -278,6 +278,34 @@ class MemoryMCPServer {
       return { status: 'ok', service: 'memory-mcp-server' };
     });
 
+    // MCP-compatible /call-tool endpoint
+    app.post('/call-tool', async (request, reply) => {
+      try {
+        const { name, arguments: args } = request.body as { name: string; arguments: any };
+        
+        let result;
+        switch (name) {
+          case 'memory_remember':
+            result = await this.handleRemember(args as RememberArgs);
+            break;
+          case 'memory_recall':
+            result = await this.handleRecall(args as RecallArgs);
+            break;
+          case 'memory_reset':
+            result = await this.handleReset(args as ResetArgs);
+            break;
+          default:
+            reply.code(400);
+            return { error: `Unknown tool: ${name}` };
+        }
+        
+        return result;
+      } catch (error) {
+        reply.code(500);
+        return { error: (error as Error).message };
+      }
+    });
+
     // MCP Tools endpoint - expose memory tools as HTTP API
     app.post('/tools/memory_remember', async (request, reply) => {
       try {

@@ -1,2 +1,23 @@
 node_modules/
 .env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+
+# Runtime logs
+*.log
+debug/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+postgres-data/

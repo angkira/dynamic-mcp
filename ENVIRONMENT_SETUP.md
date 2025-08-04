@@ -1,52 +1,52 @@
 # Environment Configuration Guide
 
-This guide explains how to set up environment variables for the Dynamic MCP application.
+This guide explains how to set up environment variables for the Dynamic MCP application with MCP daemon services.
+
+## Quick Setup
+
+**For most users**: Copy the example file and edit it:
+
+```bash
+cp .env.example .env
+# Edit .env and add your API keys
+```
 
 ## Environment Files Structure
 
-The application uses different environment configurations for development and production:
+The application uses a single `.env` file that works for both development and production:
 
-- **Development**: Uses `localhost` for API calls (direct server communication)
-- **Production**: Uses Docker service names for internal networking
+- **Development**: Uses Docker service names for internal networking
+- **Production**: Same configuration with production optimizations
 
-## Required Environment Files
+## Required Environment Variables
 
-### 1. Root Environment Files
+### Core Configuration
 
-Create these files in the project root:
+#### `.env` (Main Configuration)
 
-#### `.env` (Production)
 ```bash
-# Production Environment Variables
-# Database
+# Database Configuration
+DATABASE_URL="postgresql://postgres:yourpassword@db:5432/agentdb"
 DB_USER=postgres
-DB_PASSWORD=your_secure_password_here
-DB_NAME=dynamic_mcp
+DB_PASSWORD=yourpassword
+DB_NAME=agentdb
 
-# LLM Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-LLM_PROVIDER=openai
+# AI Provider APIs (required - get from respective providers)
+OPENAI_API_KEY="sk-proj-YOUR_OPENAI_API_KEY_HERE"
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
 
-# Client Configuration (Docker network)
-VUE_API_URL=http://server:3000/api
-```
+# AI Model Configuration
+DEFAULT_MODEL=gemini-2.5-flash
+LLM_PROVIDER=google
 
-#### `.env.dev` (Development)
-```bash
-# Development Environment Variables
-# Database
-DB_USER=postgres
-DB_PASSWORD=your_secure_password_here
-DB_NAME=dynamic_mcp
-
-# LLM Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-LLM_PROVIDER=openai
-
-# Client Configuration (localhost for development)
+# Application URLs
 VUE_API_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+CLIENT_URL=http://localhost:5173
+
+# MCP Daemon Ports (for HTTP-based MCP services)
+MCP_MEMORY_PORT=3001
+MCP_API_PORT=3002
 ```
 
 ### 2. Client Environment Files
@@ -54,6 +54,7 @@ VUE_API_URL=http://localhost:3000/api
 Create these files in the `client/` directory:
 
 #### `client/.env` (Production)
+
 ```bash
 # Production Environment
 # API Configuration
@@ -64,6 +65,7 @@ NODE_ENV=production
 ```
 
 #### `client/.env.dev` (Development)
+
 ```bash
 # Development Environment
 # API Configuration
@@ -76,6 +78,7 @@ NODE_ENV=development
 ## Running the Application
 
 ### Development Mode
+
 ```bash
 # Use development environment
 cp .env.dev .env
@@ -86,6 +89,7 @@ docker-compose -f docker-compose.dev.yml up --build
 ```
 
 ### Production Mode
+
 ```bash
 # Use production environment (or create .env files as shown above)
 # .env and client/.env should already be configured for production
@@ -95,6 +99,7 @@ docker-compose up --build
 ```
 
 ### Local Development (Non-Docker)
+
 ```bash
 # Server (from root directory)
 cp .env.dev .env
@@ -110,6 +115,7 @@ npm run dev
 ## Environment Variable Details
 
 ### `VUE_API_URL`
+
 - **Purpose**: Base URL for API calls from the client
 - **Development**: `http://localhost:3000/api` (direct connection)
 - **Production**: `http://server:3000/api` (Docker service name)
@@ -164,7 +170,7 @@ To verify your configuration is working:
 2. Look for requests going to the correct base URL
 3. Verify environment variables in the browser console:
    ```javascript
-   console.log('API URL:', import.meta.env.VITE_API_URL)
+   console.log('API URL:', import.meta.env.VITE_API_URL);
    ```
 
 ## Security Notes

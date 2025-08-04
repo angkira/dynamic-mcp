@@ -477,16 +477,42 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleGetServerTools(args: MCPServerArgs) {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
+  private async handleGetServerTools(args: MCPServerArgs | any) {
+    // Handle different parameter formats that LLMs might use
+    let serverId: number | undefined;
+    let serverName: string | undefined;
+    
+    // Try to extract server identifier from various possible parameter names
+    if (args.id) {
+      serverId = typeof args.id === 'string' ? parseInt(args.id) : args.id;
+    } else if (args.server_id) {
+      // Handle cases where LLM uses server_id instead of id
+      const serverIdStr = args.server_id;
+      if (typeof serverIdStr === 'string') {
+        // Try to extract numeric ID from strings like 'mcp-server-003'
+        const match = serverIdStr.match(/(\d+)$/);
+        if (match) {
+          serverId = parseInt(match[1]);
+        } else {
+          // If no number found, treat it as a server name
+          serverName = serverIdStr;
+        }
+      } else {
+        serverId = serverIdStr;
+      }
+    } else if (args.name) {
+      serverName = args.name;
     }
 
-    const whereClause = args.id ? { id: args.id } : { name: args.name };
+    if (!serverId && !serverName) {
+      throw new Error('Either id or name must be provided to identify the server. Received: ' + JSON.stringify(args));
+    }
+
+    const whereClause = serverId ? { id: serverId } : { name: serverName };
     const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
     
     if (!server) {
-      throw new Error('Server not found');
+      throw new Error(`Server not found with ${serverId ? `id: ${serverId}` : `name: ${serverName}`}`);
     }
 
     const capabilities = server.capabilities as any;
@@ -523,6 +549,49 @@ class DynamicMCPAPIServer {
     // Health check endpoint
     app.get('/health', async (request, reply) => {
       return { status: 'ok', service: 'dynamic-mcp-api-server' };
+    });
+
+    // MCP-compatible /call-tool endpoint
+    app.post('/call-tool', async (request, reply) => {
+      try {
+        const { name, arguments: args } = request.body as { name: string; arguments: any };
+        
+        let result;
+        switch (name) {
+          case 'mcp_list_servers':
+            result = await this.handleListServers(args as MCPServerArgs);
+            break;
+          case 'mcp_create_server':
+            result = await this.handleCreateServer(args as CreateServerArgs);
+            break;
+          case 'mcp_update_server':
+            result = await this.handleUpdateServer(args as UpdateServerArgs);
+            break;
+          case 'mcp_delete_server':
+            result = await this.handleDeleteServer(args as MCPServerArgs);
+            break;
+          case 'mcp_toggle_server':
+            result = await this.handleToggleServer(args as ToggleServerArgs);
+            break;
+          case 'mcp_connect_server':
+            result = await this.handleConnectServer(args as MCPServerArgs);
+            break;
+          case 'mcp_disconnect_server':
+            result = await this.handleDisconnectServer(args as MCPServerArgs);
+            break;
+          case 'mcp_get_server_tools':
+            result = await this.handleGetServerTools(args as MCPServerArgs);
+            break;
+          default:
+            reply.code(400);
+            return { error: `Unknown tool: ${name}` };
+        }
+        
+        return result;
+      } catch (error) {
+        reply.code(500);
+        return { error: (error as Error).message };
+      }
     });
 
     // MCP Server management endpoints

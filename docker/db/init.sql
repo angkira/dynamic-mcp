@@ -229,3 +229,63 @@ SELECT
 FROM "public"."User" u 
 WHERE u.email = 'user@example.com'
 AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'memory' AND s."userId" = u.id);
+
+-- Create HTTP daemon version of Memory MCP server
+INSERT INTO "public"."MCPServer" (
+  "userId",
+  "name",
+  "version",
+  "description",
+  "isEnabled",
+  "status",
+  "transportType",
+  "transportBaseUrl",
+  "authType",
+  "configAutoConnect",
+  "capabilities"
+)
+SELECT 
+  u.id,
+  'memory-daemon',
+  '1.0.0',
+  'Memory management HTTP daemon service for storing and retrieving important information',
+  true,
+  'DISCONNECTED',
+  'STREAMABLE_HTTP',
+  'http://mcp-memory:3001',
+  'NONE',
+  true,
+  '{"tools": [{"name": "memory_remember", "description": "💾 REMEMBER information that should be recalled later. Use this to store facts, preferences, context, or any important information. Example: memory_remember with content=''User lives in Berlin'' and key=''location''"}, {"name": "memory_recall", "description": "🧠 RECALL previously stored memories. Use this to retrieve information that was stored earlier. Search by content text or filter by key category."}, {"name": "memory_reset", "description": "🗑️ DELETE stored memories. Use with caution! Can delete all memories or just those with a specific key."}], "resources": [{"uri": "memory://stats", "name": "Memory Statistics", "description": "Current memory usage statistics, categories, and stored information overview", "mimeType": "application/json"}], "prompts": []}'::jsonb
+FROM "public"."User" u 
+WHERE u.email = 'user@example.com'
+AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'memory-daemon' AND s."userId" = u.id);
+
+-- Create HTTP daemon version of Dynamic MCP API server
+INSERT INTO "public"."MCPServer" (
+  "userId",
+  "name",
+  "version",
+  "description",
+  "isEnabled",
+  "status",
+  "transportType",
+  "transportBaseUrl",
+  "authType",
+  "configAutoConnect",
+  "capabilities"
+)
+SELECT 
+  u.id,
+  'dynamic-mcp-api-daemon',
+  '1.0.0',
+  'Dynamic MCP API HTTP daemon service for managing MCP servers and connections',
+  true,
+  'DISCONNECTED',
+  'STREAMABLE_HTTP',
+  'http://mcp-api:3002',
+  'NONE',
+  true,
+  '{"tools": [{"name": "mcp_list_servers", "description": "📋 List all registered MCP servers with their connection status, capabilities, and configuration details"}, {"name": "mcp_create_server", "description": "➕ Register a new MCP server with connection configuration and capabilities"}, {"name": "mcp_update_server", "description": "✏️ Update an existing MCP server configuration, connection settings, or capabilities"}, {"name": "mcp_delete_server", "description": "🗑️ Permanently remove an MCP server and all its associated data"}, {"name": "mcp_toggle_server", "description": "🔄 Enable or disable an MCP server to control its availability for tool calls"}, {"name": "mcp_connect_server", "description": "🔌 Establish connection to an MCP server and test its availability"}, {"name": "mcp_disconnect_server", "description": "🔌 Disconnect from an MCP server while keeping its configuration"}, {"name": "mcp_get_server_tools", "description": "🛠️ Get all available tools from a specific MCP server with their schemas"}], "resources": [{"uri": "mcp://config", "name": "MCP Configuration", "description": "Current MCP system configuration", "mimeType": "application/json"}], "prompts": []}'::jsonb
+FROM "public"."User" u 
+WHERE u.email = 'user@example.com'
+AND NOT EXISTS (SELECT 1 FROM "public"."MCPServer" s WHERE s."name" = 'dynamic-mcp-api-daemon' AND s."userId" = u.id);

@@ -27,16 +27,12 @@ export class McpService {
     this.fastify = fastify
     this.prisma = new PrismaClient()
     this.connectionManager = new McpConnectionManager(fastify)
-    this.connectionManager = new McpConnectionManager(fastify)
   }
 
   /**
    * Initialize the service and connection manager
    */
   async initialize() {
-    // Ensure the default internal servers exist in the database
-    await this.ensureDefaultServers()
-    
     // Load global settings and pass them to connection manager
     const settings = await this.getUserSettings()
     this.connectionManager.updateGlobalSettings({
@@ -449,8 +445,35 @@ export class McpService {
       serverName = parts[0];
       originalToolName = parts[1];
     } else {
-      // Legacy format - try to find which server has this tool
-      throw new Error('Legacy tool format not supported. Use "serverName__toolName" format.');
+      // Legacy format - find which server has this tool
+      console.log(`🔍 Legacy tool call detected: ${toolName}, searching for server...`);
+      
+      const servers = await this.prisma.mCPServer.findMany({
+        where: { 
+          isEnabled: true,
+          userId: 1 // TODO: Support multiple users
+        }
+      });
+
+      let foundServer = null;
+      for (const server of servers) {
+        const capabilities = server.capabilities as any;
+        if (capabilities?.tools) {
+          const hasTool = capabilities.tools.some((tool: any) => tool.name === toolName);
+          if (hasTool) {
+            foundServer = server;
+            break;
+          }
+        }
+      }
+
+      if (!foundServer) {
+        throw new Error(`Tool "${toolName}" not found in any enabled MCP server`);
+      }
+
+      serverName = foundServer.name;
+      originalToolName = toolName;
+      console.log(`✅ Found tool "${toolName}" in server "${serverName}"`);
     }
 
     // Find the server by name
@@ -500,182 +523,7 @@ export class McpService {
     await this.connectionManager.refreshConnections()
   }
 
-  /**
-   * Ensure the default servers exist in the database
-   */
-  private async ensureDefaultServers() {
-    await this.ensureMemoryServer()
-    await this.ensureDynamicMCPAPIServer()
-  }
 
-  /**
-   * Ensure the memory server exists in the database
-   */
-  private async ensureMemoryServer() {
-    const existingMemory = await this.prisma.mCPServer.findFirst({
-      where: { 
-        name: 'memory',
-        userId: 1
-      }
-    })
-
-    if (!existingMemory) {
-      console.log('🔧 Creating memory MCP server entry...')
-      
-      await this.prisma.mCPServer.create({
-        data: {
-          userId: 1,
-          name: 'memory',
-          version: '1.0.0',
-          description: 'Persistent memory system that allows AI to remember and recall information across conversations',
-          isEnabled: true,
-          status: 'DISCONNECTED',
-          transportType: 'STDIO',
-          transportCommand: 'node',
-          transportArgs: [
-            'dist/mcp-servers/memory-server.js'
-          ],
-          transportEnv: {},
-          authType: 'NONE',
-          configAutoConnect: true,
-          configConnectionTimeout: 10000,
-          configMaxRetries: 3,
-          configRetryDelay: 2000,
-          configValidateCertificates: true,
-          configDebug: false,
-          capabilities: {
-            tools: [
-              {
-                name: 'memory_remember',
-                description: '💾 REMEMBER information that should be recalled later. Use this to store facts, preferences, context, or any important information.',
-                labels: ['memory', 'storage', 'persistence']
-              },
-              {
-                name: 'memory_recall',
-                description: '🧠 RECALL previously stored memories. Use this to retrieve information that was stored earlier.',
-                labels: ['memory', 'retrieval', 'search']
-              },
-              {
-                name: 'memory_reset',
-                description: '🗑️ DELETE stored memories. Use with caution! Can delete all memories or just those with a specific key.',
-                labels: ['memory', 'cleanup', 'deletion']
-              }
-            ],
-            resources: [],
-            prompts: []
-          },
-          lastConnected: null
-        }
-      })
-      
-      console.log('✅ Memory MCP server created')
-    }
-  }
-
-  /**
-   * Ensure the dynamic MCP API server exists in the database  
-   */
-  private async ensureDynamicMCPAPIServer() {
-    const existingAPI = await this.prisma.mCPServer.findFirst({
-      where: { 
-        name: 'dynamic-mcp-api',
-        userId: 1
-      }
-    })
-
-    if (!existingAPI) {
-      console.log('🔧 Creating dynamic MCP API server entry...')
-      
-      await this.prisma.mCPServer.create({
-        data: {
-          userId: 1,
-          name: 'dynamic-mcp-api',
-          version: '1.0.0',
-          description: 'Internal MCP server for managing the Dynamic MCP system via chat',
-          isEnabled: true,
-          status: 'DISCONNECTED',
-          transportType: 'STDIO',
-          transportCommand: 'node',
-          transportArgs: [
-            'dist/mcp-servers/dynamic-mcp-api-server.js'
-          ],
-          transportEnv: {},
-          authType: 'NONE',
-          configAutoConnect: true,
-          configConnectionTimeout: 10000,
-          configMaxRetries: 3,
-          configRetryDelay: 2000,
-          configValidateCertificates: true,
-          configDebug: false,
-          capabilities: {
-            tools: [
-              { 
-                name: 'mcp_list_servers', 
-                description: '📋 List all registered MCP servers with their connection status, capabilities, and configuration details',
-                labels: ['management', 'read', 'servers']
-              },
-              { 
-                name: 'mcp_create_server', 
-                description: '➕ Register a new MCP server with connection configuration and capabilities',
-                labels: ['management', 'create', 'servers'] 
-              },
-              { 
-                name: 'mcp_update_server', 
-                description: '✏️ Update an existing MCP server configuration, connection settings, or capabilities',
-                labels: ['management', 'update', 'servers']
-              },
-              { 
-                name: 'mcp_delete_server', 
-                description: '🗑️ Permanently remove an MCP server and all its associated data',
-                labels: ['management', 'delete', 'servers']
-              },
-              { 
-                name: 'mcp_toggle_server', 
-                description: '🔄 Enable or disable an MCP server to control its availability for tool calls',
-                labels: ['management', 'update', 'servers', 'status']
-              },
-              {
-                name: 'mcp_connect_server',
-                description: '🔌 Establish connection to an MCP server and test its availability',
-                labels: ['management', 'connection', 'servers']
-              },
-              {
-                name: 'mcp_disconnect_server', 
-                description: '🔌 Disconnect from an MCP server while keeping its configuration',
-                labels: ['management', 'connection', 'servers']
-              },
-              {
-                name: 'mcp_get_server_tools',
-                description: '🛠️ Get all available tools from a specific MCP server with their schemas',
-                labels: ['management', 'read', 'tools']
-              }
-            ],
-            resources: [
-              { 
-                uri: 'mcp://config', 
-                name: 'MCP System Configuration', 
-                description: 'Complete Dynamic MCP system configuration including servers, connections, and global settings' 
-              },
-              {
-                uri: 'mcp://status',
-                name: 'MCP System Status',
-                description: 'Real-time status of all MCP servers, connections, and system health'
-              }
-            ],
-            prompts: [
-              { 
-                name: 'mcp-management-help', 
-                description: '💡 Get comprehensive help and examples for managing MCP servers through chat commands' 
-              }
-            ]
-          },
-          lastConnected: null
-        }
-      })
-      
-      console.log('✅ Dynamic MCP API server created')
-    }
-  }
 
   /**
    * Transform server data for API response

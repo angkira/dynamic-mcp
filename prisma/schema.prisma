@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
   output   = "../server/node_modules/.prisma/client"
@@ -15,62 +12,111 @@ model User {
   id         Int         @id @default(autoincrement())
   email      String      @unique
   name       String?
-  chats      Chat[]
-  settings   Settings?
-  mcpServers MCPServer[]
-  memories   Memory[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+  chats      Chat[]
+  mcpServers MCPServer[]
+  memories   Memory[]
+  settings   Settings?
 }
 
 model Chat {
   id        Int       @id @default(autoincrement())
-  user      User      @relation(fields: [userId], references: [id])
   userId    Int
-  title     String?
-  messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  title     String?
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+}
+
+model Message {
+  id           Int         @id @default(autoincrement())
+  content      Json
+  role         MessageRole @default(USER)
+  chatId       Int
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  thoughts     Json?
+  responseToId Int?        @unique
+  chat         Chat        @relation(fields: [chatId], references: [id])
+  responseTo   Message?    @relation("RequestResponse", fields: [responseToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  request      Message?    @relation("RequestResponse")
+}
+
+model Settings {
+  id                          Int      @id @default(autoincrement())
+  userId                      Int      @unique
+  defaultProvider             String   @default("openai")
+  defaultModel                String   @default("o3-mini")
+  thinkingBudget              Int      @default(2048)
+  responseBudget              Int      @default(8192)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  mcpAutoDiscovery            Boolean  @default(true)
+  mcpDefaultTimeout           Int      @default(10000)
+  mcpEnableDebugLogging       Boolean  @default(false)
+  mcpMaxConcurrentConnections Int      @default(5)
+  user                        User     @relation(fields: [userId], references: [id])
+}
+
+model MCPServer {
+  id                         Int              @id @default(autoincrement())
+  userId                     Int
+  name                       String
+  version                    String
+  description                String?
+  isEnabled                  Boolean          @default(true)
+  status                     MCPServerStatus  @default(DISCONNECTED)
+  lastConnected              DateTime?
+  transportType              MCPTransportType
+  transportCommand           String?
+  transportArgs              Json?
+  transportEnv               Json?
+  transportBaseUrl           String?
+  transportTimeout           Int?
+  transportRetryAttempts     Int?
+  transportSessionId         String?
+  authType                   MCPAuthType      @default(NONE)
+  authClientId               String?
+  authClientSecret           String?
+  authAuthUrl                String?
+  authTokenUrl               String?
+  authScopes                 Json?
+  authApiKey                 String?
+  authHeaderName             String?
+  authToken                  String?
+  configAutoConnect          Boolean          @default(false)
+  configConnectionTimeout    Int              @default(10000)
+  configMaxRetries           Int              @default(3)
+  configRetryDelay           Int              @default(2000)
+  configValidateCertificates Boolean          @default(true)
+  configDebug                Boolean          @default(false)
+  capabilities               Json?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  user                       User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Memory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  key       String?
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([userId, key])
 }
 
 enum MessageRole {
   USER
   AI
-}
-
-model Message {
-  id        Int         @id @default(autoincrement())
-  content   Json        @db.JsonB
-  thoughts  Json?       @db.JsonB
-  role      MessageRole @default(USER)
-  chat      Chat        @relation(fields: [chatId], references: [id])
-  chatId    Int
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  // Self-relation for request/response
-  responseTo   Message? @relation("RequestResponse", fields: [responseToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  responseToId Int?     @unique
-  request      Message? @relation("RequestResponse")
-}
-
-model Settings {
-  id              Int    @id @default(autoincrement())
-  user            User   @relation(fields: [userId], references: [id])
-  userId          Int    @unique
-  defaultProvider String @default("openai")
-  defaultModel    String @default("o3-mini")
-  thinkingBudget  Int    @default(2048)
-  responseBudget  Int    @default(8192)
-
-  // MCP Global Settings
-  mcpEnableDebugLogging       Boolean @default(false)
-  mcpDefaultTimeout           Int     @default(10000)
-  mcpMaxConcurrentConnections Int     @default(5)
-  mcpAutoDiscovery            Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 enum MCPServerStatus {
@@ -92,67 +138,4 @@ enum MCPAuthType {
   OAUTH
   APIKEY
   BEARER
-}
-
-model MCPServer {
-  id            Int             @id @default(autoincrement())
-  user          User            @relation(fields: [userId], references: [id])
-  userId        Int
-  name          String
-  version       String
-  description   String?
-  isEnabled     Boolean         @default(true)
-  status        MCPServerStatus @default(DISCONNECTED)
-  lastConnected DateTime?
-
-  // Transport configuration
-  transportType          MCPTransportType
-  transportCommand       String?
-  transportArgs          Json?            @db.JsonB
-  transportEnv           Json?            @db.JsonB
-  transportBaseUrl       String?
-  transportTimeout       Int?
-  transportRetryAttempts Int?
-  transportSessionId     String?
-
-  // Authentication configuration
-  authType         MCPAuthType @default(NONE)
-  authClientId     String?
-  authClientSecret String?
-  authAuthUrl      String?
-  authTokenUrl     String?
-  authScopes       Json?       @db.JsonB
-  authApiKey       String?
-  authHeaderName   String?
-  authToken        String?
-
-  // Server configuration
-  configAutoConnect          Boolean @default(false)
-  configConnectionTimeout    Int     @default(10000)
-  configMaxRetries           Int     @default(3)
-  configRetryDelay           Int     @default(2000)
-  configValidateCertificates Boolean @default(true)
-  configDebug                Boolean @default(false)
-
-  // Capabilities (stored as JSON)
-  capabilities Json? @db.JsonB
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
-
-model Memory {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  key       String? // Optional categorization key
-  content   String // The memory content
-  metadata  Json?    @db.JsonB // Additional metadata (tags, importance, etc.)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, key])
 }
