@@ -20,10 +20,13 @@ import type {
  */
 export class McpService {
   private prisma: PrismaClient
+  private fastify: FastifyInstance
   private connectionManager: McpConnectionManager
 
-  constructor(fastify?: FastifyInstance) {
+  constructor(fastify: FastifyInstance) {
+    this.fastify = fastify
     this.prisma = new PrismaClient()
+    this.connectionManager = new McpConnectionManager(fastify)
     this.connectionManager = new McpConnectionManager(fastify)
   }
 
@@ -305,8 +308,8 @@ export class McpService {
 
   /**
    * Test connection to an MCP server
-   * If already connected, performs a ping test
-   * If not connected, attempts a quick connection test
+   * For HTTP daemon services, tests the health endpoint directly
+   * For STDIO/internal servers, uses the existing connection manager approach
    */
   async testConnection(id: number, userId: number = 1) {
     const server = await this.prisma.mCPServer.findFirst({
@@ -318,46 +321,98 @@ export class McpService {
     }
 
     try {
-      // Check if server is already connected
-      const isConnected = this.connectionManager.isConnected(id)
-      
-      if (isConnected) {
-        // Server is connected, perform a ping test
-        const healthResults = await this.connectionManager.healthCheck()
-        const serverHealth = healthResults.find(h => h.serverId === id)
+      let result: { success: boolean; message: string }
+
+      // Handle HTTP daemon services (check health endpoint directly)
+      if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+        result = await this.testHttpDaemonHealth(server)
+      }
+      // Handle internal servers
+      else if (server.transportCommand === 'internal') {
+        result = { success: true, message: 'Internal server is always available' }
+      }
+      // For STDIO servers, use the existing connection manager approach
+      else {
+        const isConnected = this.connectionManager.isConnected(id)
         
-        if (serverHealth) {
-          return {
-            success: serverHealth.healthy,
-            message: serverHealth.healthy 
-              ? 'Connection test successful (ping)' 
-              : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
+        if (isConnected) {
+          // Server is connected, perform a ping test
+          const healthResults = await this.connectionManager.healthCheck()
+          const serverHealth = healthResults.find(h => h.serverId === id)
+          
+          if (serverHealth) {
+            result = {
+              success: serverHealth.healthy,
+              message: serverHealth.healthy 
+                ? 'Connection test successful (ping)' 
+                : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
+            }
+          } else {
+            result = { success: false, message: 'Server health status not available' }
           }
         } else {
-          return { success: false, message: 'Server health status not available' }
-        }
-      } else {
-        // Server is not connected, attempt a quick connection test
-        const success = await this.connectionManager.connectToServer(server)
-        
-        if (success) {
-          // Optionally disconnect after successful test to avoid keeping unnecessary connections
-          // await this.connectionManager.disconnectFromServer(id)
-          return { 
-            success: true, 
-            message: 'Connection test successful (connected)' 
-          }
-        } else {
-          return { 
-            success: false, 
-            message: 'Failed to establish connection' 
+          // Server is not connected, attempt a quick connection test
+          const success = await this.connectionManager.connectToServer(server)
+          
+          if (success) {
+            // Optionally disconnect after successful test to avoid keeping unnecessary connections
+            // await this.connectionManager.disconnectFromServer(id)
+            result = { 
+              success: true, 
+              message: 'Connection test successful (connected)' 
+            }
+          } else {
+            result = { 
+              success: false, 
+              message: 'Failed to establish connection' 
+            }
           }
         }
       }
+
+      return result
     } catch (error) {
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Connection test failed' 
+      const errorMessage = error instanceof Error ? error.message : 'Connection test failed'
+      return { success: false, message: errorMessage }
+    }
+  }
+
+  /**
+   * Test HTTP daemon health endpoint directly
+   */
+  private async testHttpDaemonHealth(server: any) {
+    try {
+      const healthUrl = `${server.transportBaseUrl}/health`
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000), // 5 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const healthData = await response.json() as { status?: string }
+        return {
+          success: true,
+          message: `HTTP daemon health check successful - ${healthData.status || 'healthy'}`
+        }
+      } else {
+        return {
+          success: false,
+          message: `HTTP daemon health check failed - HTTP ${response.status}: ${response.statusText}`
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        return {
+          success: false,
+          message: 'HTTP daemon health check timeout (5s)'
+        }
+      }
+      return {
+        success: false,
+        message: `HTTP daemon health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       }
     }
   }

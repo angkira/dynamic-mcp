@@ -190,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
+import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import {
   NCard,
   NSpace,
@@ -204,6 +204,7 @@ import {
 } from 'naive-ui'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useMcpStore } from '@/stores/mcp'
+import { socketService } from '@/services/socket'
 import type { MCPServer } from '@/types'
 
 // Props
@@ -231,6 +232,63 @@ const testResult = ref<{ success: boolean; message: string } | null>(null)
 
 // Store
 const mcpStore = useMcpStore()
+
+// WebSocket event handlers
+const setupWebSocketListeners = () => {
+  if (!socketService.socket) {
+    socketService.connect()
+  }
+
+  // Listen for test events specific to this server
+  socketService.on('mcp:test:start', (data: { serverId: string }) => {
+    if (data.serverId === props.server.id) {
+      testing.value = true
+      testResult.value = { success: true, message: 'Testing connection...' }
+    }
+  })
+
+  socketService.on(
+    'mcp:test:complete',
+    (data: { serverId: string; success: boolean; message: string }) => {
+      if (data.serverId === props.server.id) {
+        testing.value = false
+        testResult.value = { success: data.success, message: data.message }
+
+        // Auto-hide result after 5 seconds
+        setTimeout(() => {
+          testResult.value = null
+        }, 5000)
+      }
+    },
+  )
+
+  socketService.on('mcp:test:error', (data: { serverId: string; error: string }) => {
+    if (data.serverId === props.server.id) {
+      testing.value = false
+      testResult.value = { success: false, message: data.error }
+
+      // Auto-hide result after 5 seconds
+      setTimeout(() => {
+        testResult.value = null
+      }, 5000)
+    }
+  })
+}
+
+const cleanupWebSocketListeners = () => {
+  socketService.off('mcp:test:start')
+  socketService.off('mcp:test:complete')
+  socketService.off('mcp:test:error')
+}
+
+// Lifecycle hooks
+onMounted(() => {
+  setupWebSocketListeners()
+})
+
+onUnmounted(() => {
+  cleanupWebSocketListeners()
+})
 
 // Computed properties
 const statusTagType = computed(() => {
@@ -298,18 +356,26 @@ const menuOptions = computed(() => [
 
 // Methods
 const testConnection = async () => {
+  if (testing.value) return // Prevent multiple simultaneous tests
+
   testing.value = true
-  testResult.value = null
+  testResult.value = { success: true, message: 'Initializing test...' }
 
   try {
     const result = await mcpStore.testConnection(props.server.id)
+
+    // The WebSocket handlers will update the UI, but as fallback:
+    if (!testing.value) return // WebSocket already handled it
+
     testResult.value = result
+    testing.value = false
 
     // Auto-hide result after 5 seconds
     setTimeout(() => {
       testResult.value = null
     }, 5000)
   } catch (error) {
+    testing.value = false
     const errorMessage =
       error instanceof Error ? error.message : 'Connection test failed with an error.'
     testResult.value = {
@@ -321,8 +387,6 @@ const testConnection = async () => {
     setTimeout(() => {
       testResult.value = null
     }, 5000)
-  } finally {
-    testing.value = false
   }
 }
 

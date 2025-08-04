@@ -34,6 +34,69 @@ async function websocketPlugin(fastify: FastifyInstance) {
         messageHandler.handleSendMessage(socket, payload);
       });
 
+      // MCP test connection events
+      socket.on('mcp:test:request', async (payload: { serverId: string }) => {
+        fastify.log.info(`MCP test request for server ${payload.serverId} from socket ${socket.id}`);
+        
+        try {
+          // Get the MCP service instance from fastify decorators
+          const mcpService = (fastify as any).mcpService;
+          if (!mcpService) {
+            socket.emit('mcp:test:error', {
+              serverId: payload.serverId,
+              error: 'MCP service not available'
+            });
+            return;
+          }
+
+          // Emit test start to all clients for real-time updates
+          fastify.io.emit('mcp:test:start', { serverId: payload.serverId });
+
+          // Perform the actual test
+          const result = await mcpService.testConnection(parseInt(payload.serverId));
+
+          // Emit result to all clients
+          if (result.success) {
+            fastify.io.emit('mcp:test:complete', {
+              serverId: payload.serverId,
+              success: result.success,
+              message: result.message
+            });
+          } else {
+            fastify.io.emit('mcp:test:error', {
+              serverId: payload.serverId,
+              error: result.message
+            });
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error during test';
+          fastify.log.error(`MCP test error for server ${payload.serverId}:`, error);
+          
+          fastify.io.emit('mcp:test:error', {
+            serverId: payload.serverId,
+            error: errorMessage
+          });
+        }
+      });
+
+      socket.on('mcp:test:start', (payload: { serverId: string }) => {
+        fastify.log.info(`MCP test started for server ${payload.serverId} by socket ${socket.id}`);
+        // Broadcast to all connected clients for real-time updates
+        fastify.io.emit('mcp:test:start', payload);
+      });
+
+      socket.on('mcp:test:complete', (payload: { serverId: string; success: boolean; message: string }) => {
+        fastify.log.info(`MCP test completed for server ${payload.serverId}: ${payload.success ? 'SUCCESS' : 'FAILED'}`);
+        // Broadcast to all connected clients
+        fastify.io.emit('mcp:test:complete', payload);
+      });
+
+      socket.on('mcp:test:error', (payload: { serverId: string; error: string }) => {
+        fastify.log.info(`MCP test error for server ${payload.serverId}: ${payload.error}`);
+        // Broadcast to all connected clients
+        fastify.io.emit('mcp:test:error', payload);
+      });
+
       socket.on('disconnect', () => {
         fastify.log.info(`Socket disconnected: ${socket.id}`);
       });

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { mcpApi } from '@/services/api/mcp'
+import { socketService } from '@/services/socket'
 import { useSettingsStore } from '@/stores/settings'
 import type { MCPServer, MCPSettings } from '@/types'
 import { MCPServerStatus, MCPTransportType, MCPAuthType } from '@/types'
@@ -242,12 +243,56 @@ export const useMcpStore = defineStore('mcp', () => {
   }
 
   const testConnection = async (id: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      return await mcpApi.testConnection(id)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection test failed'
-      return { success: false, message }
-    }
+    return new Promise((resolve, reject) => {
+      if (!socketService.socket) {
+        socketService.connect()
+      }
+
+      let timeoutId: NodeJS.Timeout | null = null
+
+      // Set up one-time listeners for this specific test
+      const handleTestComplete = (data: { serverId: string; success: boolean; message: string }) => {
+        if (data.serverId === id) {
+          cleanup()
+          resolve({ success: data.success, message: data.message })
+        }
+      }
+
+      const handleTestError = (data: { serverId: string; error: string }) => {
+        if (data.serverId === id) {
+          cleanup()
+          resolve({ success: false, message: data.error })
+        }
+      }
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+        socketService.off('mcp:test:complete', handleTestComplete)
+        socketService.off('mcp:test:error', handleTestError)
+      }
+
+      // Set up timeout
+      timeoutId = setTimeout(() => {
+        cleanup()
+        resolve({ success: false, message: 'Test connection timeout (30s)' })
+      }, 30000)
+
+      // Listen for responses
+      socketService.on('mcp:test:complete', handleTestComplete)
+      socketService.on('mcp:test:error', handleTestError)
+
+      try {
+        // Send WebSocket request to test MCP server
+        socketService.emit('mcp:test:request', { serverId: id })
+      } catch (err) {
+        cleanup()
+        const message = err instanceof Error ? err.message : 'Failed to send test request'
+        resolve({ success: false, message })
+      }
+    })
   }
 
   const updateGlobalConfig = async (key: keyof typeof globalConfig.value, value: unknown) => {

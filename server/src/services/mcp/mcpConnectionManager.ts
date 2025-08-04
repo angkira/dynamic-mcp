@@ -116,6 +116,33 @@ export class McpConnectionManager {
         await this.updateServerStatus(server.id, 'CONNECTED')
         return true
       }
+
+      // For HTTP daemon services, just check health endpoint instead of creating MCP client connection
+      if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+        console.log(`🔌 Testing HTTP daemon health: ${server.name} at ${server.transportBaseUrl}`)
+        try {
+          const healthUrl = `${server.transportBaseUrl}/health`
+          const response = await fetch(healthUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000),
+            headers: { 'Content-Type': 'application/json' }
+          })
+
+          if (response.ok) {
+            console.log(`✅ HTTP daemon ${server.name} is healthy`)
+            await this.updateServerStatus(server.id, 'CONNECTED')
+            return true
+          } else {
+            console.error(`❌ HTTP daemon ${server.name} health check failed: ${response.status}`)
+            await this.updateServerStatus(server.id, 'ERROR')
+            return false
+          }
+        } catch (error) {
+          console.error(`❌ HTTP daemon ${server.name} health check error:`, error)
+          await this.updateServerStatus(server.id, 'ERROR')
+          return false
+        }
+      }
       
       // Update status to connecting
       await this.updateServerStatus(server.id, 'CONNECTING')
