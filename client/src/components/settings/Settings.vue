@@ -205,7 +205,7 @@ const toggleMCPServer = async (serverId: string) => {
   const server = mcpStore.servers.find((s) => s.id === serverId)
   const success = await mcpStore.toggleServer(serverId)
   if (success && server) {
-    message.success(`MCP server ${server.isEnabled ? 'enabled' : 'disabled'}`)
+    message.success(`MCP server ${server.isEnabled ? 'disabled' : 'enabled'}`)
   } else {
     message.error(mcpStore.error || 'Failed to toggle MCP server')
   }
