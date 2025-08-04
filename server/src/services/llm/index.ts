@@ -1,9 +1,9 @@
-import type { LlmService } from './interface'
-import { LlmProvider } from './interface'
+import type { LlmService } from '@shared/types'
+import { LlmProvider } from '@shared/types'
 import { OpenAiService } from './openai'
 import { GeminiService } from './gemini'
 
 export const llmServices = new Map<LlmProvider, LlmService>([
-  [LlmProvider.Gemini, new GeminiService()],
+  [LlmProvider.Google, new GeminiService()], // Fixed to match shared enum
   [LlmProvider.OpenAI, new OpenAiService()],
 ]);

@@ -25,12 +25,6 @@ export const ChatAPIService = {
       const url = `/message${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       return httpClient.post<SendMessageResponse>(url, request);
     },
-
-    createMessageStream(): EventSource {
-      // For streaming, we'll handle this specially in the store
-      // This is a placeholder for the streaming interface
-      throw new Error('Use messagesStore.sendMessage with stream: true for streaming');
-    },
   },
 
   // Chat endpoints

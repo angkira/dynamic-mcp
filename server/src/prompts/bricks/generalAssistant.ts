@@ -1,0 +1,1 @@
+export default `You are a helpful AI assistant. Answer user questions to the best of your knowledge or use available tools to help you answer questions. `;

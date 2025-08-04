@@ -98,23 +98,57 @@ class HttpClient {
   }
 
   async post<T>(endpoint: string, data?: object): Promise<T> {
-    return this.request<T>(endpoint, {
+    const options: RequestInit = {
       method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    })
+    }
+    
+    // Only set body and Content-Type if data is provided
+    if (data !== undefined) {
+      options.body = JSON.stringify(data)
+      options.headers = {
+        'Content-Type': 'application/json',
+      }
+    }
+    
+    return this.request<T>(endpoint, options)
   }
 
   async put<T>(endpoint: string, data?: object): Promise<T> {
-    return this.request<T>(endpoint, {
+    const options: RequestInit = {
       method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    })
+    }
+    
+    // Only set body and Content-Type if data is provided
+    if (data !== undefined) {
+      options.body = JSON.stringify(data)
+      options.headers = {
+        'Content-Type': 'application/json',
+      }
+    }
+    
+    return this.request<T>(endpoint, options)
   }
 
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'DELETE',
     })
+  }
+
+  async patch<T>(endpoint: string, data?: object): Promise<T> {
+    const options: RequestInit = {
+      method: 'PATCH',
+    }
+    
+    // Only set body and Content-Type if data is provided
+    if (data !== undefined) {
+      options.body = JSON.stringify(data)
+      options.headers = {
+        'Content-Type': 'application/json',
+      }
+    }
+    
+    return this.request<T>(endpoint, options)
   }
 
   /**

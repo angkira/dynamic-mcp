@@ -1,9 +1,12 @@
 <template>
-  <div class="message-item" :class="{
-    'user-message': message.role === MessageRole.USER,
-    'ai-message': message.role === MessageRole.AI,
-    'streaming': isStreaming
-  }">
+  <div
+    class="message-item"
+    :class="{
+      'user-message': message.role === MessageRole.USER,
+      'ai-message': message.role === MessageRole.AI,
+      streaming: isStreaming,
+    }"
+  >
     <div class="message-avatar">
       <div v-if="message.role === MessageRole.USER" class="user-avatar">
         {{ user.userInitials }}
@@ -18,7 +21,10 @@
         <span class="message-sender">
           {{ message.role === MessageRole.USER ? user.userName : 'AI Assistant' }}
         </span>
-        <span v-if="message.role === MessageRole.AI && message.content.metadata" class="message-model">
+        <span
+          v-if="message.role === MessageRole.AI && message.content.metadata"
+          class="message-model"
+        >
           {{ message.content.metadata.provider }}/{{ message.content.metadata.model }}
         </span>
         <span class="message-time">
@@ -28,29 +34,83 @@
 
       <div class="message-body">
         <!-- Chain of thoughts display -->
-        <div v-if="showThoughts" class="thoughts-content"
-          :class="{ 'collapsed': isThoughtsCollapsed, 'streaming': isStreaming }">
+        <div
+          v-if="showThoughts"
+          class="thoughts-content"
+          :class="{ collapsed: isThoughtsCollapsed, streaming: isStreaming }"
+        >
           <div class="thinking-header" @click="toggleThoughts">
             <FontAwesomeIcon icon="brain" class="thinking-icon" />
             <span v-if="isStreaming && streamingMessage?.isThinking">Model is thinking...</span>
             <span v-else>View reasoning process</span>
-            <FontAwesomeIcon :icon="isThoughtsCollapsed ? 'chevron-right' : 'chevron-down'" class="collapse-icon"
-              v-if="!isStreaming || streamingMessage?.thoughtsCompleted" />
+            <FontAwesomeIcon
+              :icon="isThoughtsCollapsed ? 'chevron-right' : 'chevron-down'"
+              class="collapse-icon"
+            />
           </div>
           <div class="thinking-text" v-show="!isThoughtsCollapsed">
             <!-- Streaming thoughts -->
             <template v-if="isStreaming">
               <div v-if="streamingMessage?.thoughtHtml" v-html="streamingMessage.thoughtHtml"></div>
-              <div v-else-if="streamingMessage?.thoughtContent">{{ streamingMessage.thoughtContent }}</div>
-              <span v-if="streamingMessage?.thoughtBuffer" class="current-thinking">{{ streamingMessage.thoughtBuffer
-                }}</span>
+              <div v-else-if="streamingMessage?.thoughtContent">
+                {{ streamingMessage.thoughtContent }}
+              </div>
+              <span v-if="streamingMessage?.thoughtBuffer" class="current-thinking">{{
+                streamingMessage.thoughtBuffer
+              }}</span>
             </template>
             <!-- Completed message thoughts -->
             <template v-else>
-              <div v-if="message.content.metadata?.thoughtHtml" v-html="message.content.metadata.thoughtHtml"></div>
-              <div v-else-if="message.content.metadata?.thoughtContent">{{ message.content.metadata.thoughtContent }}
+              <div
+                v-if="message.content.metadata?.thoughtHtml"
+                v-html="message.content.metadata.thoughtHtml"
+              ></div>
+              <div v-else-if="message.content.metadata?.thoughtContent">
+                {{ message.content.metadata.thoughtContent }}
               </div>
             </template>
+          </div>
+        </div>
+
+        <!-- Tool execution block -->
+        <div
+          v-if="
+            message.role === MessageRole.AI &&
+            ((streamingMessage?.toolCalls && streamingMessage.toolCalls.length > 0) ||
+              (message.content.toolCalls && message.content.toolCalls.length > 0))
+          "
+          class="tool-block"
+        >
+          <div class="tool-header">
+            <div class="tool-icon">🔧</div>
+            <span class="tool-title">Tool Execution</span>
+            <div v-if="streamingMessage?.isToolExecuting" class="tool-pulse"></div>
+          </div>
+
+          <div class="tool-logs">
+            <!-- Show tool calls and results -->
+            <div
+              v-for="(tool, index) in streamingMessage?.toolCalls ||
+              message.content.toolCalls ||
+              []"
+              :key="index"
+              class="tool-entry"
+            >
+              <div class="tool-call">
+                <span class="tool-status executing">Executing tool {{ tool.name }}...</span>
+              </div>
+              <div v-if="tool.result" class="tool-result">
+                <span v-if="tool.error" class="tool-status error"
+                  >Error in executing: {{ tool.error }}</span
+                >
+                <span v-else class="tool-status success"
+                  >✅ Tool {{ tool.name }} executed successfully</span
+                >
+                <!-- <pre v-if="tool.result" class="tool-output">{{
+                  JSON.stringify(tool.result, null, 2)
+                }}</pre> -->
+              </div>
+            </div>
           </div>
         </div>
 
@@ -60,13 +120,19 @@
           <div v-if="isStreaming && streamingMessage" class="streaming-content">
             <div v-if="streamingMessage?.html" v-html="streamingMessage.html"></div>
             <div v-else-if="streamingMessage?.content">{{ streamingMessage.content }}</div>
-            <div v-else class="streaming-placeholder"></div>
-            <span v-if="!streamingMessage?.isThinking" class="typing-cursor">|</span>
+            <div v-else class="streaming-placeholder">
+              <span class="pulse">Assistant is thinking...</span>
+            </div>
           </div>
 
           <!-- Static markdown content for completed messages -->
-          <VueMarkdown v-else-if="message.content.text" :markdown="message.content.text" :remark-plugins="[remarkGfm]"
-            :rehype-plugins="[rehypeRemovePTagsInLi]" :sanitize="true" class="markdown-content" />
+          <VueMarkdown
+            v-else-if="message.content.text"
+            :markdown="message.content.text"
+            :remark-plugins="[remarkGfm]"
+            :sanitize="true"
+            class="markdown-content"
+          />
         </div>
       </div>
 
@@ -93,7 +159,6 @@ import type { Message } from '@/types'
 import { VueMarkdown } from '@crazydos/vue-markdown'
 import remarkGfm from 'remark-gfm'
 import { MessageRole } from '@prisma/client'
-import { rehypeRemovePTagsInLi } from '@/utils/rehypePlugins'
 
 interface Props {
   message: Message
@@ -110,7 +175,7 @@ const messages = useMessagesStore()
 const isThoughtsCollapsed = ref(false)
 
 // Computed properties for streaming and thoughts
-const streamingMessage = computed(() => messages.streamingMessage)
+const streamingMessage = computed(() => messages.currentStreamingMessage)
 const showThoughts = computed(() => {
   if (props.isStreaming && props.message.role === MessageRole.AI) {
     // Show thoughts during streaming only if we actually have thought content
@@ -122,18 +187,23 @@ const showThoughts = computed(() => {
   return false
 })
 
-// Auto-collapse thoughts when they're completed
-watch(() => streamingMessage.value?.thoughtsCompleted, (completed) => {
-  if (completed) {
-    isThoughtsCollapsed.value = true
-  }
-})
+// Auto-collapse thoughts when streaming is completed, but keep them visible
+watch(
+  () => streamingMessage.value?.isComplete,
+  (isComplete) => {
+    if (
+      isComplete &&
+      (streamingMessage.value?.thoughtContent || streamingMessage.value?.thoughtHtml)
+    ) {
+      // Collapse but don't hide thoughts when streaming finishes
+      isThoughtsCollapsed.value = true
+    }
+  },
+)
 
 function toggleThoughts() {
-  // Allow toggling for completed streaming messages or any completed message with thoughts
-  if (!props.isStreaming || streamingMessage.value?.thoughtsCompleted) {
-    isThoughtsCollapsed.value = !isThoughtsCollapsed.value
-  }
+  // Always allow toggling thoughts when they exist
+  isThoughtsCollapsed.value = !isThoughtsCollapsed.value
 }
 
 function formatTime(timestamp: string): string {
@@ -146,8 +216,8 @@ async function copyMessage() {
     await navigator.clipboard.writeText(props.message.content.text)
     ui.addNotification('Message copied to clipboard', 'success')
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    ui.addNotification(`Failed to copy message: ${errorMessage}`, 'error');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    ui.addNotification(`Failed to copy message: ${errorMessage}`, 'error')
   }
 }
 
@@ -155,6 +225,16 @@ function regenerateResponse() {
   ui.addNotification('Regeneration feature coming soon', 'info')
 }
 </script>
+
+<style lang="scss">
+.message-body {
+  li > p {
+    display: inline;
+    margin: 0;
+    padding: 0;
+  }
+}
+</style>
 
 <style lang="scss" scoped>
 .message-item {
@@ -265,23 +345,128 @@ function regenerateResponse() {
   border-radius: var(--radius-lg);
   color: var(--color-text);
   white-space: pre-wrap;
-  word-break: break-words;
+  word-break: word-break;
   line-height: 1.5;
   border: 1px solid var(--color-border);
 }
 
-.ai-message .message-text {
-  background-color: #ffffff;
-  border-bottom-left-radius: var(--radius-sm);
+/* Markdown content styling */
+.markdown-content {
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
 
-  :deep(.markdown-content) {
-    p:first-child {
+  :deep(li) {
+    margin: 0.25em 0;
+    line-height: 1.6;
+
+    /* Fix for <li><p> issue: make single paragraph inline */
+    > p:only-child {
+      display: inline;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* For multiple paragraphs, reduce spacing */
+    > p:first-child {
       margin-top: 0;
     }
 
-    p:last-child {
+    > p:last-child {
       margin-bottom: 0;
     }
+
+    /* Ensure proper spacing for paragraphs in lists */
+    > p + p {
+      margin-top: 0.5em;
+    }
+  }
+
+  :deep(ul) {
+    list-style-type: disc;
+  }
+
+  :deep(ol) {
+    list-style-type: decimal;
+  }
+
+  /* Nested lists */
+  :deep(li ul),
+  :deep(li ol) {
+    margin: 0.25em 0;
+    padding-left: 1.2em;
+  }
+
+  :deep(li ul) {
+    list-style-type: circle;
+  }
+
+  :deep(li li ul) {
+    list-style-type: square;
+  }
+
+  /* Other markdown elements */
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin: 0.75em 0 0.5em 0;
+    font-weight: 600;
+  }
+
+  :deep(p) {
+    margin: 0.5em 0;
+  }
+
+  :deep(code) {
+    background-color: var(--color-surface);
+    padding: 0.125em 0.25em;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  :deep(pre) {
+    background-color: var(--color-surface);
+    padding: 1em;
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: 0.75em 0;
+  }
+
+  :deep(pre code) {
+    background: none;
+    padding: 0;
+  }
+
+  :deep(blockquote) {
+    border-left: 3px solid var(--color-primary);
+    padding-left: 1em;
+    margin: 0.75em 0;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75em 0;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid var(--color-border);
+    padding: 0.5em;
+    text-align: left;
+  }
+
+  :deep(th) {
+    background-color: var(--color-surface);
+    font-weight: 600;
   }
 }
 
@@ -289,6 +474,12 @@ function regenerateResponse() {
   background-color: var(--color-background);
   border: 1px solid var(--color-border);
   animation: pulse-border 2s infinite;
+}
+
+.streaming-placeholder {
+  animation: pulse 1.5s infinite;
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .thoughts-content {
@@ -299,6 +490,7 @@ function regenerateResponse() {
   border-left: 3px solid var(--color-primary);
   font-style: italic;
   color: var(--color-text-muted);
+  animation: none;
 
   &.streaming {
     animation: thoughtsPulse 2s infinite;
@@ -364,6 +556,18 @@ function regenerateResponse() {
       opacity: 0;
       animation-fill-mode: forwards;
     }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
   }
 }
 
@@ -461,7 +665,6 @@ function regenerateResponse() {
 
 /* Animations */
 @keyframes pulse-border {
-
   0%,
   100% {
     border-color: var(--color-border);
@@ -489,5 +692,100 @@ function regenerateResponse() {
     padding: var(--spacing-sm);
     font-size: 0.875rem;
   }
+}
+
+/* Tool execution styles */
+.tool-block {
+  margin: var(--spacing-sm) 0;
+  border: 1px solid rgba(var(--color-border-rgb), 0.3);
+  border-radius: var(--border-radius-md);
+  background: rgba(var(--color-surface-rgb), 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border-bottom: 1px solid rgba(var(--color-border-rgb), 0.2);
+  border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+}
+
+.tool-icon {
+  font-size: 1rem;
+}
+
+.tool-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tool-pulse {
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent);
+  border-radius: 50%;
+  animation: toolPulse 1.5s ease-in-out infinite;
+  margin-left: auto;
+}
+
+@keyframes toolPulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.tool-logs {
+  padding: var(--spacing-md);
+}
+
+.tool-entry {
+  margin-bottom: var(--spacing-sm);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.tool-call {
+  margin-bottom: var(--spacing-xs);
+}
+
+.tool-status {
+  font-size: 0.875rem;
+  font-weight: 500;
+
+  &.executing {
+    color: var(--color-warning);
+  }
+
+  &.success {
+    color: var(--color-success);
+  }
+
+  &.error {
+    color: var(--color-error);
+  }
+}
+
+.tool-output {
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background: rgba(var(--color-text-rgb), 0.05);
+  border-radius: var(--border-radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
 }
 </style>

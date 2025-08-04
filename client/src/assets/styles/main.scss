@@ -11,3 +11,6 @@
 
 // 4. Base styles (depends on mixins and variables)
 @use 'base';
+
+// 5. Overrides (depends on variables)
+@use 'overrides';

@@ -1,0 +1,54 @@
+/* 
+Alternative CSS-only solution for fixing <li><p> issue 
+Add this to your component styles if you prefer not to use the rehype plugin
+*/
+
+.markdown-content {
+  /* CSS-only fix for <li><p> wrapping */
+  :deep(li > p:only-child) {
+    display: inline;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Handle multiple paragraphs in list items properly */
+  :deep(li > p:first-child) {
+    margin-top: 0;
+  }
+  
+  :deep(li > p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* Standard list styling */
+  :deep(ul), :deep(ol) {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  :deep(li) {
+    margin: 0.25em 0;
+    line-height: 1.6;
+  }
+
+  :deep(ul) {
+    list-style-type: disc;
+  }
+
+  :deep(ol) {
+    list-style-type: decimal;
+  }
+
+  /* Nested lists */
+  :deep(li ul), :deep(li ol) {
+    margin: 0.25em 0;
+  }
+
+  :deep(li ul) {
+    list-style-type: circle;
+  }
+
+  :deep(li li ul) {
+    list-style-type: square;
+  }
+}

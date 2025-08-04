@@ -1,0 +1,22 @@
+// TODO: Solve markdown rendering issues with the ai message
+.ai-message .message-text {
+  background-color: #ffffff;
+  border-bottom-left-radius: var(--radius-sm);
+
+  p:first-child {
+    margin-top: 0;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  li>p {
+    display: inline;
+    margin-bottom: 1rem;
+  }
+
+  li>p:last-of-type {
+    margin-bottom: 0;
+  }
+}

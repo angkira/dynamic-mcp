@@ -52,9 +52,10 @@ export default async function (fastify: FastifyInstance) {
       const formattedChats = chats.map(chat => {
         const lastMsg = chat.messages[0];
         const messageText = lastMsg ? (lastMsg.content as any).text : null;
+        
         return {
           id: chat.id,
-          title: messageText ?? '',
+          title: chat.title,
           userId: chat.userId,
           createdAt: chat.createdAt.toISOString(),
           updatedAt: chat.updatedAt.toISOString(),
@@ -84,6 +85,7 @@ export default async function (fastify: FastifyInstance) {
       reply
     ) => {
       const { chatId } = request.params;
+      request.log.info(`Attempting to delete chat with ID: ${chatId}`);
 
       try {
         // First check if the chat exists
@@ -93,6 +95,7 @@ export default async function (fastify: FastifyInstance) {
         });
 
         if (!existingChat) {
+          request.log.warn(`Chat with ID ${chatId} not found for deletion.`);
           return reply.code(404).send({
             error: 'Chat not found',
             message: `Chat with ID ${chatId} does not exist`,
@@ -109,23 +112,15 @@ export default async function (fastify: FastifyInstance) {
         await fastify.prisma.chat.delete({
           where: { id: chatId }
         });
+        
+        request.log.info(`Successfully deleted chat with ID: ${chatId}`);
 
-        return reply.send({
-          success: true,
-          message: `Chat ${chatId} deleted successfully`,
-          deletedChat: {
-            id: existingChat.id,
-            userId: existingChat.userId,
-            messagesCount: existingChat._count.messages
-          }
-        });
-
+        return reply.code(204).send();
       } catch (error) {
-        console.error('Delete chat error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to delete chat';
+        request.log.error({ msg: 'Error deleting chat', error, chatId });
         return reply.code(500).send({
-          error: errorMessage,
-          message: 'Internal server error while deleting chat',
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while deleting the chat.',
           statusCode: 500
         });
       }

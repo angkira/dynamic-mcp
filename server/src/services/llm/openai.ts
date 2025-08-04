@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
 import type { LlmService, ConversationMessage } from './interface';
 import { LlmAuthError, LlmBadRequestError, LlmRateLimitError, LlmInternalError } from '../../utils/errors';
-import { getSystemPrompt } from '../../constants/systemPrompts';
+import { buildSystemPrompt } from '../../prompts';
+import { MCPToolForLLM } from '../../types/mcp.types';
 
 export class OpenAiService implements LlmService {
   private openai: OpenAI;
   private model = 'o3-mini';
-  private thinkingBudget: number = 2048;
   private responseBudget: number = 8192;
 
   constructor() {
@@ -38,202 +38,108 @@ export class OpenAiService implements LlmService {
     try {
       const completion = await this.openai.chat.completions.create({
         messages: [
-          { role: 'system', content: getSystemPrompt(false, true) }, // Assume single message is first message
+          { role: 'system', content: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false }) },
           { role: 'user', content: message }
         ],
         model: this.model,
         max_tokens: this.responseBudget,
       });
 
-      if (!completion.choices[0]) {
-        return '';
+      if (completion.choices[0]) {
+        return completion.choices[0].message.content ?? '';
       }
-
-      return completion.choices[0].message.content ?? '';
+      return '';
     } catch (error) {
       this.handleError(error);
     }
   }
 
   async *sendMessageStream(message: string): AsyncIterable<string> {
-    try {
-      // For reasoning models (o1), we need to use non-streaming first as they don't support streaming yet
-      // Note: o3 is not yet available in public API
-      if (this.model.startsWith('o1') || this.model.startsWith('o3')) {
-        const completion = await this.openai.chat.completions.create({
-          messages: [
-            { role: 'system', content: getSystemPrompt(false, true) }, // Assume stream without history is first message
-            { role: 'user', content: message }
-          ],
-          model: this.model,
-          max_tokens: this.responseBudget,
-        });
-
-        const responseContent = completion.choices[0]?.message?.content || '';
-        
-        // Split response into reasoning and final answer for better thinking display
-        const lines = responseContent.split('\n');
-        let reasoningEnd = -1;
-        
-        // Find where reasoning likely ends (look for conclusion patterns)
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i]?.toLowerCase() || '';
-          if (line.includes('therefore') || line.includes('in conclusion') || 
-              line.includes('so the answer') || line.includes('final answer') ||
-              line.includes('the result is') || line.includes('to summarize') ||
-              (i > 2 && line.trim().length > 40 && !line.includes('step') && 
-               !line.includes('consider') && !line.includes('analyze') && 
-               !line.includes('examine'))) {
-            reasoningEnd = i;
-            break;
-          }
+    for await (const chunk of this.sendMessageStreamWithTools(message, [], [])) {
+        if (typeof chunk === 'string') {
+            yield chunk;
         }
-        
-        if (reasoningEnd > 0) {
-          const reasoningPart = lines.slice(0, reasoningEnd).join('\n');
-          const answerPart = lines.slice(reasoningEnd).join('\n');
-          
-          // Stream reasoning with explicit markers
-          yield '<thinking>\n';
-          for (const char of reasoningPart) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 12));
-          }
-          yield '\n</thinking>\n\n';
-          
-          // Stream the final answer
-          for (const char of answerPart) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 8));
-          }
-        } else {
-          // Stream the response character by character to simulate streaming
-          for (const char of responseContent) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-        }
-      } else {
-        // Use streaming for other models
-        const stream = await this.openai.chat.completions.create({
-          messages: [
-            { role: 'system', content: getSystemPrompt(false, true) }, // Assume stream without history is first message
-            { role: 'user', content: message }
-          ],
-          model: this.model,
-          max_tokens: this.responseBudget,
-          stream: true,
-        });
-
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            yield content;
-          }
-        }
-      }
-    } catch (error) {
-      this.handleError(error);
     }
   }
 
-  private convertHistoryToOpenAIMessages(history: ConversationMessage[], currentMessage: string): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  private convertHistoryToOpenAIMessages(history: ConversationMessage[], currentMessage: string, isThinking: boolean): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
     
-    // Determine if this is the first message (no history)
-    const isFirstMessage = history.length === 0;
+    // Determine if it's the first message in the chat for prompt building
+    const isFirstMessageInChat = history.length === 0;
+    const promptOptions = {
+        isFirstMessage: isFirstMessageInChat,
+        hasHistory: history.length > 0,
+        enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
+        restrictToMCP: false, // Allow general assistance, not restricted to MCP tools only
+    };
+    console.debug(` OpenAI prompt options:`, promptOptions);
     
-    // Add system prompt first
-    messages.push({ role: 'system', content: getSystemPrompt(history.length > 0, isFirstMessage) });
+    const systemPrompt = buildSystemPrompt(promptOptions);
+    console.debug(` OpenAI system prompt preview: "${systemPrompt.substring(0, 100)}..."`);
     
-    // Add conversation history
+    messages.push({ 
+        role: 'system', 
+        content: systemPrompt
+    });
+    
     history.forEach(msg => {
       const messageText = msg.content?.text || String(msg.content);
       if (msg.role === 'USER') {
         messages.push({ role: 'user', content: messageText });
       } else if (msg.role === 'AI') {
-        messages.push({ role: 'assistant', content: messageText });
+        if (msg.content?.tool_calls) {
+            messages.push({ role: 'assistant', tool_calls: msg.content.tool_calls });
+        } else {
+            messages.push({ role: 'assistant', content: messageText });
+        }
+      } else if (msg.role === 'TOOL') {
+        messages.push({ role: 'tool', tool_call_id: msg.content.tool_call_id, content: msg.content.result });
       }
     });
     
-    // Add current message
     messages.push({ role: 'user', content: currentMessage });
     
     return messages;
   }
 
   async *sendMessageStreamWithHistory(message: string, history: ConversationMessage[]): AsyncIterable<string> {
-    try {
-      const messages = this.convertHistoryToOpenAIMessages(history, message);
-      
-      // For reasoning models (o1), we need to use non-streaming first as they don't support streaming yet
-      // Note: o3 is not yet available in public API
-      if (this.model.startsWith('o1') || this.model.startsWith('o3')) {
-        const completion = await this.openai.chat.completions.create({
-          messages,
-          model: this.model,
-          max_tokens: this.responseBudget,
-        });
+    for await (const chunk of this.sendMessageStreamWithTools(message, history, [])) {
+      if (chunk.type === 'text') {
+        yield chunk.content;
+      }
+    }
+  }
 
-        const responseContent = completion.choices[0]?.message?.content || '';
-        
-        // Split response into reasoning and final answer for better thinking display
-        const lines = responseContent.split('\n');
-        let reasoningEnd = -1;
-        
-        // Find where reasoning likely ends (look for conclusion patterns)
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i]?.toLowerCase() || '';
-          if (line.includes('therefore') || line.includes('in conclusion') || 
-              line.includes('so the answer') || line.includes('final answer') ||
-              line.includes('the result is') || line.includes('to summarize') ||
-              (i > 2 && line.trim().length > 40 && !line.includes('step') && 
-               !line.includes('consider') && !line.includes('analyze') && 
-               !line.includes('examine'))) {
-            reasoningEnd = i;
-            break;
-          }
-        }
-        
-        if (reasoningEnd > 0) {
-          const reasoningPart = lines.slice(0, reasoningEnd).join('\n');
-          const answerPart = lines.slice(reasoningEnd).join('\n');
-          
-          // Stream reasoning with explicit markers
-          yield '<thinking>\n';
-          for (const char of reasoningPart) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 12));
-          }
-          yield '\n</thinking>\n\n';
-          
-          // Stream the final answer
-          for (const char of answerPart) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 8));
-          }
-        } else {
-          // Stream the response character by character to simulate streaming
-          for (const char of responseContent) {
-            yield char;
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-        }
-      } else {
-        // Use streaming for other models
-        const stream = await this.openai.chat.completions.create({
+  async *sendMessageStreamWithTools(message: string, history: ConversationMessage[], tools: any[], isThinking?: boolean): AsyncIterable<any> {
+    try {
+      const messages = this.convertHistoryToOpenAIMessages(history, message, !!isThinking);
+      
+      const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
           messages,
           model: this.model,
           max_tokens: this.responseBudget,
           stream: true,
-        });
+      };
 
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            yield content;
+      if (tools.length > 0) {
+        options.tools = this.formatTools(tools);
+      }
+      // No specific LLM behavior change based on isThinking for now, just pass the flag.
+      // Future implementation might modify messages or options based on this flag.
+
+      const stream = await this.openai.chat.completions.create(options);
+
+      for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
+          if (delta?.content) {
+              yield { type: 'text', content: delta.content };
           }
-        }
+          if (delta?.tool_calls) {
+              for (const toolCall of delta.tool_calls) {
+                  yield { type: 'toolCall', call: toolCall };
+              }
+          }
       }
     } catch (error) {
       this.handleError(error);
@@ -243,27 +149,10 @@ export class OpenAiService implements LlmService {
   async getModels(): Promise<{ provider: string; model: string }[]> {
     try {
       const models = await this.openai.models.list();
-      
-      // Filter models to show only those with "gpt" or starting with "o"
       const filteredModels = models.data.filter((model) => {
         const modelId = model.id.toLowerCase();
         return modelId.includes('gpt') || modelId.startsWith('o');
       });
-
-      // Prioritize reasoning models (o3 > o1 > gpt-4o)
-      filteredModels.sort((a, b) => {
-        const aIsO3 = a.id.startsWith('o3');
-        const bIsO3 = b.id.startsWith('o3');
-        const aIsO1 = a.id.startsWith('o1');
-        const bIsO1 = b.id.startsWith('o1');
-        
-        if (aIsO3 && !bIsO3) return -1;
-        if (!aIsO3 && bIsO3) return 1;
-        if (aIsO1 && !bIsO1) return -1;
-        if (!aIsO1 && bIsO1) return 1;
-        return 0;
-      });
-      
       return filteredModels.map((model) => ({
         provider: 'openai',
         model: model.id,
@@ -277,13 +166,59 @@ export class OpenAiService implements LlmService {
     this.model = model;
   }
 
-  setBudgets(thinkingBudget: number, responseBudget: number): void {
-    // Note: OpenAI models (o1/o3) handle thinking internally, no direct API control
-    // We store thinkingBudget for interface consistency but don't use it in API calls
-    this.thinkingBudget = thinkingBudget;
+  setBudgets(responseBudget: number): void {
     this.responseBudget = responseBudget;
-    
-    // Log the budget settings for debugging
-    console.debug(`OpenAI budgets set: thinking=${this.thinkingBudget}, response=${this.responseBudget}`);
+  }
+
+  formatTools(tools: MCPToolForLLM[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
+    return tools.map(tool => {
+      const { metadata, parameters, ...rest } = tool;
+
+      // Convert MCP parameter format to JSON schema format for OpenAI
+      const properties = Object.entries(parameters).reduce((acc, [key, value]) => {
+        const { optional, type, ...paramProps } = value as any;
+        
+        // Map parameter types to JSON schema types
+        let jsonSchemaType: string;
+        switch (type?.toLowerCase()) {
+          case 'number':
+          case 'integer':
+            jsonSchemaType = 'number';
+            break;
+          case 'boolean':
+            jsonSchemaType = 'boolean';
+            break;
+          case 'array':
+            jsonSchemaType = 'array';
+            break;
+          case 'object':
+            jsonSchemaType = 'object';
+            break;
+          case 'string':
+          default:
+            jsonSchemaType = 'string';
+        }
+        
+        acc[key] = { ...paramProps, type: jsonSchemaType };
+        return acc;
+      }, {} as Record<string, any>);
+
+      const required = Object.entries(parameters)
+          .filter(([, value]) => !(value as { optional?: boolean }).optional)
+          .map(([key]) => key);
+
+      return {
+        type: 'function' as const,
+        function: {
+          name: rest.name,
+          description: rest.description,
+          parameters: {
+            type: 'object',
+            properties,
+            required,
+          },
+        },
+      };
+    });
   }
 }

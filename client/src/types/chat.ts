@@ -1,35 +1,43 @@
 /**
- * Chat-related types and interfaces
+ * Re-export chat types from shared
+ * This file maintains backward compatibility for existing client imports
+ * 
+ * Note: For build compatibility, we import specific types and re-declare enums
  */
 
-export interface Chat {
-  id: number
-  title: string
-  userId: string
-  createdAt: string
-  updatedAt: string
-  lastMessage?: string
-  lastMessageAt?: string
+// Import types that work in the build
+export type {
+  Chat,
+  User,
+  Settings,
+  MCPServer,
+} from '@shared/types/chat';
+
+export type {
+  CreateChatRequest,
+  CreateChatResponse,
+  GetChatsResponse,
+  DeleteChatResponse,
+} from '@shared/types/api';
+
+// Re-declare enums locally to avoid build issues with shared enums
+export enum MCPServerStatus {
+  CONNECTED = 'CONNECTED',
+  DISCONNECTED = 'DISCONNECTED',
+  CONNECTING = 'CONNECTING',
+  ERROR = 'ERROR',
+  UNKNOWN = 'UNKNOWN',
 }
 
-// API request/response types
-export interface CreateChatRequest {
-  userId: string
-  title?: string
+export enum MCPTransportType {
+  STDIO = 'STDIO',
+  SSE = 'SSE',
+  STREAMABLE_HTTP = 'STREAMABLE_HTTP',
 }
 
-export interface CreateChatResponse {
-  chat: Chat
-}
-
-export interface GetChatsResponse {
-  chats: Chat[]
-  total: number
-  page: number
-  limit: number
-}
-
-export interface DeleteChatResponse {
-  success: boolean
-  message: string
+export enum MCPAuthType {
+  NONE = 'NONE',
+  OAUTH = 'OAUTH',
+  APIKEY = 'APIKEY',
+  BEARER = 'BEARER',
 }

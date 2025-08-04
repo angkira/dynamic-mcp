@@ -1,32 +1,33 @@
 /**
- * Message-related types and interfaces
+ * Re-export message types from shared
+ * This file maintains backward compatibility for existing client imports
+ * 
+ * Note: For build compatibility, we import specific types and re-declare enums
  */
 
-export interface MessageContent {
-  text: string
-  html?: string
-  metadata?: {
-    provider: string
-    model: string
-    [key: string]: unknown
-  }
-}
+// Import types that work in the build
+export type {
+  MessageContent,
+  Message,
+  StreamingWord,
+  StreamingMessage,
+} from '@shared/types/message';
 
-export interface Message {
-  id: number
-  content: MessageContent
-  role: 'USER' | 'AI'
-  chatId: number
-  createdAt: string
-  updatedAt: string
-}
+export type {
+  SendMessageRequest,
+  SendMessageResponse,
+  GetMessagesResponse,
+} from '@shared/types/api';
 
-// Streaming-related types
+// Re-declare enums locally to avoid build issues with shared enums
+export enum MessageRole {
+  USER = 'USER',
+  AI = 'AI',
+  TOOL = 'TOOL',
+}
 
 export enum StreamingChunkType {
   Thought = 'thought',
-  Content = 'content',
-  Markdown = 'markdown',
   Code = 'code',
   Reasoning = 'reasoning',
   Title = 'title',
@@ -34,57 +35,23 @@ export enum StreamingChunkType {
   UserMessage = 'userMessage',
   Complete = 'complete',
   Error = 'error',
+  MessageChunk = 'messageChunk',
+  ToolCall = 'toolCall',
+  ToolResult = 'toolResult',
 }
 
+export enum LlmProvider {
+  OpenAI = 'openai',
+  Google = 'google',
+  Anthropic = 'anthropic',
+  DeepSeek = 'deepseek',
+  Qwen = 'qwen',
+}
+
+// Import and re-export the streaming chunk type with alias
+import type { StreamingChunk as SharedStreamingChunk } from '@shared/types/message';
 export interface StreamingChunk {
-  text: string
-  type: StreamingChunkType
-  isComplete: boolean
-}
-
-export interface StreamingWord {
-  word: string
-  id: string
-  isAnimating: boolean
-}
-
-export interface StreamingMessage {
-  content: string
-  html: string
-  words: StreamingWord[]
-  currentChunk: StreamingChunk | null
-  isComplete: boolean
-  isStreaming: boolean
-  isThinking: boolean
-  thoughtContent: string
-  thoughtHtml: string
-  insideThoughtTag: boolean
-  thoughtBuffer: string
-  thoughtWords: StreamingWord[]
-  thoughtsCompleted: boolean
-  chatTitle: string
-  titleExtracted: boolean
-  chunkCount?: number
-}
-
-// API request/response types
-export interface SendMessageRequest {
-  content: string
-  chatId?: number
-  userId: string
-  provider?: string
-  model?: string
-  stream?: boolean
-}
-
-export interface SendMessageResponse {
-  message: Message
-  chatId: number
-}
-
-export interface GetMessagesResponse {
-  messages: Message[]
-  total: number
-  page: number
-  limit: number
+  text: string;
+  type: StreamingChunkType;
+  isComplete: boolean;
 }

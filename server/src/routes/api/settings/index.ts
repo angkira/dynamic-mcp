@@ -38,12 +38,17 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
           }
         });
       }
-      
+
       return {
         defaultProvider: settings.defaultProvider,
         defaultModel: settings.defaultModel,
         thinkingBudget: settings.thinkingBudget,
-        responseBudget: settings.responseBudget
+        responseBudget: settings.responseBudget,
+        // MCP Global Settings
+        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
+        mcpDefaultTimeout: settings.mcpDefaultTimeout,
+        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
+        mcpAutoDiscovery: settings.mcpAutoDiscovery
       };
     } catch (error) {
       fastify.log.error('Failed to get settings:', error);
@@ -59,12 +64,22 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
       defaultProvider, 
       defaultModel, 
       thinkingBudget, 
-      responseBudget 
+      responseBudget,
+      // MCP Global Settings
+      mcpEnableDebugLogging,
+      mcpDefaultTimeout,
+      mcpMaxConcurrentConnections,
+      mcpAutoDiscovery
     } = request.body as { 
       defaultProvider?: string; 
       defaultModel?: string; 
       thinkingBudget?: number; 
-      responseBudget?: number; 
+      responseBudget?: number;
+      // MCP Global Settings
+      mcpEnableDebugLogging?: boolean;
+      mcpDefaultTimeout?: number;
+      mcpMaxConcurrentConnections?: number;
+      mcpAutoDiscovery?: boolean;
     };
 
     try {
@@ -88,14 +103,24 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
           ...(defaultProvider && { defaultProvider }),
           ...(defaultModel && { defaultModel }),
           ...(thinkingBudget !== undefined && { thinkingBudget }),
-          ...(responseBudget !== undefined && { responseBudget })
+          ...(responseBudget !== undefined && { responseBudget }),
+          // MCP Global Settings
+          ...(mcpEnableDebugLogging !== undefined && { mcpEnableDebugLogging }),
+          ...(mcpDefaultTimeout !== undefined && { mcpDefaultTimeout }),
+          ...(mcpMaxConcurrentConnections !== undefined && { mcpMaxConcurrentConnections }),
+          ...(mcpAutoDiscovery !== undefined && { mcpAutoDiscovery })
         },
         create: {
           userId: user.id,
           defaultProvider: defaultProvider || 'openai',
           defaultModel: defaultModel || 'o3-mini',
           thinkingBudget: thinkingBudget ?? 2048,
-          responseBudget: responseBudget ?? 8192
+          responseBudget: responseBudget ?? 8192,
+          // MCP Global Settings defaults
+          mcpEnableDebugLogging: mcpEnableDebugLogging ?? false,
+          mcpDefaultTimeout: mcpDefaultTimeout ?? 10000,
+          mcpMaxConcurrentConnections: mcpMaxConcurrentConnections ?? 5,
+          mcpAutoDiscovery: mcpAutoDiscovery ?? true
         }
       });
 
@@ -103,7 +128,27 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
         defaultProvider: settings.defaultProvider,
         defaultModel: settings.defaultModel,
         thinkingBudget: settings.thinkingBudget,
-        responseBudget: settings.responseBudget
+        responseBudget: settings.responseBudget,
+        // MCP Global Settings
+        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
+        mcpDefaultTimeout: settings.mcpDefaultTimeout,
+        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
+        mcpAutoDiscovery: settings.mcpAutoDiscovery
+      };
+
+      // Update MCP service with new settings if it exists
+      await fastify.mcpService?.updateGlobalSettings(userId);
+
+      return {
+        defaultProvider: settings.defaultProvider,
+        defaultModel: settings.defaultModel,
+        thinkingBudget: settings.thinkingBudget,
+        responseBudget: settings.responseBudget,
+        // MCP Global Settings
+        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
+        mcpDefaultTimeout: settings.mcpDefaultTimeout,
+        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
+        mcpAutoDiscovery: settings.mcpAutoDiscovery
       };
     } catch (error) {
       fastify.log.error('Failed to update settings:', error);
