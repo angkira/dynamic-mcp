@@ -25,7 +25,7 @@ export const API_CONFIG = {
   BASE_URL: getApiBaseUrl(),
   TIMEOUT: 30000, // 30 seconds
   HEADERS: {
-    'Content-Type': 'application/json',
+    // Removed default Content-Type - set conditionally per request
   },
 } as const
 

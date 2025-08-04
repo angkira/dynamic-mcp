@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { mcpApi } from '@/services/api/mcp'
+import { useSettingsStore } from '@/stores/settings'
 import type { MCPServer, MCPSettings } from '@/types'
 import { MCPServerStatus, MCPTransportType, MCPAuthType } from '@/types'
 
@@ -10,13 +11,16 @@ export const useMcpStore = defineStore('mcp', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   
-  // Global MCP settings
-  const globalConfig = ref({
-    enableDebugLogging: false,
-    defaultTimeout: 10000,
-    maxConcurrentConnections: 5,
-    autoDiscovery: true
-  })
+  // Get settings store for global MCP config
+  const settingsStore = useSettingsStore()
+  
+  // Global MCP settings are now derived from main settings
+  const globalConfig = computed(() => ({
+    enableDebugLogging: settingsStore.settings.mcpEnableDebugLogging,
+    defaultTimeout: settingsStore.settings.mcpDefaultTimeout,
+    maxConcurrentConnections: settingsStore.settings.mcpMaxConcurrentConnections,
+    autoDiscovery: settingsStore.settings.mcpAutoDiscovery
+  }))
 
   // Computed
   const connectedServers = computed(() => 
@@ -39,7 +43,18 @@ export const useMcpStore = defineStore('mcp', () => {
     
     try {
       const fetchedServers = await mcpApi.getServers()
-      servers.value = fetchedServers
+      // Normalize capabilities to ensure they have the expected structure
+      servers.value = fetchedServers.map(server => ({
+        ...server,
+        capabilities: {
+          tools: server.capabilities?.tools || [],
+          resources: server.capabilities?.resources || [],
+          prompts: server.capabilities?.prompts || [],
+          supportsElicitation: server.capabilities?.supportsElicitation,
+          supportsRoots: server.capabilities?.supportsRoots,
+          supportsProgress: server.capabilities?.supportsProgress
+        }
+      }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch MCP servers'
       console.error('Error fetching MCP servers:', err)
@@ -50,7 +65,21 @@ export const useMcpStore = defineStore('mcp', () => {
 
   const getServer = async (id: string): Promise<MCPServer | null> => {
     try {
-      return await mcpApi.getServer(id)
+      const server = await mcpApi.getServer(id)
+      if (!server) return null
+      
+      // Normalize capabilities to ensure they have the expected structure
+      return {
+        ...server,
+        capabilities: {
+          tools: server.capabilities?.tools || [],
+          resources: server.capabilities?.resources || [],
+          prompts: server.capabilities?.prompts || [],
+          supportsElicitation: server.capabilities?.supportsElicitation,
+          supportsRoots: server.capabilities?.supportsRoots,
+          supportsProgress: server.capabilities?.supportsProgress
+        }
+      }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch MCP server'
       console.error('Error fetching MCP server:', err)
@@ -221,8 +250,14 @@ export const useMcpStore = defineStore('mcp', () => {
     }
   }
 
-  const updateGlobalConfig = (key: keyof typeof globalConfig.value, value: unknown) => {
-    (globalConfig.value as any)[key] = value
+  const updateGlobalConfig = async (key: keyof typeof globalConfig.value, value: unknown) => {
+    // Map MCP config keys to settings keys
+    const settingsKey = `mcp${key.charAt(0).toUpperCase() + key.slice(1)}` as keyof typeof settingsStore.settings
+    
+    // Update the main settings store
+    await settingsStore.updateSettings({
+      [settingsKey]: value
+    } as any)
   }
 
   const clearError = () => {
@@ -231,6 +266,8 @@ export const useMcpStore = defineStore('mcp', () => {
 
   // Initialize store
   const initialize = async () => {
+    // Ensure settings are loaded first so global config is available
+    await settingsStore.fetchSettings()
     await fetchServers()
   }
 

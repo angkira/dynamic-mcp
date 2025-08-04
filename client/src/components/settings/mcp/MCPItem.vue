@@ -1,5 +1,5 @@
 <template>
-  <div class="mcp-item" :class="{ 'disabled': !server.isEnabled }">
+  <div class="mcp-item" :class="{ disabled: !server.isEnabled }">
     <n-card :bordered="false" embedded>
       <div class="mcp-item-content">
         <!-- Header Section -->
@@ -9,7 +9,7 @@
               <h4 class="mcp-name">{{ server.name }}</h4>
               <n-tag :type="statusTagType" size="small">
                 <template #icon>
-                  <n-icon><font-awesome-icon :icon="statusIcon" /></n-icon>
+                  <font-awesome-icon :icon="statusIcon" />
                 </template>
                 {{ server.status }}
               </n-tag>
@@ -17,27 +17,39 @@
             <p v-if="server.description" class="mcp-description">{{ server.description }}</p>
             <div class="mcp-meta">
               <span class="meta-item">
-                <n-icon><font-awesome-icon icon="code-branch" /></n-icon>
+                <font-awesome-icon icon="code-branch" />
                 v{{ server.version }}
               </span>
               <span class="meta-item">
-                <n-icon><font-awesome-icon icon="plug" /></n-icon>
+                <font-awesome-icon icon="plug" />
                 {{ server.transport.type }}
               </span>
               <span v-if="server.lastConnected" class="meta-item">
-                <n-icon><font-awesome-icon icon="clock" /></n-icon>
+                <font-awesome-icon icon="clock" />
                 Last: {{ formatDate(server.lastConnected) }}
               </span>
             </div>
           </div>
           <div class="mcp-actions">
             <n-space>
-              <n-switch :value="server.isEnabled" @update:value="$emit('toggle', server.id)" size="small" />
-              <n-button v-if="server.status === 'disconnected' && server.isEnabled" size="small" type="primary"
-                @click="$emit('connect', server.id)">
+              <n-switch
+                :value="server.isEnabled"
+                @update:value="$emit('toggle', server.id)"
+                size="small"
+              />
+              <n-button
+                v-if="server.status === 'disconnected' && server.isEnabled"
+                size="small"
+                type="primary"
+                @click="$emit('connect', server.id)"
+              >
                 Connect
               </n-button>
-              <n-button v-else-if="server.status === 'connected'" size="small" @click="$emit('disconnect', server.id)">
+              <n-button
+                v-else-if="server.status === 'connected'"
+                size="small"
+                @click="$emit('disconnect', server.id)"
+              >
                 Disconnect
               </n-button>
               <n-dropdown :options="menuOptions" @select="handleMenuSelect">
@@ -54,10 +66,10 @@
         <!-- Capabilities Section -->
         <div v-if="server.isEnabled && hasCapabilities" class="mcp-capabilities">
           <n-space :size="16">
-            <div v-if="server.capabilities.tools.length > 0" class="capability-group">
+            <div v-if="(server.capabilities.tools?.length || 0) > 0" class="capability-group">
               <span class="capability-label">
                 <n-icon><font-awesome-icon icon="wrench" /></n-icon>
-                Tools ({{ server.capabilities.tools.length }})
+                Tools ({{ server.capabilities.tools?.length || 0 }})
               </span>
               <n-tooltip trigger="hover">
                 <template #trigger>
@@ -69,10 +81,10 @@
               </n-tooltip>
             </div>
 
-            <div v-if="server.capabilities.resources.length > 0" class="capability-group">
+            <div v-if="(server.capabilities.resources?.length || 0) > 0" class="capability-group">
               <span class="capability-label">
                 <n-icon><font-awesome-icon icon="database" /></n-icon>
-                Resources ({{ server.capabilities.resources.length }})
+                Resources ({{ server.capabilities.resources?.length || 0 }})
               </span>
               <n-tooltip trigger="hover">
                 <template #trigger>
@@ -84,10 +96,10 @@
               </n-tooltip>
             </div>
 
-            <div v-if="server.capabilities.prompts.length > 0" class="capability-group">
+            <div v-if="(server.capabilities.prompts?.length || 0) > 0" class="capability-group">
               <span class="capability-label">
                 <n-icon><font-awesome-icon icon="comment-dots" /></n-icon>
-                Prompts ({{ server.capabilities.prompts.length }})
+                Prompts ({{ server.capabilities.prompts?.length || 0 }})
               </span>
               <n-tooltip trigger="hover">
                 <template #trigger>
@@ -105,10 +117,18 @@
             <div v-if="showTools" class="capability-details">
               <h5>Available Tools</h5>
               <n-space vertical :size="8">
-                <div v-for="tool in server.capabilities.tools" :key="tool.name" class="capability-item">
+                <div
+                  v-for="tool in server.capabilities.tools || []"
+                  :key="tool.name"
+                  class="capability-item"
+                >
                   <strong>{{ tool.name }}</strong>
-                  <span v-if="tool.description" class="item-description">: {{ tool.description }}</span>
-                  <n-tag v-if="tool.category" size="tiny" class="item-tag">{{ tool.category }}</n-tag>
+                  <span v-if="tool.description" class="item-description"
+                    >: {{ tool.description }}</span
+                  >
+                  <n-tag v-if="tool.category" size="tiny" class="item-tag">{{
+                    tool.category
+                  }}</n-tag>
                 </div>
               </n-space>
             </div>
@@ -118,9 +138,15 @@
             <div v-if="showResources" class="capability-details">
               <h5>Available Resources</h5>
               <n-space vertical :size="8">
-                <div v-for="resource in server.capabilities.resources" :key="resource.uri" class="capability-item">
+                <div
+                  v-for="resource in server.capabilities.resources || []"
+                  :key="resource.uri"
+                  class="capability-item"
+                >
                   <strong>{{ resource.name }}</strong>
-                  <span v-if="resource.description" class="item-description">: {{ resource.description }}</span>
+                  <span v-if="resource.description" class="item-description"
+                    >: {{ resource.description }}</span
+                  >
                   <code class="resource-uri">{{ resource.uri }}</code>
                 </div>
               </n-space>
@@ -131,9 +157,15 @@
             <div v-if="showPrompts" class="capability-details">
               <h5>Available Prompts</h5>
               <n-space vertical :size="8">
-                <div v-for="prompt in server.capabilities.prompts" :key="prompt.name" class="capability-item">
+                <div
+                  v-for="prompt in server.capabilities.prompts || []"
+                  :key="prompt.name"
+                  class="capability-item"
+                >
                   <strong>{{ prompt.name }}</strong>
-                  <span v-if="prompt.description" class="item-description">: {{ prompt.description }}</span>
+                  <span v-if="prompt.description" class="item-description"
+                    >: {{ prompt.description }}</span
+                  >
                   <span v-if="prompt.arguments?.length" class="prompt-args">
                     ({{ prompt.arguments.length }} args)
                   </span>
@@ -158,7 +190,7 @@ import {
   NButton,
   NDropdown,
   NTooltip,
-  NCollapseTransition
+  NCollapseTransition,
 } from 'naive-ui'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import type { MCPServer, MCPServerStatus } from '@/types'
@@ -172,11 +204,11 @@ const props = defineProps<Props>()
 
 // Emits
 const emit = defineEmits<{
-  'edit': [server: MCPServer]
-  'delete': [serverId: string]
-  'toggle': [serverId: string]
-  'connect': [serverId: string]
-  'disconnect': [serverId: string]
+  edit: [server: MCPServer]
+  delete: [serverId: string]
+  toggle: [serverId: string]
+  connect: [serverId: string]
+  disconnect: [serverId: string]
 }>()
 
 // Local state
@@ -187,52 +219,64 @@ const showPrompts = ref(false)
 // Computed properties
 const statusTagType = computed(() => {
   switch (props.server.status) {
-    case 'connected': return 'success'
-    case 'disconnected': return 'error'
-    case 'connecting': return 'info'
-    case 'error': return 'warning'
-    default: return 'default'
+    case 'connected':
+      return 'success'
+    case 'disconnected':
+      return 'error'
+    case 'connecting':
+      return 'info'
+    case 'error':
+      return 'warning'
+    default:
+      return 'default'
   }
 })
 
 const statusIcon = computed(() => {
   switch (props.server.status) {
-    case 'connected': return 'check-circle'
-    case 'disconnected': return 'times-circle'
-    case 'connecting': return 'spinner'
-    case 'error': return 'exclamation-circle'
-    default: return 'circle'
+    case 'connected':
+      return 'check-circle'
+    case 'disconnected':
+      return 'times-circle'
+    case 'connecting':
+      return 'spinner'
+    case 'error':
+      return 'exclamation-circle'
+    default:
+      return 'circle'
   }
 })
 
 const hasCapabilities = computed(() => {
   const capabilities = props.server.capabilities
   if (!capabilities) return false
-  return capabilities.tools.length > 0 ||
-    capabilities.resources.length > 0 ||
-    capabilities.prompts.length > 0
+  return (
+    (capabilities.tools?.length || 0) > 0 ||
+    (capabilities.resources?.length || 0) > 0 ||
+    (capabilities.prompts?.length || 0) > 0
+  )
 })
 
 const menuOptions = computed(() => [
   {
     label: 'Edit',
     key: 'edit',
-    icon: () => h(FontAwesomeIcon, { icon: 'edit' })
+    icon: () => h(FontAwesomeIcon, { icon: 'edit' }),
   },
   {
     label: 'Test Connection',
     key: 'test',
-    icon: () => h(FontAwesomeIcon, { icon: 'plug' })
+    icon: () => h(FontAwesomeIcon, { icon: 'plug' }),
   },
   {
     type: 'divider',
-    key: 'divider'
+    key: 'divider',
   },
   {
     label: 'Delete',
     key: 'delete',
-    icon: () => h(FontAwesomeIcon, { icon: 'trash' })
-  }
+    icon: () => h(FontAwesomeIcon, { icon: 'trash' }),
+  },
 ])
 
 // Methods
@@ -258,7 +302,7 @@ const formatDate = (value: string | Date | undefined | null) => {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   }).format(date)
 }
 </script>

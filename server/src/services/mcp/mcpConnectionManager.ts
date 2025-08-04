@@ -32,9 +32,38 @@ export class McpConnectionManager {
   }> = new Map()
   
   private prisma: PrismaClient
+  private globalSettings: {
+    mcpEnableDebugLogging: boolean
+    mcpDefaultTimeout: number
+    mcpMaxConcurrentConnections: number
+    mcpAutoDiscovery: boolean
+  } | null = null
 
   constructor(_fastify?: FastifyInstance) {
     this.prisma = new PrismaClient()
+  }
+
+  /**
+   * Update global MCP settings
+   */
+  updateGlobalSettings(settings: {
+    mcpEnableDebugLogging: boolean
+    mcpDefaultTimeout: number
+    mcpMaxConcurrentConnections: number
+    mcpAutoDiscovery: boolean
+  }) {
+    this.globalSettings = settings
+    
+    if (settings.mcpEnableDebugLogging) {
+      console.log('🔧 MCP Debug logging enabled')
+    }
+    
+    console.log(`🔧 MCP Settings updated:`, {
+      debugLogging: settings.mcpEnableDebugLogging,
+      defaultTimeout: settings.mcpDefaultTimeout,
+      maxConnections: settings.mcpMaxConcurrentConnections,
+      autoDiscovery: settings.mcpAutoDiscovery
+    })
   }
 
   /**
@@ -72,6 +101,12 @@ export class McpConnectionManager {
    */
   async connectToServer(server: MCPServer): Promise<boolean> {
     try {
+      // Check max concurrent connections limit
+      if (this.globalSettings && this.connections.size >= this.globalSettings.mcpMaxConcurrentConnections) {
+        console.warn(`⚠️ Maximum concurrent connections (${this.globalSettings.mcpMaxConcurrentConnections}) reached. Cannot connect to ${server.name}`)
+        return false
+      }
+
       console.log(`🔌 Connecting to MCP server: ${server.name} (${server.transportType})`)
       
       // Skip connection for internal server
@@ -156,6 +191,13 @@ export class McpConnectionManager {
       await this.updateServerStatus(server.id, 'ERROR')
       return false
     }
+  }
+
+  /**
+   * Check if a server is currently connected
+   */
+  isConnected(serverId: number): boolean {
+    return this.connections.has(serverId)
   }
 
   /**

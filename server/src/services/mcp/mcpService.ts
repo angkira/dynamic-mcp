@@ -27,19 +27,75 @@ export class McpService {
     this.connectionManager = new McpConnectionManager(fastify)
   }
 
-  /**
-   * Initialize the MCP service
+    /**
+   * Initialize the service and connection manager
    */
   async initialize() {
-    console.log('🚀 Initializing MCP Service...')
+    // Load global settings and pass them to connection manager
+    const settings = await this.getUserSettings()
+    this.connectionManager.updateGlobalSettings({
+      mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
+      mcpDefaultTimeout: settings.mcpDefaultTimeout,
+      mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
+      mcpAutoDiscovery: settings.mcpAutoDiscovery
+    })
     
-    // Ensure default server exists in database
-    await this.ensureDefaultServer()
-    
-    // Initialize connection manager
     await this.connectionManager.initialize()
-    
-    console.log('✅ MCP Service initialized successfully')
+  }
+
+  /**
+   * Get user settings (including MCP global settings)
+   */
+  private async getUserSettings(userId: number = 1) {
+    let settings = await this.prisma.settings.findUnique({
+      where: { userId }
+    })
+
+    // If no settings exist, create default ones
+    if (!settings) {
+      // Ensure user exists
+      let user = await this.prisma.user.findUnique({
+        where: { id: userId }
+      })
+
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: {
+            email: 'user@example.com',
+            name: 'Default User'
+          }
+        })
+      }
+
+      settings = await this.prisma.settings.create({
+        data: {
+          userId: user.id,
+          defaultProvider: 'openai',
+          defaultModel: 'o3-mini',
+          thinkingBudget: 2048,
+          responseBudget: 8192,
+          mcpEnableDebugLogging: false,
+          mcpDefaultTimeout: 10000,
+          mcpMaxConcurrentConnections: 5,
+          mcpAutoDiscovery: true
+        }
+      })
+    }
+
+    return settings
+  }
+
+  /**
+   * Update global settings (call this when settings change)
+   */
+  async updateGlobalSettings(userId: number = 1) {
+    const settings = await this.getUserSettings(userId)
+    this.connectionManager.updateGlobalSettings({
+      mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
+      mcpDefaultTimeout: settings.mcpDefaultTimeout,
+      mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
+      mcpAutoDiscovery: settings.mcpAutoDiscovery
+    })
   }
 
   // CRUD Operations
@@ -246,6 +302,8 @@ export class McpService {
 
   /**
    * Test connection to an MCP server
+   * If already connected, performs a ping test
+   * If not connected, attempts a quick connection test
    */
   async testConnection(id: number, userId: number = 1) {
     const server = await this.prisma.mCPServer.findFirst({
@@ -257,15 +315,46 @@ export class McpService {
     }
 
     try {
-      const success = await this.connectionManager.connectToServer(server)
-      return { 
-        success, 
-        message: success ? 'Connection successful' : 'Connection failed' 
+      // Check if server is already connected
+      const isConnected = this.connectionManager.isConnected(id)
+      
+      if (isConnected) {
+        // Server is connected, perform a ping test
+        const healthResults = await this.connectionManager.healthCheck()
+        const serverHealth = healthResults.find(h => h.serverId === id)
+        
+        if (serverHealth) {
+          return {
+            success: serverHealth.healthy,
+            message: serverHealth.healthy 
+              ? 'Connection test successful (ping)' 
+              : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
+          }
+        } else {
+          return { success: false, message: 'Server health status not available' }
+        }
+      } else {
+        // Server is not connected, attempt a quick connection test
+        const success = await this.connectionManager.connectToServer(server)
+        
+        if (success) {
+          // Optionally disconnect after successful test to avoid keeping unnecessary connections
+          // await this.connectionManager.disconnectFromServer(id)
+          return { 
+            success: true, 
+            message: 'Connection test successful (connected)' 
+          }
+        } else {
+          return { 
+            success: false, 
+            message: 'Failed to establish connection' 
+          }
+        }
       }
     } catch (error) {
       return { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Connection failed' 
+        message: error instanceof Error ? error.message : 'Connection test failed' 
       }
     }
   }

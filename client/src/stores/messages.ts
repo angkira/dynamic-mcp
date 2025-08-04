@@ -486,6 +486,10 @@ export const useMessagesStore = defineStore('messages', () => {
               hasThoughts: true,
             };
           }
+          // Include tool calls in the final message
+          if (streamingMessage?.toolCalls && streamingMessage.toolCalls.length > 0) {
+            data.aiMessage.content.toolCalls = streamingMessage.toolCalls;
+          }
           addMessage(data.aiMessage);
           if (data.chatId === chatsStore.currentChatId) {
             chatsStore.updateChatLastMessage(

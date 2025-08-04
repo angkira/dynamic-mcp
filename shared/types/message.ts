@@ -21,6 +21,7 @@ export interface MessageContent {
     arguments: any;
     result?: any;
     error?: string;
+    status?: 'executing' | 'completed' | 'error';
   }>;
   name?: string; // For tool results
   result?: any; // For tool results
@@ -95,6 +96,7 @@ export interface StreamingMessage {
     arguments: any;
     result?: any;
     error?: string;
+    status?: 'executing' | 'completed' | 'error';
   }>;
   isToolExecuting?: boolean;
 }

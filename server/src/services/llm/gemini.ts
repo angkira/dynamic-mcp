@@ -89,7 +89,21 @@ export class GeminiService implements LlmService {
             contents.push({ role: 'model', parts: [{ text: messageText }] });
         }
       } else if (msg.role === 'TOOL') {
-        contents.push({ role: 'function', parts: [{ functionResponse: { name: msg.content.name, response: { content: msg.content.result }}}]});
+        // Handle tool result - the content structure is { toolResult: { name, result } }
+        const toolResult = msg.content.toolResult;
+        if (toolResult && toolResult.name) {
+          contents.push({ 
+            role: 'function', 
+            parts: [{ 
+              functionResponse: { 
+                name: toolResult.name, 
+                response: { content: toolResult.result } 
+              } 
+            }] 
+          });
+        } else {
+          console.warn('Invalid tool result format:', msg.content);
+        }
       }
     });
     

@@ -13,6 +13,7 @@ import {
   faStop,
   faGear,
   faArrowRight,
+  faEllipsisV,
   
   // Chat & Communication
   faComments,
@@ -23,6 +24,7 @@ import {
   faCopy,
   faRedo,
   faTrash,
+  faEdit,
   
   // AI & Tech
   faRobot,
@@ -32,6 +34,12 @@ import {
   
   // States
   faSpinner,
+  faCheckCircle,
+  
+  // MCP & Development
+  faCodeBranch,
+  faPlug,
+  faClock,
 } from '@fortawesome/free-solid-svg-icons'
 
 import {
@@ -54,6 +62,8 @@ library.add(
   faStop,
   faGear,
   faArrowRight,
+  faEllipsisV,
+  
   // Chat & Communication
   faComments,
   faComment,
@@ -63,6 +73,7 @@ library.add(
   faCopy,
   faRedo,
   faTrash,
+  faEdit,
   
   // AI & Tech
   faRobot,
@@ -72,6 +83,12 @@ library.add(
   
   // States
   faSpinner,
+  faCheckCircle,
+  
+  // MCP & Development
+  faCodeBranch,
+  faPlug,
+  faClock,
   
   // Regular icons
   faCommentRegular,

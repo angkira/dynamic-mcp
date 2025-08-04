@@ -54,15 +54,22 @@ model Message {
 }
 
 model Settings {
-  id              Int      @id @default(autoincrement())
-  user            User     @relation(fields: [userId], references: [id])
-  userId          Int      @unique
-  defaultProvider String   @default("openai")
-  defaultModel    String   @default("o3-mini")
-  thinkingBudget  Int      @default(2048)
-  responseBudget  Int      @default(8192)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id              Int    @id @default(autoincrement())
+  user            User   @relation(fields: [userId], references: [id])
+  userId          Int    @unique
+  defaultProvider String @default("openai")
+  defaultModel    String @default("o3-mini")
+  thinkingBudget  Int    @default(2048)
+  responseBudget  Int    @default(8192)
+
+  // MCP Global Settings
+  mcpEnableDebugLogging       Boolean @default(false)
+  mcpDefaultTimeout           Int     @default(10000)
+  mcpMaxConcurrentConnections Int     @default(5)
+  mcpAutoDiscovery            Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum MCPServerStatus {

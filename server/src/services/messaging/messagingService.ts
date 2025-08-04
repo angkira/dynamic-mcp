@@ -55,6 +55,15 @@ export class MessagingService {
         isThinking
       );
       
+      // Track tool calls for final message
+      const executedToolCalls: Array<{
+        name: string;
+        arguments: any;
+        result?: any;
+        error?: string;
+        status: 'executing' | 'completed' | 'error';
+      }> = [];
+
       for await (const chunk of responseStream) {
         if (chunk.type === 'text') {
           appendFileSync(rawLogFile, `${new Date().toISOString()} - TEXT: "${chunk.content}"\n`);
@@ -68,9 +77,27 @@ export class MessagingService {
           const toolCall = chunk.call;
           stream(ServerWebSocketEvent.ToolCall, { toolCall, chatId });
 
+          // Track tool call
+          const trackedToolCall: {
+            name: string;
+            arguments: any;
+            result?: any;
+            error?: string;
+            status: 'executing' | 'completed' | 'error';
+          } = {
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            status: 'executing'
+          };
+          executedToolCalls.push(trackedToolCall);
+
           try {
             const result = await this.mcpService.executeMCPTool(toolCall.name, toolCall.arguments);
             stream(ServerWebSocketEvent.ToolResult, { toolName: toolCall.name, result, chatId });
+
+            // Update tracked tool call with result
+            trackedToolCall.result = result;
+            trackedToolCall.status = 'completed';
 
             // Add tool interactions to history
             history.push({
@@ -90,7 +117,21 @@ export class MessagingService {
               updatedAt: new Date()
             });
 
+            // Continue the conversation with the tool result
+            const followUpStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
+            for await (const followUpChunk of followUpStream) {
+              if (followUpChunk.type === 'text') {
+                appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_TEXT: "${followUpChunk.content}"\n`);
+                pipeline.processTextChunk(followUpChunk.content);
+              }
+              // Note: We don't handle nested tool calls in follow-up for simplicity
+            }
+
           } catch (error: any) {
+            // Update tracked tool call with error
+            trackedToolCall.error = error.message || 'Tool execution failed';
+            trackedToolCall.status = 'error';
+
             stream(ServerWebSocketEvent.ToolResult, {
               toolName: toolCall.name,
               result: { error: error.message || 'Tool execution failed' },
@@ -107,7 +148,7 @@ export class MessagingService {
 
       // Save messages to database
       const userMessage = await this.saveMessage(chatId, content, PrismaMessageRole.USER, provider, model || 'default');
-      const aiMessage = await this.saveMessage(chatId, results.fullResponse, PrismaMessageRole.AI, provider, model || 'default', results.thoughts.length > 0 ? results.thoughts : undefined);
+      const aiMessage = await this.saveMessage(chatId, results.fullResponse, PrismaMessageRole.AI, provider, model || 'default', results.thoughts.length > 0 ? results.thoughts : undefined, executedToolCalls);
 
       this.fastify.log.info('Sending MessageComplete event', { chatId, aiMessageId: aiMessage.id });
       stream(ServerWebSocketEvent.MessageComplete, {
@@ -121,7 +162,21 @@ export class MessagingService {
     }
   }
 
-  private async saveMessage(chatId: number, content: string, role: PrismaMessageRole, provider: LlmProvider, model: string = 'default', thoughts?: string[]) {
+  private async saveMessage(
+    chatId: number, 
+    content: string, 
+    role: PrismaMessageRole, 
+    provider: LlmProvider, 
+    model: string = 'default', 
+    thoughts?: string[],
+    toolCalls?: Array<{
+      name: string;
+      arguments: any;
+      result?: any;
+      error?: string;
+      status: 'executing' | 'completed' | 'error';
+    }>
+  ) {
     // Build base metadata
     const metadata: Record<string, any> = { provider, model };
 
@@ -135,7 +190,11 @@ export class MessagingService {
     }
 
     const messageData = {
-      content: { text: content, metadata },
+      content: { 
+        text: content, 
+        metadata,
+        ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {})
+      },
       chatId,
       role,
       ...(thoughts && { thoughts }),

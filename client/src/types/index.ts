@@ -58,6 +58,11 @@ export interface Settings {
   defaultModel: string
   thinkingBudget: number
   responseBudget: number
+  // MCP Global Settings
+  mcpEnableDebugLogging: boolean
+  mcpDefaultTimeout: number
+  mcpMaxConcurrentConnections: number
+  mcpAutoDiscovery: boolean
 }
 
 export interface GetSettingsResponse extends Settings {}

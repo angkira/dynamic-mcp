@@ -36,6 +36,7 @@ CREATE TABLE "public"."Message" (
     "thoughts" JSONB,
     "role" "public"."MessageRole" NOT NULL DEFAULT 'USER',
     "chatId" INTEGER NOT NULL,
+    "responseToId" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -50,6 +51,10 @@ CREATE TABLE "public"."Settings" (
     "defaultModel" TEXT NOT NULL DEFAULT 'o3-mini',
     "thinkingBudget" INTEGER NOT NULL DEFAULT 2048,
     "responseBudget" INTEGER NOT NULL DEFAULT 8192,
+    "mcpEnableDebugLogging" BOOLEAN NOT NULL DEFAULT false,
+    "mcpDefaultTimeout" INTEGER NOT NULL DEFAULT 10000,
+    "mcpMaxConcurrentConnections" INTEGER NOT NULL DEFAULT 5,
+    "mcpAutoDiscovery" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -113,6 +118,7 @@ CREATE INDEX "MCPServer_userId_idx" ON "public"."MCPServer"("userId");
 -- Add foreign key constraints
 ALTER TABLE "public"."Chat" ADD CONSTRAINT "Chat_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "public"."Chat"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_responseToId_fkey" FOREIGN KEY ("responseToId") REFERENCES "public"."Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "public"."Settings" ADD CONSTRAINT "Settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "public"."MCPServer" ADD CONSTRAINT "MCPServer_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -128,14 +134,22 @@ INSERT INTO "public"."Settings" (
   "defaultProvider", 
   "defaultModel", 
   "thinkingBudget", 
-  "responseBudget"
+  "responseBudget",
+  "mcpEnableDebugLogging",
+  "mcpDefaultTimeout",
+  "mcpMaxConcurrentConnections",
+  "mcpAutoDiscovery"
 )
 SELECT 
   u.id,
   'openai',
   'o3-mini',
   2048,
-  8192
+  8192,
+  false,
+  10000,
+  5,
+  true
 FROM "public"."User" u 
 WHERE u.email = 'user@example.com'
 AND NOT EXISTS (SELECT 1 FROM "public"."Settings" s WHERE s."userId" = u.id);

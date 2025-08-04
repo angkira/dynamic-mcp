@@ -103,10 +103,12 @@
                 <span v-if="tool.error" class="tool-status error"
                   >Error in executing: {{ tool.error }}</span
                 >
-                <span v-else class="tool-status success">✅ Tool executed successfully</span>
-                <pre v-if="tool.result" class="tool-output">{{
+                <span v-else class="tool-status success"
+                  >✅ Tool {{ tool.name }} executed successfully</span
+                >
+                <!-- <pre v-if="tool.result" class="tool-output">{{
                   JSON.stringify(tool.result, null, 2)
-                }}</pre>
+                }}</pre> -->
               </div>
             </div>
           </div>
