@@ -36,11 +36,11 @@ export const useModelStore = defineStore('models', () => {
       // Get settings store to use user preferences
       const settingsStore = useSettingsStore()
       
-      // Fetch user settings and available models
-      const [settingsResponse, modelsResponse] = await Promise.all([
-        ChatAPIService.settings.getSettings(),
-        ChatAPIService.models.getModels()
-      ])
+      // Ensure settings are loaded (this will only fetch if not already loaded or in progress)
+      await settingsStore.fetchSettings()
+      
+      // Fetch available models
+      const modelsResponse = await ChatAPIService.models.getModels()
 
       // Convert providers to model groups format
       const modelGroups: ModelGroup[] = modelsResponse.map(provider => ({
@@ -53,16 +53,16 @@ export const useModelStore = defineStore('models', () => {
       // Use user settings for default model selection
       if (modelGroups.length > 0) {
         // Check if the user's default provider exists in available models
-        const defaultProviderGroup = modelGroups.find(group => group.provider === settingsResponse.defaultProvider)
+        const defaultProviderGroup = modelGroups.find(group => group.provider === settingsStore.settings.defaultProvider)
 
         if (defaultProviderGroup) {
           // Use user's default provider
-          currentProvider.value = settingsResponse.defaultProvider
+          currentProvider.value = settingsStore.settings.defaultProvider
 
           // Check if the user's default model exists in the provider
-          const defaultModelExists = defaultProviderGroup.models.some(model => model.id === settingsResponse.defaultModel)
+          const defaultModelExists = defaultProviderGroup.models.some(model => model.id === settingsStore.settings.defaultModel)
           if (defaultModelExists) {
-            currentModel.value = settingsResponse.defaultModel
+            currentModel.value = settingsStore.settings.defaultModel
           } else {
             // Fallback to first model of the default provider
             currentModel.value = defaultProviderGroup.models[0]?.id || ''

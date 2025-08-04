@@ -1,9 +1,16 @@
 <template>
   <div class="chat-settings">
     <!-- Settings Modal/Drawer -->
-    <n-modal v-model:show="isVisible" preset="card" :style="{ width: '800px', maxWidth: '90vw' }" title="Chat Settings"
-      :bordered="false" size="huge" role="dialog" aria-label="Chat Settings">
-
+    <n-modal
+      v-model:show="isVisible"
+      preset="card"
+      :style="{ width: '800px', maxWidth: '90vw' }"
+      title="Chat Settings"
+      :bordered="false"
+      size="huge"
+      role="dialog"
+      aria-label="Chat Settings"
+    >
       <!-- Tabs Container -->
       <n-tabs v-model:value="activeTab" type="line" animated justify-content="start">
         <!-- General Settings Tab -->
@@ -14,10 +21,17 @@
         <!-- MCP Settings Tab -->
         <n-tab-pane name="mcp" tab="MCP Servers">
           <div class="settings-section">
-            <MCPList :servers="mcpStore.servers" :global-config="mcpStore.globalConfig"
-              @add-server="showMCPModal = true" @edit-server="editMCPServer" @delete-server="deleteMCPServer"
-              @toggle-server="toggleMCPServer" @connect-server="connectMCPServer"
-              @disconnect-server="disconnectMCPServer" @update-global-config="mcpStore.updateGlobalConfig" />
+            <MCPList
+              :servers="mcpStore.servers"
+              :global-config="mcpStore.globalConfig"
+              @add-server="showMCPModal = true"
+              @edit-server="editMCPServer"
+              @delete-server="deleteMCPServer"
+              @toggle-server="toggleMCPServer"
+              @connect-server="connectMCPServer"
+              @disconnect-server="disconnectMCPServer"
+              @update-global-config="mcpStore.updateGlobalConfig"
+            />
           </div>
         </n-tab-pane>
 
@@ -38,12 +52,8 @@
       <!-- Action Buttons -->
       <template #action>
         <n-space>
-          <n-button @click="resetSettings">
-            Reset to Defaults
-          </n-button>
-          <n-button @click="closeSettings">
-            Cancel
-          </n-button>
+          <n-button @click="resetSettings"> Reset to Defaults </n-button>
+          <n-button @click="closeSettings"> Cancel </n-button>
           <n-button type="primary" :loading="settingsStore.isLoading" @click="saveSettings">
             Save Settings
           </n-button>
@@ -52,16 +62,27 @@
     </n-modal>
 
     <!-- MCP Server Settings Modal -->
-    <n-modal v-model:show="showMCPModal" preset="card" :style="{ width: '900px', maxWidth: '95vw' }"
-      :title="mcpModalTitle" :bordered="false" size="huge" role="dialog" :aria-label="mcpModalTitle">
-      <MCPSettings ref="mcpSettingsRef" :server="currentMCPServer" :mode="mcpModalMode" @save="saveMCPServer"
-        @cancel="closeMCPModal" />
+    <n-modal
+      v-model:show="showMCPModal"
+      preset="card"
+      :style="{ width: '900px', maxWidth: '95vw' }"
+      :title="mcpModalTitle"
+      :bordered="false"
+      size="huge"
+      role="dialog"
+      :aria-label="mcpModalTitle"
+    >
+      <MCPSettings
+        ref="mcpSettingsRef"
+        :server="currentMCPServer"
+        :mode="mcpModalMode"
+        @save="saveMCPServer"
+        @cancel="closeMCPModal"
+      />
 
       <template #action>
         <n-space>
-          <n-button @click="closeMCPModal">
-            Cancel
-          </n-button>
+          <n-button @click="closeMCPModal"> Cancel </n-button>
           <n-button type="primary" @click="handleMCPSave">
             {{ mcpModalMode === 'create' ? 'Add Server' : 'Save Changes' }}
           </n-button>
@@ -84,7 +105,7 @@ import {
   NButton,
   NDivider,
   NEmpty,
-  useMessage
+  useMessage,
 } from 'naive-ui'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useSettingsStore } from '@/stores/settings'
@@ -102,7 +123,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  show: false
+  show: false,
 })
 
 // Emits
@@ -122,7 +143,11 @@ const localSettings = ref<Settings>({
   defaultProvider: 'openai',
   defaultModel: 'o3-mini',
   thinkingBudget: 2048,
-  responseBudget: 8192
+  responseBudget: 8192,
+  mcpEnableDebugLogging: false,
+  mcpDefaultTimeout: 30000,
+  mcpMaxConcurrentConnections: 10,
+  mcpAutoDiscovery: true,
 })
 
 // MCP-related state
@@ -134,24 +159,26 @@ const mcpSettingsRef = ref()
 // Computed
 const isVisible = computed({
   get: () => props.show,
-  set: (value) => emit('update:show', value)
+  set: (value) => emit('update:show', value),
 })
 
 const providerOptions = computed(() =>
-  modelStore.availableModels.map(group => ({
+  modelStore.availableModels.map((group) => ({
     label: group.provider.charAt(0).toUpperCase() + group.provider.slice(1),
-    value: group.provider
-  }))
+    value: group.provider,
+  })),
 )
 
 const modelOptions = computed(() => {
   const provider = modelStore.availableModels.find(
-    group => group.provider === localSettings.value.defaultProvider
+    (group) => group.provider === localSettings.value.defaultProvider,
   )
-  return provider?.models.map(model => ({
-    label: model.name,
-    value: model.id
-  })) || []
+  return (
+    provider?.models.map((model) => ({
+      label: model.name,
+      value: model.id,
+    })) || []
+  )
 })
 
 const mcpModalTitle = computed(() => {
@@ -175,7 +202,7 @@ const deleteMCPServer = async (serverId: string) => {
 }
 
 const toggleMCPServer = async (serverId: string) => {
-  const server = mcpStore.servers.find(s => s.id === serverId)
+  const server = mcpStore.servers.find((s) => s.id === serverId)
   const success = await mcpStore.toggleServer(serverId)
   if (success && server) {
     message.success(`MCP server ${server.isEnabled ? 'enabled' : 'disabled'}`)
@@ -185,7 +212,7 @@ const toggleMCPServer = async (serverId: string) => {
 }
 
 const connectMCPServer = async (serverId: string) => {
-  const server = mcpStore.servers.find(s => s.id === serverId)
+  const server = mcpStore.servers.find((s) => s.id === serverId)
   const success = await mcpStore.connectServer(serverId)
   if (success && server) {
     message.success(`Connected to ${server.name}`)
@@ -195,7 +222,7 @@ const connectMCPServer = async (serverId: string) => {
 }
 
 const disconnectMCPServer = async (serverId: string) => {
-  const server = mcpStore.servers.find(s => s.id === serverId)
+  const server = mcpStore.servers.find((s) => s.id === serverId)
   const success = await mcpStore.disconnectServer(serverId)
   if (success && server) {
     message.success(`Disconnected from ${server.name}`)
@@ -248,8 +275,6 @@ const loadSettings = async () => {
   localSettings.value = { ...settingsStore.settings }
 }
 
-
-
 const saveSettings = async () => {
   try {
     await settingsStore.updateSettings(localSettings.value)
@@ -265,7 +290,11 @@ const resetSettings = () => {
     defaultProvider: 'openai',
     defaultModel: 'o3-mini',
     thinkingBudget: 2048,
-    responseBudget: 8192
+    responseBudget: 8192,
+    mcpEnableDebugLogging: false,
+    mcpDefaultTimeout: 30000,
+    mcpMaxConcurrentConnections: 10,
+    mcpAutoDiscovery: true,
   }
 }
 
@@ -274,17 +303,17 @@ const closeSettings = () => {
 }
 
 // Watch for settings changes
-watch(() => settingsStore.settings, (newSettings) => {
-  localSettings.value = { ...newSettings }
-}, { deep: true })
+watch(
+  () => settingsStore.settings,
+  (newSettings) => {
+    localSettings.value = { ...newSettings }
+  },
+  { deep: true },
+)
 
 // Load data on mount
 onMounted(async () => {
-  await Promise.all([
-    modelStore.fetchModels(),
-    loadSettings(),
-    mcpStore.initialize()
-  ])
+  await Promise.all([modelStore.fetchModels(), loadSettings(), mcpStore.initialize()])
 })
 </script>
 

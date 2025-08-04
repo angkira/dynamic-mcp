@@ -9,10 +9,15 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultProvider: 'openai',
     defaultModel: 'o3-mini',
     thinkingBudget: 2048,
-    responseBudget: 8192
+    responseBudget: 8192,
+    mcpEnableDebugLogging: false,
+    mcpDefaultTimeout: 30000,
+    mcpMaxConcurrentConnections: 10,
+    mcpAutoDiscovery: true
   })
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  let fetchPromise: Promise<void> | null = null
 
   // Computed
   const defaultProviderModel = computed(() => ({
@@ -22,18 +27,30 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Actions
   async function fetchSettings() {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await ChatAPIService.settings.getSettings()
-      settings.value = response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch settings'
-      console.error('Failed to fetch settings:', err)
-    } finally {
-      isLoading.value = false
+    // Return existing promise if one is in progress
+    if (fetchPromise) {
+      return fetchPromise
     }
+
+    // Create new promise and cache it
+    fetchPromise = (async () => {
+      isLoading.value = true
+      error.value = null
+      
+      try {
+        const response = await ChatAPIService.settings.getSettings()
+        settings.value = response
+      } catch (err) {
+        error.value = err instanceof Error ? err.message : 'Failed to fetch settings'
+        console.error('Failed to fetch settings:', err)
+        throw err
+      } finally {
+        isLoading.value = false
+        fetchPromise = null // Reset promise cache
+      }
+    })()
+
+    return fetchPromise
   }
 
   async function updateSettings(updates: UpdateSettingsRequest) {
