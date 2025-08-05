@@ -24,6 +24,7 @@
     "clean:client": "cd client && npm run clean || true",
     "docker:dev": "docker compose up --build",
     "docker:prod": "docker compose -f docker-compose.prod.yml up --build",
+    "docker:prod:clean": "docker compose -f docker-compose.prod.yml down -v && docker compose -f docker-compose.prod.yml up --build",
     "docker:down": "docker compose down",
     "docker:clean": "docker compose down -v --rmi all --remove-orphans",
     "mcp:start": "./scripts/mcp-manager.sh start",

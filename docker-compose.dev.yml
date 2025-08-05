@@ -37,7 +37,7 @@ services:
       - /app/server/node_modules
       - /app/client/node_modules
       - /app/shared/node_modules
-    command: sh -c "npx prisma migrate deploy --schema=../prisma/schema.prisma && npm run seed && npm run dev"
+    command: sh -c "npx prisma migrate deploy --schema=../prisma/schema.prisma && npm run seed && npm start"
 
   # Separate MCP servers as independent services
   mcp-memory:

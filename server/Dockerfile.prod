@@ -60,11 +60,12 @@ COPY --from=builder /app/server/dist ./dist
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
+COPY server/start-prod.sh ./start-prod.sh
 
 # Set proper permissions
-RUN chown -R nextjs:nodejs /app
+RUN chmod +x ./start-prod.sh && chown -R nextjs:nodejs /app
 USER nextjs
 
 EXPOSE 3000
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/app.js"]
+CMD ["./start-prod.sh"]

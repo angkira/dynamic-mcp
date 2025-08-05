@@ -11,6 +11,8 @@ services:
       # Performance optimizations
       POSTGRES_SHARED_BUFFERS: 256MB
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      # Force re-initialization if needed
+      POSTGRES_INITDB_ARGS: "${POSTGRES_INITDB_ARGS:-}"
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:
