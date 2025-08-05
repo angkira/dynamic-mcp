@@ -2,7 +2,44 @@
  * Centralized type exports
  */
 
-import type { MCPAuthType, MCPTransportType } from '@dynamic-mcp/shared'
+import type {
+  MCPAuthType,
+  MCPTransportType,
+  MCPServerStatus,
+  MCPServer,
+  MCPCapabilities,
+  MCPAuthentication,
+  MCPTransport,
+  MCPServerConfig,
+  MCPSettings,
+  MCPGlobalConfig,
+  MCPTool,
+  MCPResource,
+  MCPPrompt,
+  MCPPromptArgument,
+} from '@dynamic-mcp/shared'
+
+// Re-export shared types for local use
+export {
+  MCPAuthType,
+  MCPTransportType,
+  MCPServerStatus,
+}
+
+export type {
+  MCPServer,
+  MCPCapabilities,
+  MCPAuthentication,
+  MCPTransport,
+  MCPServerConfig,
+  MCPSettings,
+  MCPGlobalConfig,
+  MCPTool,
+  MCPResource,
+  MCPPrompt,
+  MCPPromptArgument,
+}
+
 
 // Message types
 export * from './message'
@@ -165,14 +202,6 @@ export interface MCPPromptArgument {
 }
 
 // Database enums (matching Prisma schema)
-export enum MCPServerStatusDB {
-  CONNECTED = 'CONNECTED',
-  DISCONNECTED = 'DISCONNECTED', 
-  CONNECTING = 'CONNECTING',
-  ERROR = 'ERROR',
-  UNKNOWN = 'UNKNOWN'
-}
-
 export enum MCPTransportTypeDB {
   STDIO = 'STDIO',
   SSE = 'SSE',

@@ -46,7 +46,12 @@
             <div class="user-email">{{ user.user?.email }}</div>
           </div>
         </div>
-        <button v-if="ui.sidebarState === 'open'" @click="handleLogout" class="logout-btn" title="Logout">
+        <button
+          v-if="ui.sidebarState === 'open'"
+          @click="handleLogout"
+          class="logout-btn"
+          title="Logout"
+        >
           <FontAwesomeIcon icon="arrow-right-from-bracket" />
         </button>
       </div>

@@ -10,41 +10,40 @@ export const useMcpStore = defineStore('mcp', () => {
   const servers = ref<MCPServer[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  
+
   // Get settings store for global MCP config
   const settingsStore = useSettingsStore()
-  
+
   // Global MCP settings are now derived from main settings
   const globalConfig = computed(() => ({
     enableDebugLogging: settingsStore.settings.mcpEnableDebugLogging,
     defaultTimeout: settingsStore.settings.mcpDefaultTimeout,
     maxConcurrentConnections: settingsStore.settings.mcpMaxConcurrentConnections,
-    autoDiscovery: settingsStore.settings.mcpAutoDiscovery
+    autoDiscovery: settingsStore.settings.mcpAutoDiscovery,
   }))
 
   // Computed
-  const connectedServers = computed(() => 
-    servers.value.filter(server => server.status === MCPServerStatus.CONNECTED)
+  const connectedServers = computed(() =>
+    servers.value.filter((server) => server.status === MCPServerStatus.CONNECTED),
   )
-  
-  const enabledServers = computed(() => 
-    servers.value.filter(server => server.isEnabled)
+  const enabledServers = computed(() => servers.value.filter((server) => server.isEnabled))
+
+  const mcpSettings = computed(
+    (): MCPSettings => ({
+      servers: servers.value,
+      globalConfig: globalConfig.value,
+    }),
   )
-  
-  const mcpSettings = computed((): MCPSettings => ({
-    servers: servers.value,
-    globalConfig: globalConfig.value
-  }))
 
   // Actions
   const fetchServers = async () => {
     isLoading.value = true
     error.value = null
-    
+
     try {
       const fetchedServers = await mcpApi.getServers()
       // Normalize capabilities to ensure they have the expected structure
-      servers.value = fetchedServers.map(server => ({
+      servers.value = fetchedServers.map((server) => ({
         ...server,
         capabilities: {
           tools: server.capabilities?.tools || [],
@@ -52,8 +51,8 @@ export const useMcpStore = defineStore('mcp', () => {
           prompts: server.capabilities?.prompts || [],
           supportsElicitation: server.capabilities?.supportsElicitation,
           supportsRoots: server.capabilities?.supportsRoots,
-          supportsProgress: server.capabilities?.supportsProgress
-        }
+          supportsProgress: server.capabilities?.supportsProgress,
+        },
       }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch MCP servers'
@@ -67,7 +66,7 @@ export const useMcpStore = defineStore('mcp', () => {
     try {
       const server = await mcpApi.getServer(id)
       if (!server) return null
-      
+
       // Normalize capabilities to ensure they have the expected structure
       return {
         ...server,
@@ -77,8 +76,8 @@ export const useMcpStore = defineStore('mcp', () => {
           prompts: server.capabilities?.prompts || [],
           supportsElicitation: server.capabilities?.supportsElicitation,
           supportsRoots: server.capabilities?.supportsRoots,
-          supportsProgress: server.capabilities?.supportsProgress
-        }
+          supportsProgress: server.capabilities?.supportsProgress,
+        },
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch MCP server'
@@ -90,10 +89,10 @@ export const useMcpStore = defineStore('mcp', () => {
   const createServer = async (serverData: Partial<MCPServer>): Promise<boolean> => {
     isLoading.value = true
     error.value = null
-    
+
     try {
       const result = await mcpApi.createServer(serverData)
-      
+
       // Add the new server to the local state with the returned ID
       const newServer: MCPServer = {
         id: result.id,
@@ -105,7 +104,7 @@ export const useMcpStore = defineStore('mcp', () => {
         transport: serverData.transport || { type: MCPTransportType.STDIO, config: {} },
         authentication: serverData.authentication || {
           type: MCPAuthType.NONE,
-          config: {}
+          config: {},
         },
         config: serverData.config || {
           autoConnect: false,
@@ -113,15 +112,15 @@ export const useMcpStore = defineStore('mcp', () => {
           maxRetries: 3,
           retryDelay: 2000,
           validateCertificates: true,
-          debug: false
+          debug: false,
         },
         capabilities: serverData.capabilities || {
           tools: [],
           resources: [],
-          prompts: []
-        }
+          prompts: [],
+        },
       }
-      
+
       servers.value.push(newServer)
       return true
     } catch (err) {
@@ -136,16 +135,16 @@ export const useMcpStore = defineStore('mcp', () => {
   const updateServer = async (id: string, serverData: Partial<MCPServer>): Promise<boolean> => {
     isLoading.value = true
     error.value = null
-    
+
     try {
       await mcpApi.updateServer(id, serverData)
-      
+
       // Update the server in local state
-      const index = servers.value.findIndex(s => s.id === id)
+      const index = servers.value.findIndex((s) => s.id === id)
       if (index > -1) {
         servers.value[index] = { ...servers.value[index], ...serverData }
       }
-      
+
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to update MCP server'
@@ -156,12 +155,16 @@ export const useMcpStore = defineStore('mcp', () => {
     }
   }
 
-  const updateServerStatus = async (id: string, status: MCPServerStatus, lastConnected?: Date): Promise<boolean> => {
+  const updateServerStatus = async (
+    id: string,
+    status: MCPServerStatus,
+    lastConnected?: Date,
+  ) => {
     try {
       await mcpApi.updateServerStatus(id, status, lastConnected)
-      
+
       // Update the server status in local state
-      const server = servers.value.find(s => s.id === id)
+      const server = servers.value.find((s) => s.id === id)
       if (server) {
         server.status = status
         if (lastConnected) {
@@ -170,7 +173,7 @@ export const useMcpStore = defineStore('mcp', () => {
           server.lastConnected = new Date()
         }
       }
-      
+
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to update MCP server status'
@@ -182,16 +185,16 @@ export const useMcpStore = defineStore('mcp', () => {
   const deleteServer = async (id: string): Promise<boolean> => {
     isLoading.value = true
     error.value = null
-    
+
     try {
       await mcpApi.deleteServer(id)
-      
+
       // Remove the server from local state
-      const index = servers.value.findIndex(s => s.id === id)
+      const index = servers.value.findIndex((s) => s.id === id)
       if (index > -1) {
         servers.value.splice(index, 1)
       }
-      
+
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to delete MCP server'
@@ -203,22 +206,22 @@ export const useMcpStore = defineStore('mcp', () => {
   }
 
   const toggleServer = async (id: string): Promise<boolean> => {
-    const server = servers.value.find(s => s.id === id)
+    const server = servers.value.find((s) => s.id === id)
     if (!server) return false
-    
+
     return await updateServer(id, { isEnabled: !server.isEnabled })
   }
 
   const connectServer = async (id: string): Promise<boolean> => {
-    const server = servers.value.find(s => s.id === id)
+    const server = servers.value.find((s) => s.id === id)
     if (!server || !server.isEnabled) return false
-    
+
     // Set status to connecting
     await updateServerStatus(id, MCPServerStatus.CONNECTING)
-    
+
     try {
       const result = await mcpApi.testConnection(id)
-      
+
       if (result.success) {
         await updateServerStatus(id, MCPServerStatus.CONNECTED, new Date())
         return true
@@ -249,11 +252,12 @@ export const useMcpStore = defineStore('mcp', () => {
 
   const updateGlobalConfig = async (key: keyof typeof globalConfig.value, value: unknown) => {
     // Map MCP config keys to settings keys
-    const settingsKey = `mcp${key.charAt(0).toUpperCase() + key.slice(1)}` as keyof typeof settingsStore.settings
-    
+    const settingsKey =
+      `mcp${key.charAt(0).toUpperCase() + key.slice(1)}` as keyof typeof settingsStore.settings
+
     // Update the main settings store
     await settingsStore.updateSettings({
-      [settingsKey]: value
+      [settingsKey]: value,
     } as any)
   }
 
@@ -274,12 +278,12 @@ export const useMcpStore = defineStore('mcp', () => {
     isLoading,
     error,
     globalConfig,
-    
+
     // Computed
     connectedServers,
     enabledServers,
     mcpSettings,
-    
+
     // Actions
     fetchServers,
     getServer,
@@ -293,6 +297,6 @@ export const useMcpStore = defineStore('mcp', () => {
     testConnection,
     updateGlobalConfig,
     clearError,
-    initialize
+    initialize,
   }
 })

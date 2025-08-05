@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
@@ -57,9 +58,36 @@ export class JWTService {
   }
 
   /**
+   * Login user with email and password
+   */
+  async login(email: string, password: string): Promise<{ user: any; token: string } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user || !user.password) {
+      return null; // User not found or has no password set
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return null; // Invalid password
+    }
+
+    const token = this.generateToken({
+      id: user.id,
+      email: user.email,
+      name: user.name ?? undefined
+    });
+
+    return { user, token };
+  }
+
+  /**
    * Get or create demo user and generate token
    */
-  async ensureDemoUserWithToken(): Promise<{ user: any; token: string }> {
+  async ensureDemoUserWithToken(): Promise<{ user: any; token:string }> {
     const demoEmail = 'demo@example.com';
     
     // Try to find existing demo user

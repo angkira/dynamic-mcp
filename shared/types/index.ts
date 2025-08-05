@@ -5,7 +5,9 @@
 
 // LLM types - mix of types and enums
 export { LlmProvider, MessageRole } from './llm';
-export type { ConversationMessage, LlmService, StreamingChunk } from './llm';
+export * from './mcp'
+export * from './enums'
+
 
 // Message types - mix of types and enums
 export { StreamingChunkType } from './message';

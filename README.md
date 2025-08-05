@@ -429,6 +429,11 @@ SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
 4. Add tests if applicable
 5. Submit a pull request
 
+## TODO
+
+- **Interactive tools** - interactive tools widgets - from regular confirmation to the data collection
+- **Internet access** - live chat retrieving the data from the real world, helping you to generate your MCP
+
 ## 📝 License
 
 [Add your license information here]

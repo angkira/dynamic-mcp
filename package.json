@@ -4,7 +4,7 @@
   "description": "Dynamic MCP management system",
   "workspaces": [
     "client",
-    "server", 
+    "server",
     "shared",
     "packages/*"
   ],
@@ -37,12 +37,14 @@
     "prisma:studio": "npx prisma studio"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "concurrently": "^9.2.0",
     "pino-pretty": "^13.1.1",
     "prisma": "^6.13.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.13.0"
+    "@prisma/client": "^6.13.0",
+    "bcrypt": "^6.0.0"
   }
 }
