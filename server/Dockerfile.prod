@@ -1,56 +1,67 @@
-# Clean production Dockerfile for server
-FROM node:22-alpine AS deps
+# Optimized production Dockerfile for server
+FROM node:22-alpine AS base
+RUN apk add --no-cache dumb-init
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
 WORKDIR /app
 
-# Copy package files
+# Dependencies stage - cache layer for faster rebuilds
+FROM base AS deps
+# Copy package files first (better caching)
 COPY package*.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies once with optimizations
+RUN npm ci --prefer-offline --no-audit --no-fund && \
+    npm cache clean --force
 
 # Build stage
-FROM node:22-alpine AS builder
-WORKDIR /app
+FROM base AS builder
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package*.json ./
 
-# Copy package files and source
-COPY package*.json ./
+# Copy source code
 COPY server/ ./server/
 COPY shared/ ./shared/
 COPY packages/ ./packages/
 COPY prisma/ ./prisma/
 
-# Install all dependencies
-RUN npm ci
+# Build with optimizations
+RUN cd shared && npm run build && \
+    cd ../server && npm run build:all && \
+    npx prisma generate
 
-# Create dist directories with proper permissions
-RUN mkdir -p server/dist shared/dist && chmod 755 server/dist shared/dist
+# Production dependencies only
+FROM base AS prod-deps
+COPY package*.json ./
+COPY server/package.json ./server/
+COPY shared/package.json ./shared/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
 
-# Build shared first, then server
-RUN cd shared && npm run build
-RUN cd server && npm run build:all
-
-# Generate Prisma client
-RUN npx prisma generate
+RUN npm ci --only=production --prefer-offline --no-audit --no-fund && \
+    npm cache clean --force
 
 # Production runtime
-FROM node:22-alpine AS runner
-WORKDIR /app
-
+FROM base AS runner
 ENV NODE_ENV=production
 
-# Copy only what's needed for runtime
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package*.json ./
+# Copy production dependencies
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/package*.json ./
+
+# Copy built applications
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
 
-# Make MCP servers executable if they exist
-RUN find ./server/dist -name "*.js" -path "*/mcp-servers/*" -exec chmod +x {} \; 2>/dev/null || true
+# Set proper permissions
+RUN chown -R nextjs:nodejs /app
+USER nextjs
 
 EXPOSE 3000
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "server/dist/app.js"]

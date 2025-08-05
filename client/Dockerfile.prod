@@ -1,52 +1,81 @@
-# Clean production Dockerfile for client
-FROM node:22-alpine AS deps
+# Optimized production Dockerfile for client
+FROM node:22-alpine AS base
+RUN apk add --no-cache dumb-init
 WORKDIR /app
 
-# Copy package files
+# Dependencies stage - cache layer for faster rebuilds
+FROM base AS deps
+# Copy package files first (better caching)
 COPY package*.json ./
 COPY client/package.json ./client/
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies with optimizations
+RUN npm ci --prefer-offline --no-audit --no-fund && \
+    npm cache clean --force
 
 # Build stage
-FROM node:22-alpine AS builder
-WORKDIR /app
-
+FROM base AS builder
 ARG VITE_API_URL
 ARG NODE_ENV=production
 
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=${NODE_ENV}
 
-# Copy package files and source
-COPY package*.json ./
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package*.json ./
+
+# Copy source code
 COPY client/ ./client/
 COPY shared/ ./shared/
 COPY packages/ ./packages/
 
-# Install all dependencies
-RUN npm ci
-
-# Build shared first, then client
-RUN cd shared && npm run build
-RUN cd client && npm run build
+# Build with optimizations
+RUN cd shared && npm run build && \
+    cd ../client && npm run build
 
 # Production runtime with nginx
-FROM nginx:alpine
+FROM nginx:alpine AS runner
+RUN addgroup -g 1001 -S nginx-user
+RUN adduser -S nginx-user -u 1001
+
+# Copy built app
 COPY --from=builder /app/client/dist /usr/share/nginx/html
 
-# Simple nginx config for SPA
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-    root /usr/share/nginx/html; \
-    index index.html index.htm; \
-    try_files $uri $uri/ /index.html; \
-    } \
-    }' > /etc/nginx/conf.d/default.conf
+# Optimized nginx config for SPA
+COPY <<EOF /etc/nginx/conf.d/default.conf
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    
+    # Security headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # SPA routing
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+    
+    # Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Disable server tokens
+    server_tokens off;
+}
+EOF
+
+# Set proper permissions
+RUN chown -R nginx-user:nginx-user /usr/share/nginx/html
 
 EXPOSE 80
+USER nginx-user
 CMD ["nginx", "-g", "daemon off;"]

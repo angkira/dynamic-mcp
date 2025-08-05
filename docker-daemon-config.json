@@ -1,0 +1,23 @@
+{
+  "features": {
+    "buildkit": true
+  },
+  "experimental": false,
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "20GB"
+    }
+  },
+  "registry-mirrors": [],
+  "insecure-registries": [],
+  "debug": false,
+  "hosts": ["fd://"],
+  "log-level": "info",
+  "max-concurrent-downloads": 6,
+  "max-concurrent-uploads": 5,
+  "storage-driver": "overlay2",
+  "storage-opts": [
+    "overlay2.override_kernel_check=true"
+  ]
+}
