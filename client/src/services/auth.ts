@@ -1,4 +1,5 @@
 import type { User } from '@/stores/user'
+import { httpService } from './http'
 
 export interface LoginCredentials {
   email: string
@@ -28,9 +29,6 @@ class AuthError extends Error {
   }
 }
 
-const API_BASE_URL = 'http://localhost:3000'
-// Debug: const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-
 class AuthService {
   private readonly TOKEN_KEY = 'auth_token'
   private readonly USER_KEY = 'auth_user'
@@ -53,7 +51,7 @@ class AuthService {
   setToken(token: string): void {
     try {
       sessionStorage.setItem(this.TOKEN_KEY, token)
-      
+
       // Trigger socket connection when token is set
       this.triggerSocketConnection()
     } catch (error) {
@@ -82,7 +80,7 @@ class AuthService {
     try {
       sessionStorage.removeItem(this.TOKEN_KEY)
       sessionStorage.removeItem(this.USER_KEY)
-      
+
       // Disconnect socket when clearing token
       this.disconnectSocket()
     } catch (error) {
@@ -155,25 +153,11 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-      })
+      const data = await httpService.post<AuthResponse>(
+        '/auth/login',
+        credentials
+      )
 
-      if (!response.ok) {
-        const errorData = await this.parseErrorResponse(response)
-        throw new AuthError(
-          errorData.message || 'Login failed',
-          response.status,
-          errorData.code
-        )
-      }
-
-      const data: AuthResponse = await response.json()
-      
       // Store token and user data
       this.setToken(data.token)
       this.setStoredUser(data.user)
@@ -183,7 +167,7 @@ class AuthService {
       if (error instanceof AuthError) {
         throw error
       }
-      
+
       console.error('Login request failed:', error)
       throw new AuthError('Network error during login', 500)
     }
@@ -194,39 +178,16 @@ class AuthService {
    */
   async getDemoToken(): Promise<AuthResponse> {
     try {
-      // Ensure no double /api by cleaning the base URL
-      const baseUrl = API_BASE_URL.replace(/\/api$/, '')
-      const url = `${baseUrl}/api/auth/demo-token`
-      console.log('🔍 Demo token URL:', url)
-      console.log('🔍 API_BASE_URL:', API_BASE_URL)
-      console.log('🔍 Cleaned base URL:', baseUrl)
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const data = await httpService.get<AuthResponse>('/auth/demo-token')
 
-      if (!response.ok) {
-        const errorData = await this.parseErrorResponse(response)
-        throw new AuthError(
-          errorData.message || 'Failed to get demo token',
-          response.status,
-          errorData.code
-        )
-      }
-
-      const data: AuthResponse = await response.json()
-      
       // Store token and user data
       this.setToken(data.token)
       this.setStoredUser(data.user)
-      
+
       console.log('🔑 Demo token refreshed successfully', {
         userId: data.user.id,
         tokenExists: !!data.token,
-        tokenLength: data.token?.length
+        tokenLength: data.token?.length,
       })
 
       // Refresh socket connection with new token
@@ -242,7 +203,7 @@ class AuthService {
       if (error instanceof AuthError) {
         throw error
       }
-      
+
       console.error('Demo token request failed:', error)
       throw new AuthError('Network error during demo authentication', 500)
     }
@@ -258,37 +219,34 @@ class AuthService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await this.parseErrorResponse(response)
-        if (response.status === 401) {
-          this.clearToken()
-        }
-        throw new AuthError(
-          errorData.message || 'Token verification failed',
-          response.status,
-          errorData.code
-        )
-      }
-
-      const data: { user: User } = await response.json()
+      const data = await httpService.get<{ user: User }>('/auth/verify')
       this.setStoredUser(data.user)
       return data.user
     } catch (error) {
       if (error instanceof AuthError) {
+        // httpService handles clearing the token on 401
         throw error
       }
-      
+
       console.error('Token verification failed:', error)
       throw new AuthError('Network error during token verification', 500)
     }
+  }
+
+  /**
+   * Make an authenticated request
+   */
+  async authenticatedRequest<T>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> {
+    return httpService.request<T>(endpoint, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${this.getToken()}`,
+      },
+    })
   }
 
   /**
@@ -296,72 +254,6 @@ class AuthService {
    */
   logout(): void {
     this.clearToken()
-  }
-
-  /**
-   * Make authenticated API request
-   */
-  async authenticatedRequest<T>(
-    url: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const token = this.getToken()
-    if (!token) {
-      throw new AuthError('No authentication token found', 401)
-    }
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers,
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}${url}`, {
-        ...options,
-        headers,
-      })
-
-      if (!response.ok) {
-        const errorData = await this.parseErrorResponse(response)
-        if (response.status === 401) {
-          this.clearToken()
-        }
-        throw new AuthError(
-          errorData.message || 'Request failed',
-          response.status,
-          errorData.code
-        )
-      }
-
-      return await response.json()
-    } catch (error) {
-      if (error instanceof AuthError) {
-        throw error
-      }
-      
-      console.error('Authenticated request failed:', error)
-      throw new AuthError('Network error during request', 500)
-    }
-  }
-
-  /**
-   * Parse error response from API
-   */
-  private async parseErrorResponse(response: Response): Promise<ApiError> {
-    try {
-      const errorData = await response.json()
-      return {
-        message: errorData.message || 'Unknown error occurred',
-        code: errorData.code,
-        status: response.status,
-      }
-    } catch (error) {
-      return {
-        message: 'Failed to parse error response',
-        status: response.status,
-      }
-    }
   }
 }
 

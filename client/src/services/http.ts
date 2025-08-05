@@ -22,21 +22,21 @@ class HttpService {
   /**
    * Make an authenticated HTTP request
    */
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
     const token = authService.getToken()
 
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...options.headers,
+    const headers = new Headers(options.headers)
+    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json')
     }
 
     // Add authentication header if token exists
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+      headers.set('Authorization', `Bearer ${token}`)
     }
 
     try {
@@ -163,11 +163,11 @@ class HttpService {
     options?: Omit<RequestInit, 'body' | 'headers'>
   ): Promise<T> {
     const token = authService.getToken()
-    const headers: HeadersInit = {}
+    const headers = new Headers()
 
     // Add authentication header if token exists
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+      headers.set('Authorization', `Bearer ${token}`)
     }
 
     // Don't set Content-Type for FormData, let browser set it with boundary

@@ -29,16 +29,17 @@ class HttpClient {
     const isAbsolute = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const urlToFetch = isAbsolute ? endpoint : buildApiUrl(endpoint);
 
-    // Merge headers with authentication
-    const headers = {
-      ...this.defaultHeaders,
-      ...options.headers,
-    };
+    const headers = new Headers(this.defaultHeaders)
+    if (options.headers) {
+      new Headers(options.headers).forEach((value, key) => {
+        headers.set(key, value)
+      })
+    }
 
     // Add authentication header if token exists
-    const token = authService.getToken();
+    const token = authService.getToken()
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.set('Authorization', `Bearer ${token}`)
     }
 
     const config: RequestInit = {
@@ -93,11 +94,8 @@ class HttpClient {
             }
             const authResponse = await this.demoTokenRefreshPromise;
             
-            // Update the authorization header with the new token
-            const freshHeaders = {
-              ...headers,
-              'Authorization': `Bearer ${authResponse.token}`
-            };
+            const freshHeaders = new Headers(headers)
+            freshHeaders.set('Authorization', `Bearer ${authResponse.token}`)
             const retryConfig: RequestInit = {
               ...options,
               headers: freshHeaders,
