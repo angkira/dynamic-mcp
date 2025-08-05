@@ -40,8 +40,55 @@ export class McpConnectionManager {
     mcpAutoDiscovery: boolean
   } | null = null
 
+  private pollingTimer: NodeJS.Timeout | null = null
+  private readonly POLLING_INTERVAL_MS = 20000 // 20 seconds
+
   constructor(_fastify?: FastifyInstance) {
     this.prisma = new PrismaClient()
+  }
+
+  /**
+   * Check if an HTTP daemon server is healthy and reachable
+   */
+  private async checkHttpDaemonHealth(server: MCPServer, timeoutMs: number = 5000): Promise<boolean> {
+    if (server.transportType !== 'STREAMABLE_HTTP' || !server.transportBaseUrl) {
+      return false
+    }
+
+    try {
+      const healthUrl = `${server.transportBaseUrl}/health`
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      return response.ok
+    } catch (error) {
+      return false
+    }
+  }
+
+  /**
+   * Verify server connectivity based on transport type
+   */
+  private async verifyServerConnectivity(server: MCPServer, timeoutMs: number = 2000): Promise<boolean> {
+    // For HTTP daemon servers, check health endpoint
+    if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+      return await this.checkHttpDaemonHealth(server, timeoutMs)
+    }
+    
+    // For STDIO servers, verify connection exists in our connections map
+    if (server.transportType === 'STDIO') {
+      return this.connections.has(server.id)
+    }
+    
+    // For internal servers, assume they're always available
+    if (server.transportCommand === 'internal') {
+      return true
+    }
+    
+    return false
   }
 
   /**
@@ -70,14 +117,14 @@ export class McpConnectionManager {
   /**
    * Initialize the connection manager and auto-connect to enabled servers
    */
-  async initialize() {
+  async initialize(userId: number = 1) {
     console.log('🔌 Initializing MCP Connection Manager...')
     
-    // Get all enabled servers
+    // Get all enabled servers for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
       where: { 
         isEnabled: true,
-        userId: 1 // TODO: Support multiple users
+        userId: userId
       }
     })
 
@@ -94,6 +141,136 @@ export class McpConnectionManager {
         console.error(`❌ Failed to auto-connect to ${server.name}:`, error)
         await this.updateServerStatus(server.id, 'ERROR')
       }
+    }
+    
+    // Start polling for disconnected servers
+    this.startPolling(userId)
+  }
+
+  /**
+   * Start polling for disconnected enabled servers
+   */
+  private startPolling(userId: number = 1) {
+    if (this.pollingTimer) {
+      return // Already polling
+    }
+    
+    console.log(`🔄 Starting MCP server polling every ${this.POLLING_INTERVAL_MS / 1000} seconds`)
+    
+    this.pollingTimer = setInterval(async () => {
+      try {
+        await this.checkAndReconnectServers(userId)
+      } catch (error) {
+        console.error('❌ Error during MCP server polling:', error)
+      }
+    }, this.POLLING_INTERVAL_MS)
+  }
+
+  /**
+   * Stop polling for disconnected servers
+   */
+  private stopPolling() {
+    if (this.pollingTimer) {
+      clearInterval(this.pollingTimer)
+      this.pollingTimer = null
+      console.log('⏹️ Stopped MCP server polling')
+    }
+  }
+
+  /**
+   * Manually trigger a check for disconnected servers (public method)
+   */
+  async triggerReconnectionCheck(userId: number = 1) {
+    console.log('🔄 Manually triggered reconnection check...')
+    await this.checkAndReconnectServers(userId)
+  }
+
+  /**
+   * Get the current polling status
+   */
+  getPollingStatus() {
+    return {
+      isPolling: this.pollingTimer !== null,
+      intervalMs: this.POLLING_INTERVAL_MS,
+      intervalSeconds: this.POLLING_INTERVAL_MS / 1000
+    }
+  }
+
+  /**
+   * Check for enabled servers that are not connected and attempt to reconnect
+   */
+  private async checkAndReconnectServers(userId: number = 1) {
+    try {
+      // Get all enabled servers that are not currently connected
+      const disconnectedServers = await this.prisma.mCPServer.findMany({
+        where: { 
+          isEnabled: true,
+          userId: userId,
+          status: { in: ['DISCONNECTED', 'ERROR', 'CONNECTING'] }
+        }
+      })
+
+      if (disconnectedServers.length === 0) {
+        return
+      }
+
+      if (this.globalSettings?.mcpEnableDebugLogging) {
+        console.log(`🔄 Polling check: Found ${disconnectedServers.length} disconnected enabled servers`)
+      }
+
+      for (const server of disconnectedServers) {
+        try {
+          // Skip if we've reached max connections
+          if (this.globalSettings && this.connections.size >= this.globalSettings.mcpMaxConcurrentConnections) {
+            if (this.globalSettings.mcpEnableDebugLogging) {
+              console.log(`⚠️ Max connections reached, skipping reconnection attempt for ${server.name}`)
+            }
+            continue
+          }
+
+          // Skip if already in connections map (shouldn't happen, but safety check)
+          if (this.connections.has(server.id)) {
+            continue
+          }
+
+          // Check if server has been stuck in CONNECTING state for too long (more than 2 minutes)
+          if (server.status === 'CONNECTING' && server.updatedAt) {
+            const timeSinceConnecting = Date.now() - server.updatedAt.getTime()
+            const maxConnectingTime = 2 * 60 * 1000 // 2 minutes
+            
+            if (timeSinceConnecting < maxConnectingTime) {
+              // Still within reasonable connecting time, skip this iteration
+              if (this.globalSettings?.mcpEnableDebugLogging) {
+                console.log(`⏳ Server ${server.name} still connecting, waiting...`)
+              }
+              continue
+            } else {
+              // Been connecting too long, reset to ERROR state
+              if (this.globalSettings?.mcpEnableDebugLogging) {
+                console.log(`⚠️ Server ${server.name} stuck in CONNECTING state, resetting to ERROR`)
+              }
+              await this.updateServerStatus(server.id, 'ERROR')
+            }
+          }
+
+          if (this.globalSettings?.mcpEnableDebugLogging) {
+            console.log(`🔄 Attempting to reconnect to ${server.name} (${server.transportType})`)
+          }
+
+          const connected = await this.connectToServer(server)
+          if (connected) {
+            console.log(`✅ Successfully reconnected to MCP server: ${server.name}`)
+          }
+        } catch (error) {
+          if (this.globalSettings?.mcpEnableDebugLogging) {
+            console.error(`❌ Failed to reconnect to ${server.name}:`, error)
+          }
+          // Don't spam logs for failed reconnections, just update status
+          await this.updateServerStatus(server.id, 'ERROR')
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking and reconnecting servers:', error)
     }
   }
 
@@ -115,6 +292,22 @@ export class McpConnectionManager {
         console.log(`⚡ Internal server ${server.name} - marking as connected`)
         await this.updateServerStatus(server.id, 'CONNECTED')
         return true
+      }
+
+      // For HTTP daemon services, just check health endpoint instead of creating MCP client connection
+      if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+        console.log(`🔌 Testing HTTP daemon health: ${server.name} at ${server.transportBaseUrl}`)
+        
+        const isHealthy = await this.checkHttpDaemonHealth(server, 5000)
+        if (isHealthy) {
+          console.log(`✅ HTTP daemon ${server.name} is healthy`)
+          await this.updateServerStatus(server.id, 'CONNECTED')
+          return true
+        } else {
+          console.error(`❌ HTTP daemon ${server.name} health check failed`)
+          await this.updateServerStatus(server.id, 'ERROR')
+          return false
+        }
       }
       
       // Update status to connecting
@@ -232,19 +425,27 @@ export class McpConnectionManager {
   /**
    * Get all available tools from connected MCP servers
    */
-  async getAllAvailableTools(): Promise<MCPToolForLLM[]> {
+  async getAllAvailableTools(userId: number = 1): Promise<MCPToolForLLM[]> {
     const allTools: MCPToolForLLM[] = []
     
-    // Get ALL enabled servers from database (both internal and external)
+    // Get enabled AND connected servers from database for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
       where: { 
         isEnabled: true,
-        userId: 1 // TODO: Support multiple users
+        status: 'CONNECTED',  // Only include connected servers
+        userId: userId
       }
     })
     
     for (const server of enabledServers) {
       try {
+        // Verify server is actually reachable before including its tools
+        const isConnected = await this.verifyServerConnectivity(server, 2000)
+        if (!isConnected) {
+          console.warn(`⚠️ Server ${server.name} (${server.transportType}) is not reachable, skipping tools`)
+          continue
+        }
+        
         // Get tools from server capabilities stored in database
         const capabilities = server.capabilities as any
         const tools = capabilities?.tools || []
@@ -265,32 +466,42 @@ export class McpConnectionManager {
           })
         }
         
-        console.log(`📋 Loaded ${tools.length} tools from ${server.name} (${server.transportCommand})`)
+        console.log(`📋 Loaded ${tools.length} tools from connected ${server.name} (${server.transportCommand})`)
       } catch (error) {
         console.error(`❌ Error getting tools from server ${server.name}:`, error)
       }
     }
     
+    console.log(`🔧 Total tools available for LLM: ${allTools.length} from ${enabledServers.length} connected servers`)
     return allTools
   }
 
   /**
    * Get all available resources from connected MCP servers
    */
-  async getAllAvailableResources(): Promise<MCPResourceForLLM[]> {
+  async getAllAvailableResources(userId: number = 1): Promise<MCPResourceForLLM[]> {
     const allResources: MCPResourceForLLM[] = []
     
-    // Get internal servers that have resources
+    // Get enabled AND connected internal servers that have resources for this user
     const internalServers = await this.prisma.mCPServer.findMany({
       where: { 
         name: { in: ['dynamic-mcp-api', 'memory'] },
         isEnabled: true,
-        transportCommand: 'internal'
+        status: 'CONNECTED',  // Only include connected servers
+        transportCommand: 'internal',
+        userId: userId
       }
     })
     
     for (const internalServer of internalServers) {
       try {
+        // Verify internal server connectivity
+        const isConnected = await this.verifyServerConnectivity(internalServer)
+        if (!isConnected) {
+          console.warn(`⚠️ Internal server ${internalServer.name} is not available, skipping resources`)
+          continue
+        }
+        
         // Load internal resources from JSON configuration
         const configLoader = InternalMCPConfigLoader.getInstance()
         const internalResourceConfigs = await configLoader.getResourcesForServer(internalServer.name)
@@ -306,15 +517,32 @@ export class McpConnectionManager {
           })
         }
         
-        console.log(`📋 Loaded ${internalResourceConfigs.length} resources from internal server ${internalServer.name}`)
+        console.log(`📋 Loaded ${internalResourceConfigs.length} resources from connected internal server ${internalServer.name}`)
       } catch (error) {
         console.error(`❌ Error loading resources from internal server ${internalServer.name}:`, error)
       }
     }
     
-    // Add resources from connected external servers
+    // Add resources from connected external servers (only those with active connections)
     for (const [serverId, connection] of this.connections) {
       try {
+        // Verify server is still enabled and connected
+        const server = await this.prisma.mCPServer.findUnique({
+          where: { id: serverId }
+        })
+        
+        if (!server?.isEnabled || server.status !== 'CONNECTED') {
+          console.warn(`⚠️ Server ${serverId} (${connection.server.name}) is no longer enabled or connected, skipping resources`)
+          continue
+        }
+        
+        // Double-check connectivity using our verification method
+        const isConnected = await this.verifyServerConnectivity(server)
+        if (!isConnected) {
+          console.warn(`⚠️ Server ${connection.server.name} connectivity verification failed, skipping resources`)
+          continue
+        }
+        
         const resources = await connection.client.listResources() as any;
         
         for (const resource of resources.resources || []) {
@@ -327,40 +555,295 @@ export class McpConnectionManager {
             mimeType: resource.mimeType || undefined
           })
         }
+        
+        console.log(`📋 Loaded ${resources.resources?.length || 0} resources from connected external server ${connection.server.name}`)
       } catch (error) {
         console.error(`Error getting resources from server ${serverId}:`, error)
       }
     }
     
+    console.log(`🔧 Total resources available for LLM: ${allResources.length} from connected servers`)
     return allResources
   }
 
   /**
    * Call a tool on a specific MCP server
    */
-  async callTool(serverId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
-    const connection = this.connections.get(serverId)
+  async callTool(userId: number, serverId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    // Helper for error result
+    function errorResult(params: {
+      error: string;
+      toolName: string;
+      arguments: unknown;
+      stdout?: string;
+      stderr?: string;
+      daemonResponse?: unknown;
+      stack?: string;
+    }): CallToolResult {
+      return {
+        success: false,
+        error: params.error,
+        toolName: params.toolName,
+        arguments: params.arguments,
+        stdout: params.stdout ?? '',
+        stderr: params.stderr ?? params.error,
+        daemonResponse: params.daemonResponse,
+        stack: params.stack
+      };
+    }
+
+    // First check if this is an HTTP daemon server for the specific user
+    const server = await this.prisma.mCPServer.findFirst({
+      where: { 
+        id: serverId,
+        userId: userId 
+      }
+    });
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found for user ${userId}`);
+    }
+
+    // Handle HTTP daemon servers
+    if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+      const toolUrl = `${server.transportBaseUrl}/call-tool`;
+      const payload = {
+        name: toolName,
+        arguments: (arguments_ as Record<string, unknown>) || {}
+      };
+      try {
+        if (this.globalSettings?.mcpEnableDebugLogging) {
+          console.log(`[MCP] HTTP Tool Call Request`, { serverId, toolName, payload });
+        }
+        const headers: Record<string, string> = { 
+          'Content-Type': 'application/json' 
+        };
+        
+        // Add JWT token if available
+        if (server.authToken) {
+          headers['Authorization'] = `Bearer ${server.authToken}`;
+        }
+        
+        const response = await fetch(toolUrl, {
+          method: 'POST',
+          headers,
+          signal: AbortSignal.timeout(30000),
+          body: JSON.stringify(payload)
+        });
+
+        let result: unknown;
+        try {
+          result = await response.json();
+        } catch (jsonErr) {
+          const rawText = await response.text();
+          console.error(`[MCP] HTTP Tool Call Response not JSON`, { serverId, toolName, rawText });
+          return errorResult({
+            error: `Daemon returned non-JSON response: ${rawText}`,
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: rawText
+          });
+        }
+
+        if (this.globalSettings?.mcpEnableDebugLogging) {
+          console.log(`[MCP] HTTP Tool Call Response`, { serverId, toolName, result });
+        }
+
+        // Type guard for daemon error
+        if (!response.ok || (typeof result === 'object' && result !== null && 'error' in result)) {
+          const errorMsg = typeof result === 'object' && result !== null && 'error' in result ? (result as { error: string }).error : `${response.status} ${response.statusText}`;
+          console.error(`[MCP] Tool call failed`, { toolName, errorMsg, daemonResponse: result });
+          return errorResult({
+            error: errorMsg,
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: errorMsg,
+            daemonResponse: result
+          });
+        }
+
+        // Validate result structure
+        if (!result || typeof result !== 'object') {
+          return errorResult({
+            error: 'Daemon returned invalid response',
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: 'Daemon returned invalid response',
+            daemonResponse: result
+          });
+        }
+
+        // Strictly require a valid CallToolResult from daemon
+        if (!result || typeof result !== 'object') {
+          return errorResult({
+            error: 'Daemon returned malformed CallToolResult',
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: 'Daemon returned malformed CallToolResult',
+            daemonResponse: result
+          });
+        }
+
+        // Handle MCP standard response format with content array
+        if ('content' in result && Array.isArray((result as any).content)) {
+          const mcpResult = result as any;
+          if (mcpResult.content.length > 0 && mcpResult.content[0].type === 'text') {
+            try {
+              // Parse the JSON content from the MCP response
+              const actualData = JSON.parse(mcpResult.content[0].text);
+              
+              return {
+                stdout: mcpResult.content[0].text,
+                stderr: '',
+                success: true,
+                ...actualData // Include the parsed data for easy access
+              } as CallToolResult;
+            } catch (parseError) {
+              // If JSON parsing fails, treat the text as raw output
+              return {
+                stdout: mcpResult.content[0].text,
+                stderr: '',
+                success: true,
+                content: mcpResult.content
+              } as CallToolResult;
+            }
+          }
+        }
+
+        // Handle direct JSON response format (legacy daemon format)
+        if ('success' in result && typeof (result as any).success === 'boolean') {
+          const daemonResult = result as any;
+          if (daemonResult.success) {
+            // Success case - return the data as stdout in JSON format
+            return {
+              stdout: JSON.stringify(daemonResult),
+              stderr: '',
+              success: true,
+              ...daemonResult // Include all the original data
+            } as CallToolResult;
+          } else {
+            // Error case from daemon
+            return errorResult({
+              error: daemonResult.error || 'Tool execution failed',
+              toolName,
+              arguments: payload.arguments,
+              stdout: '',
+              stderr: daemonResult.error || 'Tool execution failed',
+              daemonResponse: result
+            });
+          }
+        }
+
+        // If it doesn't match any known format, assume it's raw result data
+        return {
+          stdout: JSON.stringify(result),
+          stderr: '',
+          success: true,
+          ...result
+        } as CallToolResult;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[MCP] Exception in tool call`, { toolName, errorMsg, stack: error instanceof Error ? error.stack : undefined });
+        return errorResult({
+          error: errorMsg,
+          toolName,
+          arguments: payload.arguments,
+          stdout: '',
+          stderr: errorMsg,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+      }
+    }
+
+    // Handle internal/STDIO servers with MCP client connections
+    const connection = this.connections.get(serverId);
     if (!connection) {
-      throw new Error(`No connection to server ${serverId}`)
+      return errorResult({
+        error: `No connection to server ${serverId}`,
+        toolName,
+        arguments: arguments_,
+        stdout: '',
+        stderr: `No connection to server ${serverId}`
+      });
     }
 
     try {
       const result = await connection.client.callTool({
         name: toolName,
         arguments: arguments_ as Record<string, unknown>
-      })
-      
-      return result as CallToolResult
+      });
+      // Robust type guard for CallToolResult
+      const requiredFields = [
+        ['success', 'boolean'],
+        ['toolName', 'string'],
+        ['arguments', 'object'],
+        ['stdout', 'string'],
+        ['stderr', 'string']
+      ];
+      let malformedReason = '';
+      for (const [field, type] of requiredFields) {
+        if (!(field in result)) {
+          malformedReason = `Missing field: ${field}`;
+          break;
+        }
+        if (type === 'object') {
+          if (typeof (result as any)[field] !== 'object' || (result as any)[field] === null) {
+            malformedReason = `Field ${field} is not a valid object`;
+            break;
+          }
+        } else {
+          if (typeof (result as any)[field] !== type) {
+            malformedReason = `Field ${field} is not of type ${type}`;
+            break;
+          }
+        }
+      }
+      if (malformedReason) {
+        return errorResult({
+          error: `Internal tool call returned malformed CallToolResult: ${malformedReason}`,
+          toolName,
+          arguments: arguments_,
+          stdout: '',
+          stderr: `Internal tool call returned malformed CallToolResult: ${malformedReason}`,
+          daemonResponse: result
+        });
+      }
+      // All required fields exist and are valid
+      return result as unknown as CallToolResult;
     } catch (error) {
-      console.error(`Error calling tool ${toolName} on server ${serverId}:`, error)
-      throw error
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[MCP] Exception in STDIO/internal tool call`, { toolName, errorMsg, stack: error instanceof Error ? error.stack : undefined });
+      return errorResult({
+        error: errorMsg,
+        toolName,
+        arguments: arguments_,
+        stdout: '',
+        stderr: errorMsg,
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
   /**
    * Read a resource from a specific MCP server
    */
-  async readResource(serverId: number, uri: string): Promise<ReadResourceResult> {
+  async readResource(userId: number, serverId: number, uri: string): Promise<ReadResourceResult> {
+    // Verify server belongs to user
+    const server = await this.prisma.mCPServer.findFirst({
+      where: { 
+        id: serverId,
+        userId: userId 
+      }
+    });
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found for user ${userId}`);
+    }
+
     const connection = this.connections.get(serverId)
     if (!connection) {
       throw new Error(`No connection to server ${serverId}`)
@@ -398,18 +881,21 @@ export class McpConnectionManager {
   }
 
   /**
-   * Get connection status for all servers
+   * Get connection status for all connected servers for a specific user
    */
-  getConnectionStatus(): MCPConnectionInfo[] {
+  getConnectionStatus(userId: number): MCPConnectionInfo[] {
     const status: MCPConnectionInfo[] = []
     
     for (const [serverId, connection] of this.connections) {
-      status.push({
-        serverId,
-        serverName: connection.server.name,
-        isConnected: true,
-        lastConnected: connection.lastConnected
-      })
+      // Only include servers that belong to this user
+      if (connection.server.userId === userId) {
+        status.push({
+          serverId,
+          serverName: connection.server.name,
+          isConnected: true,
+          lastConnected: connection.lastConnected
+        })
+      }
     }
     
     return status
@@ -454,6 +940,9 @@ export class McpConnectionManager {
   async cleanup() {
     console.log('🧹 Cleaning up MCP connections...')
     
+    // Stop polling first
+    this.stopPolling()
+    
     for (const [serverId, connection] of this.connections) {
       try {
         await connection.client.close()
@@ -470,43 +959,49 @@ export class McpConnectionManager {
   /**
    * Refresh connections - reconnect to all enabled servers
    */
-  async refreshConnections() {
+  async refreshConnections(userId: number = 1) {
     console.log('🔄 Refreshing MCP connections...')
+    
+    // Stop polling temporarily
+    this.stopPolling()
     
     // Close existing connections
     for (const [serverId] of this.connections) {
       await this.disconnectFromServer(serverId)
     }
     
-    // Reinitialize
-    await this.initialize()
+    // Reinitialize (this will restart polling)
+    await this.initialize(userId)
   }
 
   /**
-   * Health check for all connections
+   * Health check for all connections for a specific user
    */
-  async healthCheck(): Promise<MCPHealthCheckResult[]> {
+  async healthCheck(userId: number): Promise<MCPHealthCheckResult[]> {
     const results: MCPHealthCheckResult[] = []
     
     for (const [serverId, connection] of this.connections) {
-      try {
-        // Test connection by making a simple call
-        await connection.client.ping()
-        results.push({
-          serverId,
-          serverName: connection.server.name,
-          healthy: true
-        })
-      } catch (error) {
-        results.push({
-          serverId,
-          serverName: connection.server.name,
-          healthy: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-        
-        // Update status to error
-        await this.updateServerStatus(serverId, 'ERROR')
+      // Only check health for servers that belong to this user
+      if (connection.server.userId === userId) {
+        try {
+          // Test connection by making a simple call
+          await connection.client.ping()
+          results.push({
+            serverId,
+            serverName: connection.server.name,
+            healthy: true
+          })
+        } catch (error) {
+          results.push({
+            serverId,
+            serverName: connection.server.name,
+            healthy: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })
+          
+          // Update status to error
+          await this.updateServerStatus(serverId, 'ERROR')
+        }
       }
     }
     

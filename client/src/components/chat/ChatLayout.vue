@@ -19,7 +19,11 @@
 
     <!-- Mobile Overlay -->
     <Transition name="overlay">
-      <div v-if="ui.isMobile && ui.sidebarState === 'open'" class="mobile-overlay" @click="ui.closeSidebar" />
+      <div
+        v-if="ui.isMobile && ui.sidebarState === 'open'"
+        class="mobile-overlay"
+        @click="ui.closeSidebar"
+      />
     </Transition>
   </div>
 </template>
@@ -43,7 +47,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  chatId: undefined
+  chatId: undefined,
 })
 
 const route = useRoute()
@@ -58,8 +62,8 @@ onMounted(async () => {
   // Initialize UI
   ui.init()
 
-  // Initialize user (mock for now)
-  await user.fetchUser()
+  // Verify and refresh user before using user data
+  await user.verifyAndRefreshUser()
 
   // Fetch available models
   await models.fetchModels()
@@ -73,24 +77,31 @@ onMounted(async () => {
 })
 
 // Watch for route changes to handle navigation
-watch(() => route.params.chatId, (newChatId, oldChatId) => {
-  // Only handle route change if chatId actually changed
-  if (newChatId !== oldChatId) {
-    handleRouteChange()
-  }
-}, { immediate: true })
+watch(
+  () => route.params.chatId,
+  (newChatId, oldChatId) => {
+    // Only handle route change if chatId actually changed
+    if (newChatId !== oldChatId) {
+      handleRouteChange()
+    }
+  },
+  { immediate: true },
+)
 
 // Watch for programmatic chat changes and update route
-watch(() => chats.currentChatId, (newChatId, oldChatId) => {
-  // Avoid infinite loops - only update route if it's actually different
-  if (newChatId !== oldChatId) {
-    if (newChatId && route.params.chatId !== String(newChatId)) {
-      router.push(`/chat/${newChatId}`)
-    } else if (!newChatId && route.params.chatId) {
-      router.push('/')
+watch(
+  () => chats.currentChatId,
+  (newChatId, oldChatId) => {
+    // Avoid infinite loops - only update route if it's actually different
+    if (newChatId !== oldChatId) {
+      if (newChatId && route.params.chatId !== String(newChatId)) {
+        router.push(`/chat/${newChatId}`)
+      } else if (!newChatId && route.params.chatId) {
+        router.push('/')
+      }
     }
-  }
-})
+  },
+)
 
 async function handleRouteChange() {
   const routeChatId = route.params.chatId ? Number(route.params.chatId) : null

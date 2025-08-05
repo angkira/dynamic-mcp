@@ -1,8 +1,22 @@
 import { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { WebSocketMessageHandlerService } from '../services/websocket/messageHandler';
 import { LlmProvider, ClientWebSocketEvent } from '@dynamic-mcp/shared';
+
+interface AuthenticatedSocket extends Socket {
+  userId: number;
+  userEmail: string;
+}
+
+interface SendMessagePayload {
+  content: string;
+  chatId?: number;
+  provider?: LlmProvider;
+  model?: string;
+  stream: boolean;
+  isThinking?: boolean;
+}
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -10,33 +24,105 @@ declare module 'fastify' {
   }
 }
 
-async function websocketPlugin(fastify: FastifyInstance) {
+async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
   const messageHandler = new WebSocketMessageHandlerService(fastify);
 
-  fastify.decorate('io', new Server(fastify.server, {
+  // Register fastify-socket.io plugin
+  await fastify.register(require('fastify-socket.io'), {
     cors: {
       origin: process.env.CLIENT_URL || "http://localhost:5173",
-      methods: ["GET", "POST"]
+      methods: ["GET", "POST"],
+      credentials: true
     }
-  }));
-
-  fastify.io.on('connection', (socket) => {
-    fastify.log.info(`Socket connected: ${socket.id}`);
-
-    // TODO: Add authentication logic here
-
-    socket.on(ClientWebSocketEvent.SendMessage, (payload: { content: string; userId: number; chatId?: number; provider?: LlmProvider; model?: string; stream: boolean; isThinking?: boolean }) => {
-      messageHandler.handleSendMessage(socket, payload);
-    });
-
-    socket.on('disconnect', () => {
-      fastify.log.info(`Socket disconnected: ${socket.id}`);
-    });
   });
 
-  fastify.addHook('onClose', (instance, done) => {
-    instance.io.close();
-    done();
+  fastify.ready((err) => {
+    if (err) throw err;
+
+    fastify.io.on('connection', (socket: Socket) => {
+      fastify.log.info(`Socket connected: ${socket.id}`);
+
+      // JWT Authentication middleware for WebSocket
+      const authenticateSocket = async (socket: Socket): Promise<{ userId: number; userEmail: string } | null> => {
+        try {
+          // Try to get token from auth handshake
+          const token = socket.handshake.auth?.token || 
+                       socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
+                       socket.handshake.query?.token;
+
+          if (!token) {
+            fastify.log.warn(`Socket ${socket.id} attempted connection without token`);
+            return null;
+          }
+
+          // Verify token using JWT service
+          const jwtService = fastify.jwtService;
+          const decoded = jwtService.verifyToken(token);
+          
+          if (!decoded) {
+            fastify.log.warn(`Socket ${socket.id} token verification failed`);
+            return null;
+          }
+          
+          fastify.log.info(`Socket ${socket.id} authenticated as user ${decoded.userId} (${decoded.email})`);
+          return {
+            userId: decoded.userId,
+            userEmail: decoded.email
+          };
+        } catch (error) {
+          fastify.log.error(`Socket ${socket.id} authentication failed:`, error);
+          return null;
+        }
+      };
+
+      // Authenticate the socket connection
+      authenticateSocket(socket).then((authResult) => {
+        if (!authResult) {
+          // Authentication failed
+          socket.emit('unauthorized', { message: 'Authentication failed' });
+          socket.disconnect(true);
+          return;
+        }
+
+        // Store user info on socket
+        const authenticatedSocket = socket as AuthenticatedSocket;
+        authenticatedSocket.userId = authResult.userId;
+        authenticatedSocket.userEmail = authResult.userEmail;
+
+        // Emit successful authentication
+        socket.emit('authenticated', { 
+          userId: authResult.userId,
+          email: authResult.userEmail 
+        });
+
+        // Register authenticated event handlers
+        registerSocketHandlers(authenticatedSocket, messageHandler, fastify);
+      }).catch((error) => {
+        fastify.log.error(`Socket authentication error for ${socket.id}:`, error);
+        socket.emit('error', { message: 'Authentication error' });
+        socket.disconnect(true);
+      });
+    });
+  });
+}
+
+function registerSocketHandlers(
+  socket: AuthenticatedSocket,
+  messageHandler: WebSocketMessageHandlerService,
+  fastify: FastifyInstance
+): void {
+  
+  socket.on(ClientWebSocketEvent.SendMessage, (payload: SendMessagePayload) => {
+    // Add userId from authenticated socket to payload
+    const enrichedPayload = {
+      ...payload,
+      userId: socket.userId
+    };
+    messageHandler.handleSendMessage(socket, enrichedPayload);
+  });
+
+  socket.on('disconnect', () => {
+    fastify.log.info(`Authenticated socket disconnected: ${socket.id} (user ${socket.userId})`);
   });
 }
 

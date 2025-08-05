@@ -56,6 +56,7 @@ export class MessagingService {
       }
       
       const availableTools = await this.mcpService.getAvailableToolsForLLM();
+      console.log(`🔧 Providing ${availableTools.length} tools to LLM:`, availableTools.map(t => t.name));
       // Pass an empty message because the user's message is now the last item in the history array.
       const responseStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
 
@@ -121,14 +122,28 @@ export class MessagingService {
           executedToolCalls.push(trackedToolCall);
 
           try {
-            const result = await this.mcpService.executeMCPTool(toolCall.name, toolCall.arguments);
+            console.log(`🔧 Executing MCP tool: ${toolCall.name} with args:`, toolCall.arguments);
+            
+            // Add timeout to prevent hanging
+            const executionTimeout = 30000; // 30 seconds
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error(`Tool execution timeout after ${executionTimeout}ms`)), executionTimeout);
+            });
+            
+            const executionPromise = this.mcpService.executeMCPTool(toolCall.name, toolCall.arguments);
+            
+            console.log(`⏱️ Starting tool execution with ${executionTimeout}ms timeout...`);
+            const result = await Promise.race([executionPromise, timeoutPromise]);
+            console.log(`✅ Tool execution completed:`, result);
             stream(ServerWebSocketEvent.ToolResult, { toolName: toolCall.name, result, chatId });
 
             // Update tracked tool call with result
             trackedToolCall.result = result;
             trackedToolCall.status = 'completed';
+            console.log(`📊 Updated tracked tool call status to: ${trackedToolCall.status}`);
 
             // Add tool result to history
+            console.log(`📝 Adding tool result to history. Current history length: ${history.length}`);
             history.push({
               id: 0,
               role: MessageRole.TOOL,
@@ -137,30 +152,53 @@ export class MessagingService {
               createdAt: new Date(),
               updatedAt: new Date()
             });
+            console.log(`📝 Tool result added. New history length: ${history.length}`);
 
             // Continue the conversation with the tool result
-            console.debug(`🔄 Starting follow-up stream for tool result. History length: ${history.length}`);
+            console.log(`🔄 Starting follow-up stream for tool result. History length: ${history.length}`);
+            console.log(`📋 Last 3 history items:`, history.slice(-3).map(h => ({ role: h.role, content: typeof h.content === 'object' ? Object.keys(h.content) : h.content })));
+            console.log(`🎯 About to create follow-up stream...`);
             try {
               // For Gemini, we pass an empty message. The model will see the function response
               // as the last message and generate a natural language response automatically.
+              console.log(`🚀 Creating follow-up stream with LLM service...`);
               const followUpStream = this.llmService.sendMessageStreamWithTools('', history, availableTools, isThinking);
+              console.log(`✅ Follow-up stream created successfully, starting iteration...`);
               let followUpChunkCount = 0;
+              let followUpTextCount = 0;
               for await (const followUpChunk of followUpStream) {
+                followUpChunkCount++;
+                console.log(`📦 Follow-up chunk ${followUpChunkCount} type: ${followUpChunk.type}`);
+                appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_CHUNK: type=${followUpChunk.type}, content="${followUpChunk.type === 'text' ? followUpChunk.content : JSON.stringify(followUpChunk)}"\n`);
+                
                 if (followUpChunk.type === 'text') {
-                  followUpChunkCount++;
-                  console.debug(`📝 Follow-up chunk ${followUpChunkCount}: "${followUpChunk.content}"`);
-                  appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_TEXT: "${followUpChunk.content}"\n`);
+                  followUpTextCount++;
+                  console.log(`📝 Follow-up text chunk ${followUpTextCount}: "${followUpChunk.content}"`);
                   pipeline.processTextChunk(followUpChunk.content);
+                } else if (followUpChunk.type === 'toolCall') {
+                  console.log(`🔧 Follow-up wants to make another tool call: ${followUpChunk.call.name}`);
+                  // For now, we'll skip nested tool calls to avoid infinite loops
+                  // but log them for debugging
+                  appendFileSync(rawLogFile, `${new Date().toISOString()} - NESTED_TOOL_CALL_SKIPPED: ${JSON.stringify(followUpChunk.call)}\n`);
                 }
-                // Note: We don't handle nested tool calls in follow-up for simplicity
               }
-              console.debug(`✅ Follow-up stream completed. Total chunks: ${followUpChunkCount}`);
+              console.log(`✅ Follow-up stream completed. Total chunks: ${followUpChunkCount}, Text chunks: ${followUpTextCount}`);
             } catch (followUpError) {
               console.error(`❌ Follow-up stream error:`, followUpError);
+              console.error(`❌ Follow-up error stack:`, followUpError instanceof Error ? followUpError.stack : 'No stack');
               appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_ERROR: ${followUpError}\n`);
             }
+            console.log(`🏁 Follow-up processing completed, continuing...`);
 
           } catch (error: any) {
+            console.error(`❌ Tool execution failed for ${toolCall.name}:`, error);
+            console.error(`❌ Error details:`, {
+              message: error.message,
+              stack: error.stack,
+              name: error.name,
+              type: typeof error
+            });
+            
             // Update tracked tool call with error
             trackedToolCall.error = error.message || 'Tool execution failed';
             trackedToolCall.status = 'error';

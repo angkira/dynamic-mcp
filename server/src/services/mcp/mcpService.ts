@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client'
 import type { MCPServer, MCPServerStatus } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
-import MemoryService from '../memory/memoryService'
 import type { 
   MCPServerUpdateData,
   MCPToolForLLM,
@@ -21,29 +20,23 @@ import type {
  */
 export class McpService {
   private prisma: PrismaClient
+  private fastify: FastifyInstance
   private connectionManager: McpConnectionManager
-  private memoryService: MemoryService
 
-  constructor(fastify?: FastifyInstance) {
+  constructor(fastify: FastifyInstance) {
+    this.fastify = fastify
     this.prisma = new PrismaClient()
     this.connectionManager = new McpConnectionManager(fastify)
-    this.memoryService = new MemoryService()
   }
 
-    /**
+  /**
    * Initialize the service and connection manager
+   * Note: This should be called once during server startup
    */
   async initialize() {
-    // Load global settings and pass them to connection manager
-    const settings = await this.getUserSettings()
-    this.connectionManager.updateGlobalSettings({
-      mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
-      mcpDefaultTimeout: settings.mcpDefaultTimeout,
-      mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
-      mcpAutoDiscovery: settings.mcpAutoDiscovery
-    })
-    
-    await this.connectionManager.initialize()
+    // The service is now user-aware, so we don't initialize connections here
+    // Connections will be managed per user when they make requests
+    console.log('🔌 MCP Service initialized (user-aware mode)')
   }
 
   /**
@@ -91,7 +84,7 @@ export class McpService {
   /**
    * Update global settings (call this when settings change)
    */
-  async updateGlobalSettings(userId: number = 1) {
+  async updateGlobalSettings(userId: number) {
     const settings = await this.getUserSettings(userId)
     this.connectionManager.updateGlobalSettings({
       mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
@@ -99,6 +92,19 @@ export class McpService {
       mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
       mcpAutoDiscovery: settings.mcpAutoDiscovery
     })
+  }
+
+  /**
+   * Ensure user's MCP connections are initialized
+   * This is called the first time a user makes an MCP-related request
+   */
+  private async ensureUserInitialized(userId: number) {
+    // Update global settings for this user
+    await this.updateGlobalSettings(userId)
+    
+    // Initialize connections for this user if not already done
+    // The connection manager will handle checking if already initialized
+    await this.connectionManager.initialize(userId)
   }
 
   // CRUD Operations
@@ -305,8 +311,8 @@ export class McpService {
 
   /**
    * Test connection to an MCP server
-   * If already connected, performs a ping test
-   * If not connected, attempts a quick connection test
+   * For HTTP daemon services, tests the health endpoint directly
+   * For STDIO/internal servers, uses the existing connection manager approach
    */
   async testConnection(id: number, userId: number = 1) {
     const server = await this.prisma.mCPServer.findFirst({
@@ -318,46 +324,98 @@ export class McpService {
     }
 
     try {
-      // Check if server is already connected
-      const isConnected = this.connectionManager.isConnected(id)
-      
-      if (isConnected) {
-        // Server is connected, perform a ping test
-        const healthResults = await this.connectionManager.healthCheck()
-        const serverHealth = healthResults.find(h => h.serverId === id)
+      let result: { success: boolean; message: string }
+
+      // Handle HTTP daemon services (check health endpoint directly)
+      if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+        result = await this.testHttpDaemonHealth(server)
+      }
+      // Handle internal servers
+      else if (server.transportCommand === 'internal') {
+        result = { success: true, message: 'Internal server is always available' }
+      }
+      // For STDIO servers, use the existing connection manager approach
+      else {
+        const isConnected = this.connectionManager.isConnected(id)
         
-        if (serverHealth) {
-          return {
-            success: serverHealth.healthy,
-            message: serverHealth.healthy 
-              ? 'Connection test successful (ping)' 
-              : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
+        if (isConnected) {
+          // Server is connected, perform a ping test
+          const healthResults = await this.connectionManager.healthCheck(userId)
+          const serverHealth = healthResults.find(h => h.serverId === id)
+          
+          if (serverHealth) {
+            result = {
+              success: serverHealth.healthy,
+              message: serverHealth.healthy 
+                ? 'Connection test successful (ping)' 
+                : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
+            }
+          } else {
+            result = { success: false, message: 'Server health status not available' }
           }
         } else {
-          return { success: false, message: 'Server health status not available' }
-        }
-      } else {
-        // Server is not connected, attempt a quick connection test
-        const success = await this.connectionManager.connectToServer(server)
-        
-        if (success) {
-          // Optionally disconnect after successful test to avoid keeping unnecessary connections
-          // await this.connectionManager.disconnectFromServer(id)
-          return { 
-            success: true, 
-            message: 'Connection test successful (connected)' 
-          }
-        } else {
-          return { 
-            success: false, 
-            message: 'Failed to establish connection' 
+          // Server is not connected, attempt a quick connection test
+          const success = await this.connectionManager.connectToServer(server)
+          
+          if (success) {
+            // Optionally disconnect after successful test to avoid keeping unnecessary connections
+            // await this.connectionManager.disconnectFromServer(id)
+            result = { 
+              success: true, 
+              message: 'Connection test successful (connected)' 
+            }
+          } else {
+            result = { 
+              success: false, 
+              message: 'Failed to establish connection' 
+            }
           }
         }
       }
+
+      return result
     } catch (error) {
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Connection test failed' 
+      const errorMessage = error instanceof Error ? error.message : 'Connection test failed'
+      return { success: false, message: errorMessage }
+    }
+  }
+
+  /**
+   * Test HTTP daemon health endpoint directly
+   */
+  private async testHttpDaemonHealth(server: any) {
+    try {
+      const healthUrl = `${server.transportBaseUrl}/health`
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000), // 5 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const healthData = await response.json() as { status?: string }
+        return {
+          success: true,
+          message: `HTTP daemon health check successful - ${healthData.status || 'healthy'}`
+        }
+      } else {
+        return {
+          success: false,
+          message: `HTTP daemon health check failed - HTTP ${response.status}: ${response.statusText}`
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        return {
+          success: false,
+          message: 'HTTP daemon health check timeout (5s)'
+        }
+      }
+      return {
+        success: false,
+        message: `HTTP daemon health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       }
     }
   }
@@ -365,25 +423,58 @@ export class McpService {
   // Integration with LLM system
 
   /**
-   * Get all available tools from enabled MCP servers for LLM integration
+   * Get all available tools from enabled MCP servers for LLM integration (user-aware)
+   */
+  async getAvailableToolsForUser(userId: number): Promise<MCPToolForLLM[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.getAllAvailableTools(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async getAvailableToolsForLLM(): Promise<MCPToolForLLM[]> {
-    return await this.connectionManager.getAllAvailableTools()
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.getAvailableToolsForUser(demoUser.id)
   }
 
   /**
-   * Get all available resources from enabled MCP servers for LLM integration
+   * Get all available resources from enabled MCP servers for LLM integration (user-aware)
+   */
+  async getAvailableResourcesForUser(userId: number): Promise<MCPResourceForLLM[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.getAllAvailableResources(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async getAvailableResourcesForLLM(): Promise<MCPResourceForLLM[]> {
-    return await this.connectionManager.getAllAvailableResources()
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.getAvailableResourcesForUser(demoUser.id)
   }
 
   /**
-   * Execute an MCP tool call from LLM
+   * Execute an MCP tool call from LLM (user-aware)
    */
-  async executeMCPTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
+  async executeMCPToolForUser(userId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    await this.ensureUserInitialized(userId)
+    
     // Parse server and tool name from format "serverName__toolName"
-    // Also handle legacy format for internal tools
     let serverName: string;
     let originalToolName: string;
     
@@ -395,9 +486,35 @@ export class McpService {
       serverName = parts[0];
       originalToolName = parts[1];
     } else {
-      // Handle legacy internal tool names without prefix
-      serverName = 'dynamic-mcp-api';
+      // Legacy format - find which server has this tool
+      console.log(`🔍 Legacy tool call detected: ${toolName}, searching for server...`);
+      
+      const servers = await this.prisma.mCPServer.findMany({
+        where: { 
+          isEnabled: true,
+          userId: userId
+        }
+      });
+
+      let foundServer = null;
+      for (const server of servers) {
+        const capabilities = server.capabilities as any;
+        if (capabilities?.tools) {
+          const hasTool = capabilities.tools.some((tool: any) => tool.name === toolName);
+          if (hasTool) {
+            foundServer = server;
+            break;
+          }
+        }
+      }
+
+      if (!foundServer) {
+        throw new Error(`Tool "${toolName}" not found in any enabled MCP server`);
+      }
+
+      serverName = foundServer.name;
       originalToolName = toolName;
+      console.log(`✅ Found tool "${toolName}" in server "${serverName}"`);
     }
 
     // Find the server by name
@@ -405,7 +522,7 @@ export class McpService {
       where: { 
         name: serverName,
         isEnabled: true,
-        userId: 1 // TODO: Support multiple users
+        userId: userId
       }
     })
 
@@ -413,145 +530,108 @@ export class McpService {
       throw new Error(`MCP server "${serverName}" not found or not enabled`)
     }
 
-    // If this is an internal server, handle it directly
-    if (server.transportCommand === 'internal') {
-      return await this.executeInternalTool(originalToolName, arguments_)
-    }
-
-    // Execute the tool
-    return await this.connectionManager.callTool(server.id, originalToolName, arguments_)
+    // All tools now go through the connection manager
+    return await this.connectionManager.callTool(userId, server.id, originalToolName, arguments_)
   }
 
   /**
-   * Read an MCP resource for LLM
+   * Legacy method for backwards compatibility (uses demo user)
+   */
+  async executeMCPTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.executeMCPToolForUser(demoUser.id, toolName, arguments_)
+  }
+
+  /**
+   * Read an MCP resource for LLM (user-aware)
+   */
+  async readMCPResourceForUser(userId: number, serverId: number, uri: string): Promise<ReadResourceResult> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.readResource(userId, serverId, uri)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async readMCPResource(serverId: number, uri: string): Promise<ReadResourceResult> {
-    return await this.connectionManager.readResource(serverId, uri)
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.readMCPResourceForUser(demoUser.id, serverId, uri)
   }
 
   // Utility methods
 
   /**
-   * Get connection status for all servers
+   * Get connection status for all servers (user-aware)
+   */
+  getConnectionStatusForUser(userId: number): MCPConnectionInfo[] {
+    return this.connectionManager.getConnectionStatus(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   getConnectionStatus(): MCPConnectionInfo[] {
-    return this.connectionManager.getConnectionStatus()
-  }
-
-  /**
-   * Health check for all connections
-   */
-  async healthCheck(): Promise<MCPHealthCheckResult[]> {
-    return await this.connectionManager.healthCheck()
-  }
-
-  /**
-   * Refresh all connections
-   */
-  async refreshConnections() {
-    await this.connectionManager.refreshConnections()
-  }
-
-  /**
-   * Ensure the default server exists in the database
-   */
-  private async ensureDefaultServer() {
-    const existingDefault = await this.prisma.mCPServer.findFirst({
-      where: { 
-        name: 'dynamic-mcp-api',
-        userId: 1
-      }
-    })
-
-    if (!existingDefault) {
-      console.log('🔧 Creating default MCP server entry...')
-      
-      await this.prisma.mCPServer.create({
-        data: {
-          userId: 1,
-          name: 'dynamic-mcp-api',
-          version: '1.0.0',
-          description: 'Internal MCP server for managing the Dynamic MCP system via chat',
-          isEnabled: true,
-          status: 'CONNECTED',
-          transportType: 'STDIO',
-          transportCommand: 'internal',
-          authType: 'NONE',
-          configAutoConnect: false, // Don't auto-connect the internal server
-          configConnectionTimeout: 10000,
-          configMaxRetries: 3,
-          configRetryDelay: 2000,
-          configValidateCertificates: true,
-          configDebug: false,
-          capabilities: {
-            tools: [
-              { 
-                name: 'mcp_list_servers', 
-                description: '📋 List all registered MCP servers with their connection status, capabilities, and configuration details',
-                labels: ['management', 'read', 'servers']
-              },
-              { 
-                name: 'mcp_create_server', 
-                description: '➕ Register a new MCP server with connection configuration and capabilities',
-                labels: ['management', 'create', 'servers'] 
-              },
-              { 
-                name: 'mcp_update_server', 
-                description: '✏️ Update an existing MCP server configuration, connection settings, or capabilities',
-                labels: ['management', 'update', 'servers']
-              },
-              { 
-                name: 'mcp_delete_server', 
-                description: '🗑️ Permanently remove an MCP server and all its associated data',
-                labels: ['management', 'delete', 'servers']
-              },
-              { 
-                name: 'mcp_toggle_server', 
-                description: '🔄 Enable or disable an MCP server to control its availability for tool calls',
-                labels: ['management', 'update', 'servers', 'status']
-              },
-              {
-                name: 'mcp_connect_server',
-                description: '🔌 Establish connection to an MCP server and test its availability',
-                labels: ['management', 'connection', 'servers']
-              },
-              {
-                name: 'mcp_disconnect_server', 
-                description: '🔌 Disconnect from an MCP server while keeping its configuration',
-                labels: ['management', 'connection', 'servers']
-              },
-              {
-                name: 'mcp_get_server_tools',
-                description: '🛠️ Get all available tools from a specific MCP server with their schemas',
-                labels: ['management', 'read', 'tools']
-              }
-            ],
-            resources: [
-              { 
-                uri: 'mcp://config', 
-                name: 'MCP System Configuration', 
-                description: 'Complete Dynamic MCP system configuration including servers, connections, and global settings' 
-              },
-              {
-                uri: 'mcp://status',
-                name: 'MCP System Status',
-                description: 'Real-time status of all MCP servers, connections, and system health'
-              }
-            ],
-            prompts: [
-              { 
-                name: 'mcp-management-help', 
-                description: '💡 Get comprehensive help and examples for managing MCP servers through chat commands' 
-              }
-            ]
-          },
-          lastConnected: new Date()
-        }
-      })
-      
-      console.log('✅ Default MCP server created')
+    // For legacy compatibility, return status for demo user or empty array
+    try {
+      return this.connectionManager.getConnectionStatus(1) // Fallback to userId 1 for legacy compatibility
+    } catch {
+      return []
     }
   }
+
+  /**
+   * Health check for all connections (user-aware)
+   */
+  async healthCheckForUser(userId: number): Promise<MCPHealthCheckResult[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.healthCheck(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
+   */
+  async healthCheck(): Promise<MCPHealthCheckResult[]> {
+    try {
+      return await this.connectionManager.healthCheck(1) // Fallback to userId 1 for legacy compatibility
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Refresh all connections (user-aware)
+   */
+  async refreshConnectionsForUser(userId: number) {
+    await this.ensureUserInitialized(userId)
+    await this.connectionManager.refreshConnections(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
+   */
+  async refreshConnections() {
+    try {
+      await this.connectionManager.refreshConnections(1) // Fallback to userId 1 for legacy compatibility
+    } catch (error) {
+      console.error('Error refreshing connections for legacy call:', error)
+    }
+  }
+
+
 
   /**
    * Transform server data for API response
@@ -563,11 +643,11 @@ export class McpService {
       version: server.version,
       description: server.description,
       isEnabled: server.isEnabled,
-      status: server.status.toLowerCase(),
+      status: server.status, // Keep status in uppercase to match schema
       lastConnected: server.lastConnected,
       
       transport: {
-        type: server.transportType.toLowerCase().replace('_', '-'),
+        type: server.transportType, // Keep transport type in uppercase to match schema
         config: {
           command: server.transportCommand,
           args: (server.transportArgs as string[]) || [],
@@ -580,7 +660,7 @@ export class McpService {
       },
       
       authentication: {
-        type: server.authType.toLowerCase(),
+        type: server.authType, // Keep auth type in uppercase to match schema
         config: {
           clientId: server.authClientId,
           clientSecret: server.authClientSecret,
@@ -607,469 +687,6 @@ export class McpService {
         resources: [],
         prompts: []
       }
-    }
-  }
-
-  /**
-   * Cleanup resources
-   */
-  /**
-   * Execute internal MCP management tools
-   */
-  private async executeInternalTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
-    const args = arguments_ as Record<string, any> || {};
-    
-    try {
-      switch (toolName) {
-        // Unified internal tool name
-        case 'mcp_list_servers':
-        // Legacy alias kept for backward compatibility
-        case 'list_mcp_servers':
-          return await this.handleListServers();
-          
-        case 'mcp_create_server':
-          return await this.handleCreateServer(args);
-          
-        case 'mcp_update_server':
-          return await this.handleUpdateServer(args);
-          
-        case 'mcp_delete_server':
-          return await this.handleDeleteServer(args);
-          
-        case 'mcp_toggle_server':
-          return await this.handleToggleServer(args);
-          
-        case 'mcp_connect_server':
-          return await this.handleConnectServer(args);
-          
-        case 'mcp_disconnect_server':
-          return await this.handleDisconnectServer(args);
-          
-        case 'mcp_get_server_tools':
-          return await this.handleGetServerTools(args);
-          
-        case 'memory_remember':
-          return await this.handleMemoryRemember(args);
-          
-        case 'memory_recall':
-          return await this.handleMemoryRecall(args);
-          
-        case 'memory_reset':
-          return await this.handleMemoryReset(args);
-          
-        case 'list_mcp_servers':
-          return await this.handleListServers();
-          
-        default:
-          throw new Error(`Unknown internal tool: ${toolName}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error executing ${toolName}: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  private async handleListServers(): Promise<CallToolResult> {
-    const servers = await this.getServers();
-    const serverList = servers.map((server: any) => ({
-      id: server.id,
-      name: server.name,
-      description: server.description,
-      status: server.status,
-      isEnabled: server.isEnabled,
-      transportType: server.transportType,
-      lastConnected: server.lastConnected,
-      capabilities: server.capabilities
-    }));
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        servers: serverList,
-        total: serverList.length
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleCreateServer(args: Record<string, any>): Promise<CallToolResult> {
-    const required = ['name', 'transportType', 'transportCommand'];
-    for (const field of required) {
-      if (!args[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
-
-    const server = await this.prisma.mCPServer.create({
-      data: {
-        userId: args.userId || 1,
-        name: args.name,
-        version: args.version || '1.0.0',
-        description: args.description || '',
-        isEnabled: args.isEnabled ?? true,
-        status: 'DISCONNECTED',
-        transportType: args.transportType,
-        transportCommand: args.transportCommand,
-        transportArgs: args.transportArgs || [],
-        transportEnv: args.transportEnv || {},
-        authType: args.authType || 'NONE',
-        configAutoConnect: args.configAutoConnect ?? true,
-        configConnectionTimeout: args.configConnectionTimeout || 10000,
-        configMaxRetries: args.configMaxRetries || 3,
-        configRetryDelay: args.configRetryDelay || 2000,
-        configValidateCertificates: args.configValidateCertificates ?? true,
-        configDebug: args.configDebug ?? false,
-        capabilities: args.capabilities || { tools: [], resources: [], prompts: [] }
-      }
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' created successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          status: server.status,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleUpdateServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    let whereClause: any;
-    if (args.id) {
-      whereClause = { id: Number(args.id) };
-    } else {
-      whereClause = { name: String(args.name) };
-    }
-    
-    const updateData: any = {};
-
-    // Build update data from provided args
-    const updateableFields = [
-      'name', 'version', 'description', 'isEnabled', 'transportType', 
-      'transportCommand', 'transportArgs', 'transportEnv', 'authType',
-      'configAutoConnect', 'configConnectionTimeout', 'configMaxRetries',
-      'configRetryDelay', 'configValidateCertificates', 'configDebug', 'capabilities'
-    ];
-
-    for (const field of updateableFields) {
-      if (args[field] !== undefined) {
-        updateData[field] = args[field];
-      }
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      throw new Error('No update fields provided');
-    }
-
-    const server = await this.prisma.mCPServer.update({
-      where: whereClause,
-      data: updateData
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' updated successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          status: server.status,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleDeleteServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    
-    // Check if server exists and get its name
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    // Don't allow deletion of the internal server
-    if (server.transportCommand === 'internal') {
-      throw new Error('Cannot delete the internal MCP management server');
-    }
-
-    await this.prisma.mCPServer.delete({ where: { id: server.id } });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' deleted successfully`
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleToggleServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    let whereClause: any;
-    if (args.id) {
-      whereClause = { id: Number(args.id) };
-    } else {
-      whereClause = { name: String(args.name) };
-    }
-    
-    const enabled = args.enabled;
-
-    if (typeof enabled !== 'boolean') {
-      throw new Error('enabled field must be a boolean value');
-    }
-
-    const server = await this.prisma.mCPServer.update({
-      where: whereClause,
-      data: { isEnabled: enabled }
-    });
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        message: `MCP server '${server.name}' ${enabled ? 'enabled' : 'disabled'} successfully`,
-        server: {
-          id: server.id,
-          name: server.name,
-          isEnabled: server.isEnabled
-        }
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  private async handleConnectServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    const connectionResult = await this.connectionManager.connectToServer(server);
-    const result = {
-      success: connectionResult !== null,
-      message: connectionResult ? 'Connected successfully' : 'Connection failed'
-    };
-
-    return {
-      stdout: JSON.stringify({
-        success: result.success,
-        message: result.success ? 
-          `Successfully connected to MCP server '${server.name}'` :
-          `Failed to connect to MCP server '${server.name}': ${result.message}`,
-        server: {
-          id: server.id,
-          name: server.name,
-          connected: result.success
-        }
-      }, null, 2),
-      stderr: result.success ? '' : result.message || '',
-      success: result.success
-    };
-  }
-
-  private async handleDisconnectServer(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    await this.connectionManager.disconnectFromServer(server.id);
-    const result = {
-      success: true,
-      message: 'Disconnected successfully'
-    };
-
-    return {
-      stdout: JSON.stringify({
-        success: result.success,
-        message: result.success ? 
-          `Successfully disconnected from MCP server '${server.name}'` :
-          `Failed to disconnect from MCP server '${server.name}': ${result.message}`,
-        server: {
-          id: server.id,
-          name: server.name,
-          connected: false
-        }
-      }, null, 2),
-      stderr: result.success ? '' : result.message || '',
-      success: result.success
-    };
-  }
-
-  private async handleGetServerTools(args: Record<string, any>): Promise<CallToolResult> {
-    if (!args.id && !args.name) {
-      throw new Error('Either id or name must be provided to identify the server');
-    }
-
-    const whereClause = args.id ? { id: Number(args.id) } : { name: String(args.name) };
-    const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
-    if (!server) {
-      throw new Error('Server not found');
-    }
-
-    // Get tools from the server's capabilities or connection manager
-    const capabilities = server.capabilities as any;
-    const tools = capabilities?.tools || [];
-
-    return {
-      stdout: JSON.stringify({
-        success: true,
-        server: {
-          id: server.id,
-          name: server.name
-        },
-        tools: tools,
-        totalTools: tools.length
-      }, null, 2),
-      stderr: '',
-      success: true
-    };
-  }
-
-  /**
-   * Handle memory_remember tool call
-   */
-  private async handleMemoryRemember(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      if (!args.content) {
-        throw new Error('Missing required field: content');
-      }
-
-      const memory = await this.memoryService.remember({
-        content: args.content,
-        key: args.key,
-        metadata: args.metadata,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          memory: {
-            id: memory.id,
-            content: memory.content,
-            key: memory.key,
-            createdAt: memory.createdAt
-          },
-          message: 'Memory stored successfully'
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error storing memory: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  /**
-   * Handle memory_recall tool call
-   */
-  private async handleMemoryRecall(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      const result = await this.memoryService.recall({
-        key: args.key,
-        search: args.search,
-        limit: args.limit,
-        offset: args.offset,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          memories: result.memories,
-          total: result.total,
-          hasMore: result.hasMore,
-          message: `Retrieved ${result.memories.length} memories`
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error recalling memories: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
-    }
-  }
-
-  /**
-   * Handle memory_reset tool call
-   */
-  private async handleMemoryReset(args: Record<string, any>): Promise<CallToolResult> {
-    try {
-      const result = await this.memoryService.reset({
-        key: args.key,
-        userId: args.userId
-      });
-
-      return {
-        stdout: JSON.stringify({
-          success: true,
-          deletedCount: result.deletedCount,
-          message: result.message
-        }, null, 2),
-        stderr: '',
-        success: true
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        stdout: '',
-        stderr: `Error resetting memories: ${errorMessage}`,
-        success: false,
-        error: errorMessage
-      };
     }
   }
 

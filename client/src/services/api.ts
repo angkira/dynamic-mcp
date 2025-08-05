@@ -1,19 +1,20 @@
 /**
  * API Service Layer
- * Centralized HTTP client with configurable base URL
+ * Centralized HTTP client with authentication support
  */
 
 import { API_CONFIG, buildApiUrl } from '@/config/api'
 import { ApiError } from '@/types'
-
+import { authService, AuthError } from './auth'
 
 /**
- * Base HTTP client
+ * Authenticated HTTP client
  */
 class HttpClient {
   private baseUrl: string
   private defaultHeaders: Record<string, string>
   private timeout: number
+  private demoTokenRefreshPromise: Promise<any> | null = null
 
   constructor() {
     this.baseUrl = API_CONFIG.BASE_URL
@@ -25,63 +26,122 @@ class HttpClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const isAbsolute = endpoint.startsWith('http://') || endpoint.startsWith('https://')
-    const urlToFetch = isAbsolute ? endpoint : buildApiUrl(endpoint)
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        ...this.defaultHeaders,
-        ...options.headers,
-      },
+    const isAbsolute = endpoint.startsWith('http://') || endpoint.startsWith('https://');
+    const urlToFetch = isAbsolute ? endpoint : buildApiUrl(endpoint);
+
+    // Merge headers with authentication
+    const headers = {
+      ...this.defaultHeaders,
+      ...options.headers,
+    };
+
+    // Add authentication header if token exists
+    const token = authService.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const config: RequestInit = {
+      ...options,
+      headers,
+    };
+
     // Add timeout
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout)
-    config.signal = controller.signal
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    config.signal = controller.signal;
 
+    let response;
     try {
-      const response = await fetch(urlToFetch, config)
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-        let errorDetails: unknown = null
-
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.message || errorMessage
-          errorDetails = errorData
-        } catch {
-          // If error response is not JSON, use status text
-        }
-
-        throw new ApiError(errorMessage, response.status, errorDetails)
-      }
-
-      const contentType = response.headers.get('content-type')
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json()
-      }
-
-      return response.text() as T
+      response = await fetch(urlToFetch, config);
+      clearTimeout(timeoutId);
     } catch (error: unknown) {
-      clearTimeout(timeoutId)
-      
-      if (error instanceof ApiError) {
-        throw error
-      }
-      
+      clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ApiError('Request timeout', 'TIMEOUT')
+        throw new ApiError('Request timeout', 'TIMEOUT');
       }
-
       throw new ApiError(
         error instanceof Error ? error.message : 'Network error occurred',
         'NETWORK_ERROR',
         error
-      )
+      );
     }
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      let errorDetails: unknown = null;
+
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorMessage;
+        errorDetails = errorData;
+      } catch {
+        // If error response is not JSON, use status text
+      }
+
+      // Handle authentication errors
+      if (response.status === 401) {
+        // Demo user auto-retry logic
+        const storedUser = authService.getStoredUser();
+        if (storedUser && storedUser.id === 2) {
+          try {
+            // Prevent multiple simultaneous demo token refreshes
+            if (!this.demoTokenRefreshPromise) {
+              this.demoTokenRefreshPromise = authService.getDemoToken().finally(() => {
+                this.demoTokenRefreshPromise = null;
+              });
+            }
+            const authResponse = await this.demoTokenRefreshPromise;
+            
+            // Update the authorization header with the new token
+            const freshHeaders = {
+              ...headers,
+              'Authorization': `Bearer ${authResponse.token}`
+            };
+            const retryConfig: RequestInit = {
+              ...options,
+              headers: freshHeaders,
+            };
+            // Add timeout for retry
+            const retryController = new AbortController();
+            const retryTimeoutId = setTimeout(() => retryController.abort(), this.timeout);
+            retryConfig.signal = retryController.signal;
+
+            try {
+              const retryResponse = await fetch(urlToFetch, retryConfig);
+              clearTimeout(retryTimeoutId);
+              
+              if (!retryResponse.ok) {
+                throw new AuthError('Demo token refresh failed - still unauthorized', 401);
+              }
+              
+              const contentType = retryResponse.headers.get('content-type');
+              if (contentType && contentType.includes('application/json')) {
+                return await retryResponse.json();
+              }
+              return retryResponse.text() as T;
+            } catch (retryError: unknown) {
+              clearTimeout(retryTimeoutId);
+              throw retryError;
+            }
+          } catch (demoErr) {
+            authService.clearToken();
+            throw new AuthError('Demo token refresh failed', 401);
+          }
+        }
+        authService.clearToken();
+        throw new AuthError(errorMessage, response.status);
+      }
+
+      throw new ApiError(errorMessage, response.status, errorDetails);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+
+    return response.text() as T;
   }
 
   async get<T>(endpoint: string, params?: Record<string, string | number | boolean>): Promise<T> {
@@ -152,29 +212,70 @@ class HttpClient {
   }
 
   /**
-   * Create SSE connection for streaming
+   * Create SSE connection for streaming with authentication
    */
   createEventSource(endpoint: string, data?: Record<string, string | number | boolean>): EventSource {
     const url = buildApiUrl(endpoint)
+    const token = authService.getToken()
     
     if (data) {
-      // For POST requests with data, we'll need to handle this differently
-      // This is a simplified version - in practice, you might need to send
-      // the data via POST first and then listen to SSE
       const urlWithData = new URL(url)
       Object.entries(data).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           urlWithData.searchParams.append(key, String(value))
         }
       })
+      
+      // Add token as query parameter for SSE since EventSource doesn't support headers
+      if (token) {
+        urlWithData.searchParams.append('token', token)
+      }
+      
       return new EventSource(urlWithData.toString())
     }
     
-    return new EventSource(url)
+    // Add token as query parameter for SSE
+    const urlWithAuth = new URL(url)
+    if (token) {
+      urlWithAuth.searchParams.append('token', token)
+    }
+    
+    return new EventSource(urlWithAuth.toString())
+  }
+
+  /**
+   * Check if request requires authentication
+   */
+  requiresAuth(): boolean {
+    return authService.isAuthenticated()
+  }
+
+  /**
+   * Force token refresh and retry request
+   */
+  async retryWithRefresh<T>(requestFn: () => Promise<T>): Promise<T> {
+    try {
+      return await requestFn()
+    } catch (error) {
+      if (error instanceof AuthError && error.status === 401) {
+        // Token expired, try to refresh if user is still authenticated in storage
+        const storedUser = authService.getStoredUser()
+        if (storedUser) {
+          try {
+            // This would be a refresh token endpoint in a full implementation
+            // For now, we'll just clear the auth and let user re-login
+            authService.clearToken()
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError)
+          }
+        }
+      }
+      throw error
+    }
   }
 }
 
 // Create singleton instance
 export const httpClient = new HttpClient()
 
-export { ApiError }
+export { ApiError, AuthError }

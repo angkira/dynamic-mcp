@@ -34,11 +34,19 @@ export class WebSocketMessageHandlerService {
       userSettings = await this.fastify.prisma.settings.findUnique({
         where: { userId: settingsUserId }
       });
+      
+      // If no settings found, create default settings
       if (!userSettings) {
-        throw new Error('User settings not found');
+        console.log(`Creating default settings for user ${settingsUserId}`);
+        userSettings = await this.fastify.prisma.settings.create({
+          data: {
+            userId: settingsUserId,
+            // All other fields will use their default values from the schema
+          }
+        });
       }
     } catch (error) {
-      this.fastify.log.error('Failed to fetch user settings:', error);
+      this.fastify.log.error('Failed to fetch/create user settings:', error);
       socket.emit(ServerWebSocketEvent.Error, { error: 'Failed to fetch user settings' });
       return;
     }

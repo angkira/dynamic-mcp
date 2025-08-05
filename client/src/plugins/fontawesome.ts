@@ -35,11 +35,18 @@ import {
   // States
   faSpinner,
   faCheckCircle,
+  faTimesCircle,
   
   // MCP & Development
   faCodeBranch,
   faPlug,
   faClock,
+  
+  // Auth & Login
+  faEnvelope,
+  faLock,
+  faSignInAlt,
+  faPlay,
 } from '@fortawesome/free-solid-svg-icons'
 
 import {
@@ -63,6 +70,10 @@ library.add(
   faGear,
   faArrowRight,
   faEllipsisV,
+  // Ensure we have both solid and regular versions of icons
+  faCommentRegular,
+  faCopyRegular,
+  faTimesCircle,
   
   // Chat & Communication
   faComments,
@@ -89,6 +100,12 @@ library.add(
   faCodeBranch,
   faPlug,
   faClock,
+  
+  // Auth & Login
+  faEnvelope,
+  faLock,
+  faSignInAlt,
+  faPlay,
   
   // Regular icons
   faCommentRegular,

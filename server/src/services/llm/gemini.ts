@@ -113,6 +113,12 @@ export class GeminiService implements LlmService {
               response = response.stdout;
             }
           }
+          
+          // Ensure response is not null, undefined, or empty string
+          if (response === null || response === undefined || response === '') {
+            response = { error: 'Tool returned an empty response' };
+          }
+          
           contents.push({ 
             role: 'function', 
             parts: [{ 

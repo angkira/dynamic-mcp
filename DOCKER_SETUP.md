@@ -1,25 +1,40 @@
-# Docker Setup with Shared Volume
+# Clean Docker Setup for Monorepo
 
-This project now uses Docker volumes to mount the `shared` directory instead of copying it, allowing both client and server to access shared TypeScript code directly.
+This project uses a clean, modern Docker setup that properly handles the monorepo structure with shared dependencies and separate MCP server processes.
+
+## Key Improvements ✨
+
+- **No unnecessary copying** - Uses volume mounts for development
+- **Proper monorepo support** - Handles shared packages correctly
+- **Separate MCP servers** - Each MCP server runs as its own service/process
+- **No random users** - Removed the weird `expressjs` user nonsense
+- **Clean builds** - Simple, understandable Dockerfiles
 
 ## Development Setup
 
-For development, use `docker-compose.dev.yml`:
+Start everything with hot reloading:
 
 ```bash
+# Start all services (includes separated MCP servers)
+docker compose up --build
+
+# Or use the specific dev compose file
 docker compose -f docker-compose.dev.yml up --build
 ```
 
 This setup:
 
-- Mounts the `shared` directory as a volume at `/app/shared` in both containers
-- Uses development Dockerfiles that don't build/copy source code
-- Runs `npm run dev` in both client and server for hot reloading
-- Client runs on port 5173, server on port 3000
+- **Database**: PostgreSQL with health checks
+- **Server**: Main API server with hot reload
+- **MCP Memory**: Separate memory server process
+- **MCP API**: Separate dynamic MCP API server process
+- **Client**: Frontend with hot reload
+
+All services have proper dependency management and health checks.
 
 ## Production Setup
 
-For production, use `docker-compose.prod.yml`:
+For production deployment:
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build
@@ -27,42 +42,161 @@ docker compose -f docker-compose.prod.yml up --build
 
 This setup:
 
-- Uses multi-stage production Dockerfiles that copy `shared` during build
-- Client serves static files via nginx on port 80
-- Server runs compiled JavaScript on port 3000
+- Uses multi-stage builds for optimization
+- Separate containers for each MCP server
+- Nginx for client static file serving
+- No development dependencies
 
-## Regular Development (no Docker)
+## Local Development (No Docker)
 
-You can still run development normally:
+You can still develop locally without Docker:
 
 ```bash
-# Install dependencies in all workspaces
+# Install dependencies
 npm install
 
-# Start server
+# Start database (you'll need PostgreSQL)
+# Update your .env with local database URL
+
+# Generate Prisma client
+npx prisma generate
+
+# Start main server
 cd server && npm run dev
 
-# Start client (in another terminal)
+# Start MCP servers (separate terminals)
+./scripts/mcp-manager.sh start
+
+# Start client (separate terminal)
 cd client && npm run dev
 ```
 
-## Shared Directory
+## MCP Server Management
 
-The `shared` directory contains TypeScript types and constants used by both client and server:
+Use the provided script to manage MCP servers locally:
 
-- No need to build the shared directory separately
-- Both client and server import directly from `@shared/*` TypeScript files
-- TypeScript path aliases handle the module resolution
+```bash
+# Start all MCP servers
+./scripts/mcp-manager.sh start
 
-## Files Changed
+# Stop all MCP servers
+./scripts/mcp-manager.sh stop
 
-- `client/Dockerfile` - Now development-focused, uses volumes
-- `server/Dockerfile` - Now development-focused, uses volumes
-- `client/Dockerfile.prod` - Production build with shared copying
-- `server/Dockerfile.prod` - Production build with shared copying
-- `docker-compose.yml` - Updated with volume mounts
-- `docker-compose.dev.yml` - Updated with volume mounts
-- `docker-compose.prod.yml` - New production compose file
-- `client/tsconfig.app.json` - Updated shared path to `./shared/*`
-- `server/tsconfig.json` - Updated shared path to `./shared/*`
-- `client/vite.config.ts` - Updated shared alias to `./shared`
+# Restart all MCP servers
+./scripts/mcp-manager.sh restart
+
+# Check status
+./scripts/mcp-manager.sh status
+
+# Just build without starting
+./scripts/mcp-manager.sh build
+```
+
+## Architecture
+
+```
+dynamic-mcp/
+├── client/           # Vue.js frontend
+├── server/           # Main Fastify API server
+│   └── src/mcp-servers/  # MCP server implementations
+├── shared/           # Shared TypeScript types/constants
+├── prisma/           # Database schema
+└── scripts/          # Management scripts
+```
+
+### Volume Mounts (Development)
+
+- **Entire workspace** mounted to `/app` in containers
+- **node_modules** preserved via anonymous volumes
+- **Prisma client** generated at runtime
+- **Hot reload** works for all services
+
+### Separate Processes
+
+Each MCP server runs as its own process/container:
+
+- `mcp-memory`: Memory persistence server
+- `mcp-api`: Dynamic MCP API server
+- `server`: Main application server
+- `client`: Frontend application
+
+## Environment Variables
+
+Create a `.env` file:
+
+```env
+# Database
+DB_USER=postgres
+DB_PASSWORD=password
+DB_NAME=dynamic_mcp
+
+# API
+VUE_API_URL=http://localhost:3000
+
+# LLM (if needed)
+OPENAI_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
+LLM_PROVIDER=openai
+```
+
+## MCP Daemon Services 🚀
+
+The MCP servers now run as **HTTP daemon services** for better containerized architecture:
+
+### Service Ports:
+
+- **Memory MCP Server** (`port 3001`): Memory persistence operations
+- **Dynamic MCP API Server** (`port 3002`): MCP server management
+- **Main Server** (`port 3000`): Main application API
+- **Client** (`port 5173`): Frontend application
+
+### Memory MCP Daemon (port 3001):
+
+```bash
+# Health check
+curl http://localhost:3001/health
+
+# Store memory
+curl -X POST http://localhost:3001/tools/memory_remember \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Test memory", "key": "test"}'
+
+# Recall memory
+curl -X POST http://localhost:3001/tools/memory_recall \
+  -H "Content-Type: application/json" \
+  -d '{"key": "test"}'
+```
+
+### Dynamic MCP API Daemon (port 3002):
+
+```bash
+# Health check
+curl http://localhost:3002/health
+
+# List MCP servers
+curl http://localhost:3002/servers
+
+# List available tools
+curl http://localhost:3002/tools
+```
+
+### Testing All Daemons:
+
+```bash
+# Run comprehensive tests
+npm run mcp:test
+
+# Or test manually
+./scripts/test-mcp-daemons.sh
+```
+
+## What Was Fixed
+
+1. **Removed unnecessary file copying** - Now uses proper volume mounts
+2. **Eliminated the random `expressjs` user** - No need for custom users in development
+3. **Simplified Dockerfiles** - Clean, readable, and maintainable
+4. **Proper monorepo handling** - Shared dependencies work correctly
+5. **Converted MCP servers to HTTP daemons** - Each runs as independent HTTP service
+6. **Added health checks** - Proper service orchestration
+7. **Cleaned up builds** - No duplicate Prisma generation or shared copying
+8. **Fixed Socket.IO** - Proper URL configuration and CORS setup

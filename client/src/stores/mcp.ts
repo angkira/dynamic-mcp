@@ -24,7 +24,7 @@ export const useMcpStore = defineStore('mcp', () => {
 
   // Computed
   const connectedServers = computed(() => 
-    servers.value.filter(server => server.status === MCPServerStatus.Connected)
+    servers.value.filter(server => server.status === MCPServerStatus.CONNECTED)
   )
   
   const enabledServers = computed(() => 
@@ -101,11 +101,8 @@ export const useMcpStore = defineStore('mcp', () => {
         version: serverData.version || '1.0.0',
         description: serverData.description,
         isEnabled: serverData.isEnabled ?? true,
-        status: MCPServerStatus.Disconnected,
-        transport: serverData.transport || {
-          type: MCPTransportType.STDIO,
-          config: {}
-        },
+        status: MCPServerStatus.DISCONNECTED,
+        transport: serverData.transport || { type: MCPTransportType.STDIO, config: {} },
         authentication: serverData.authentication || {
           type: MCPAuthType.NONE,
           config: {}
@@ -169,7 +166,7 @@ export const useMcpStore = defineStore('mcp', () => {
         server.status = status
         if (lastConnected) {
           server.lastConnected = lastConnected
-        } else if (status === MCPServerStatus.Connected) {
+        } else if (status === MCPServerStatus.CONNECTED) {
           server.lastConnected = new Date()
         }
       }
@@ -217,35 +214,35 @@ export const useMcpStore = defineStore('mcp', () => {
     if (!server || !server.isEnabled) return false
     
     // Set status to connecting
-    await updateServerStatus(id, MCPServerStatus.Connecting)
+    await updateServerStatus(id, MCPServerStatus.CONNECTING)
     
     try {
       const result = await mcpApi.testConnection(id)
       
       if (result.success) {
-        await updateServerStatus(id, MCPServerStatus.Connected, new Date())
+        await updateServerStatus(id, MCPServerStatus.CONNECTED, new Date())
         return true
       } else {
-        await updateServerStatus(id, MCPServerStatus.Error)
+        await updateServerStatus(id, MCPServerStatus.ERROR)
         error.value = result.message
         return false
       }
     } catch (err) {
-      await updateServerStatus(id, MCPServerStatus.Error)
+      await updateServerStatus(id, MCPServerStatus.ERROR)
       error.value = err instanceof Error ? err.message : 'Connection failed'
       return false
     }
   }
 
   const disconnectServer = async (id: string): Promise<boolean> => {
-    return await updateServerStatus(id, MCPServerStatus.Disconnected)
+    return await updateServerStatus(id, MCPServerStatus.DISCONNECTED)
   }
 
   const testConnection = async (id: string): Promise<{ success: boolean; message: string }> => {
     try {
       return await mcpApi.testConnection(id)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection test failed'
+      const message = err instanceof Error ? err.message : 'Failed to test connection'
       return { success: false, message }
     }
   }

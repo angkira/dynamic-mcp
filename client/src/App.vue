@@ -1,5 +1,20 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import {
+  NMessageProvider,
+  NLoadingBarProvider,
+  NDialogProvider,
+  NNotificationProvider,
+  NConfigProvider,
+  darkTheme,
+  type GlobalTheme,
+} from 'naive-ui'
+import { useUserStore } from '@/stores/user'
+
+// Theme configuration
+const theme: GlobalTheme | null = null // Use light theme by default
+
+const userStore = useUserStore()
 
 // Initialize dark mode support
 onMounted(() => {
@@ -12,9 +27,17 @@ onMounted(() => {
 
 <template>
   <div id="app">
-    <NMessageProvider>
-      <RouterView />
-    </NMessageProvider>
+    <NConfigProvider :theme="theme">
+      <NLoadingBarProvider>
+        <NDialogProvider>
+          <NNotificationProvider>
+            <NMessageProvider>
+              <RouterView />
+            </NMessageProvider>
+          </NNotificationProvider>
+        </NDialogProvider>
+      </NLoadingBarProvider>
+    </NConfigProvider>
   </div>
 </template>
 

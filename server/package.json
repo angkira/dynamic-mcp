@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:mcp-servers": "tsc src/mcp-servers/memory-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true --skipLibCheck true && tsc src/mcp-servers/dynamic-mcp-api-server.ts --outDir dist/mcp-servers --module commonjs --target es2020 --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true --skipLibCheck true",
+    "build:all": "npm run build && npm run build:mcp-servers",
     "start": "node dist/app.js",
     "dev": "nodemon",
     "dev:watch": "concurrently \"tsc -w\" \"nodemon --delay 1000ms dist/app.js\"",
@@ -36,6 +38,7 @@
     "fastify-plugin": "^4.5.1",
     "fastify-socket.io": "^5.1.0",
     "json-schema-to-ts": "^3.1.1",
+    "jsonwebtoken": "^9.0.2",
     "module-alias": "^2.2.3",
     "openai": "^5.11.0",
     "socket.io": "^4.8.1",
@@ -45,6 +48,7 @@
   "devDependencies": {
     "@dynamic-mcp/typescript-config": "file:../packages/typescript-config",
     "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.14.13",
     "@types/uuid": "^10.0.0",
     "concurrently": "^8.2.2",
@@ -54,7 +58,7 @@
     "typescript": "^5.5.4"
   },
   "prisma": {
-    "schema": "./prisma/schema.prisma"
+    "schema": "../prisma/schema.prisma"
   },
   "_moduleAliases": {
     "@shared": "../shared/dist"
