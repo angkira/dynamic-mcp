@@ -88,3 +88,27 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   
   await fastify.register(memoryRoute, { prefix: '/api/memory' });
 }
+
+// Start the server if this file is run directly
+if (require.main === module) {
+  const start = async () => {
+    try {
+      const fastify = (await import('fastify')).default;
+      const app = fastify(options);
+      
+      // Apply the app configuration
+      await exports.default(app, {});
+      
+      const port = parseInt(process.env.PORT || '3000');
+      const host = process.env.HOST || '0.0.0.0';
+      
+      await app.listen({ port, host });
+      console.log(`🚀 Main server listening on http://${host}:${port}`);
+    } catch (err) {
+      console.error('Error starting server:', err);
+      process.exit(1);
+    }
+  };
+  
+  start();
+}

@@ -30,7 +30,14 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
   // Register fastify-socket.io plugin
   await fastify.register(require('fastify-socket.io'), {
     cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:5173",
+      origin: [
+        process.env.CLIENT_URL || "http://localhost:5173",  // Development
+        "http://localhost",      // Production client (nginx)
+        "http://localhost:80",   // Production client (nginx) with port
+        "http://localhost:5173", // Development fallback
+        "http://127.0.0.1",      // Alternative localhost
+        "http://127.0.0.1:80"    // Alternative with port
+      ],
       methods: ["GET", "POST"],
       credentials: true
     }

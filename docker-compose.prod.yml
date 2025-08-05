@@ -71,7 +71,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["dumb-init", "--", "node", "server/dist/mcp-servers/memory-server.js"]
+    command: ["sh", "-c", "cd /app && node dist/mcp-servers/memory-server.js"]
     restart: unless-stopped
     deploy:
       resources:
@@ -93,7 +93,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["dumb-init", "--", "node", "server/dist/mcp-servers/dynamic-mcp-api-server.js"]
+    command: ["sh", "-c", "cd /app && node dist/mcp-servers/dynamic-mcp-api-server.js"]
     restart: unless-stopped
     deploy:
       resources:
@@ -111,6 +111,7 @@ services:
       target: runner
       args:
         - VITE_API_URL=${VUE_API_URL}
+        - VITE_SOCKET_URL=${VITE_SOCKET_URL}
     env_file:
       - .env
     depends_on:
