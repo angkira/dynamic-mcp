@@ -23,13 +23,13 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 echo "🧹 Cleaning up previous containers..."
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 
 echo "🏗️  Building containers..."
-docker-compose -f docker-compose.dev.yml build
+docker compose -f docker-compose.dev.yml build
 
 echo "🚀 Starting Dynamic MCP system..."
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 
 echo "⏳ Waiting for services to start..."
 sleep 10
@@ -44,10 +44,10 @@ echo "   • Memory Daemon Health: http://localhost:3001/health"
 echo "   • API Daemon Health: http://localhost:3002/health"
 echo ""
 echo "📊 Monitor logs with:"
-echo "   docker-compose -f docker-compose.dev.yml logs -f"
+echo "   docker compose -f docker-compose.dev.yml logs -f"
 echo ""
 echo "🛑 Stop all services with:"
-echo "   docker-compose -f docker-compose.dev.yml down"
+echo "   docker compose -f docker-compose.dev.yml down"
 echo ""
 echo "🎯 Try registering an MCP server by chatting with the AI!"
 echo "   Example: 'Show me all my MCP servers' or 'Add a new weather MCP server'"
