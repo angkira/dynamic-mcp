@@ -41,6 +41,15 @@ FROM nginx:alpine AS runner
 RUN addgroup -g 1001 -S nginx-user
 RUN adduser -S nginx-user -u 1001
 
+# Create necessary directories with proper permissions
+RUN mkdir -p /var/cache/nginx/client_temp \
+    /var/cache/nginx/proxy_temp \
+    /var/cache/nginx/fastcgi_temp \
+    /var/cache/nginx/uwsgi_temp \
+    /var/cache/nginx/scgi_temp \
+    /var/run/nginx && \
+    chown -R nginx-user:nginx-user /var/cache/nginx /var/run/nginx /etc/nginx/conf.d
+
 # Copy built app
 COPY --from=builder /app/client/dist /usr/share/nginx/html
 
@@ -73,8 +82,11 @@ server {
 }
 EOF
 
-# Set proper permissions
+# Set proper permissions for web content
 RUN chown -R nginx-user:nginx-user /usr/share/nginx/html
+
+# Configure nginx to run without root
+RUN sed -i '/user nginx;/d' /etc/nginx/nginx.conf
 
 EXPOSE 80
 USER nginx-user

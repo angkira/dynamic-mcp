@@ -54,9 +54,9 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/package*.json ./
 
-# Copy built applications
+# Copy built applications and shared library
 COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
 
