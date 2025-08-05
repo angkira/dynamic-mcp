@@ -92,6 +92,106 @@ docker-compose -f docker-compose.dev.yml logs -f
 - **Memory Daemon**: http://localhost:3001/health
 - **API Daemon**: http://localhost:3002/health
 
+## 🔐 Authentication System
+
+Dynamic MCP uses **JWT (JSON Web Token) authentication** to secure all API endpoints and MCP server communications. The system provides both demo access for quick testing and full authentication capabilities.
+
+### 🎭 Demo User Access
+
+For immediate testing and demonstration purposes, the system provides **one-click demo authentication**:
+
+```typescript
+// Demo login - no credentials required
+const response = await authService.getDemoToken();
+// Returns: { token: "jwt-token", user: { id: "demo", email: "demo@example.com", ... } }
+```
+
+**Demo User Features:**
+
+- **Auto-creation**: Demo user is automatically created on first request
+- **Persistent**: Demo user and data persist across sessions
+- **Full Access**: Complete access to all MCP functionality
+- **JWT Integration**: Uses the same JWT system as regular users
+
+### 🛡️ JWT Token System
+
+**Token Management:**
+
+- **Storage**: Tokens stored in browser `sessionStorage` for security
+- **Expiration**: Automatic token validation with expiry checking
+- **Auto-refresh**: Seamless token verification on API requests
+- **Logout Cleanup**: Complete token removal on logout
+
+**Security Features:**
+
+- **Bearer Authentication**: All API requests use `Authorization: Bearer <token>`
+- **Middleware Protection**: Server-side JWT verification on protected routes
+- **MCP Integration**: JWT authentication extends to all MCP server communications
+- **CORS Security**: Proper CORS configuration for cross-origin requests
+
+### 🔑 Authentication Flow
+
+```typescript
+// 1. Demo Authentication (Quick Start)
+const demoAuth = await authService.getDemoToken();
+
+// 2. Regular Login (Full Implementation)
+const loginAuth = await authService.login({
+  email: 'user@example.com',
+  password: 'password',
+});
+
+// 3. Token Verification
+const user = await authService.verifyToken();
+
+// 4. Authenticated API Requests
+const data = await authService.authenticatedRequest('/api/mcp-servers');
+```
+
+### 🏗️ MCP Server Authentication
+
+All MCP servers in the system are **JWT-aware**:
+
+**Database Configuration:**
+
+```sql
+-- MCPServer model with authentication type
+CREATE TABLE "MCPServer" (
+  "authType" "MCPAuthType" DEFAULT 'BEARER'  -- JWT Bearer token auth
+  -- ... other fields
+);
+```
+
+**Server Integration:**
+
+- **Dynamic MCP API Server**: JWT-protected endpoints with user context
+- **Memory Daemon**: JWT verification for memory operations
+- **External Servers**: Configurable authentication per server
+- **User Context**: JWT payload provides user ID for data isolation
+
+### 🔧 Implementation Details
+
+**Client-Side (`/client/src/services/auth.ts`):**
+
+- `AuthService` class with comprehensive token management
+- Automatic URL construction with environment variable support
+- Error handling with custom `AuthError` class
+- Session storage integration for token persistence
+
+**Server-Side (`/server/src/services/auth/jwtService.ts`):**
+
+- `JWTService` with token generation and verification
+- User management with automatic demo user creation
+- JWT middleware for route protection
+- Integration with Prisma for user persistence
+
+**MCP Integration (`/server/src/mcp-servers/`):**
+
+- JWT-aware MCP server implementations
+- User context extraction from JWT tokens
+- Protected MCP tool execution
+- Database queries scoped to authenticated user
+
 ## 🎯 How to Register MCP Servers via Chat
 
 This is the **core innovation** of Dynamic MCP - you can register and manage MCP servers simply by talking to the AI:
@@ -132,15 +232,21 @@ AI: "I've disabled the weather server and testing the memory daemon... ✅ Memor
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Vue.js Client │────│  Fastify Server  │────│   PostgreSQL    │
 │   (Port 5173)   │    │   (Port 3000)    │    │   Database      │
+│                 │    │                  │    │                 │
+│ JWT Auth Store  │    │ JWT Middleware   │    │ Users & Tokens  │
+│ AuthService     │    │ Auth Routes      │    │ MCP Servers     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                 │
-                                │ WebSocket + HTTP
+                        JWT Protected WebSocket + HTTP
                                 │
                     ┌───────────┼───────────┐
                     │                       │
             ┌───────▼────────┐    ┌────────▼────────┐
             │ Memory Daemon  │    │  API Daemon     │
             │  (Port 3001)   │    │  (Port 3002)    │
+            │                │    │                 │
+            │ JWT Verified   │    │ JWT Verified    │
+            │ User Context   │    │ User Context    │
             └────────────────┘    └─────────────────┘
 ```
 
@@ -148,23 +254,32 @@ AI: "I've disabled the weather server and testing the memory daemon... ✅ Memor
 
 1. **Client (Vue.js + TypeScript)**
    - Chat interface for MCP management
+   - **JWT Authentication**: Token-based auth with session storage
+   - **Auth Service**: Comprehensive authentication management
+   - **Demo Login**: One-click demo access for testing
    - Real-time server status monitoring
    - WebSocket communication for live updates
 
 2. **Server (Fastify + TypeScript)**
    - RESTful API for application logic
+   - **JWT Service**: Token generation, verification, and user management
+   - **Auth Middleware**: Route protection with Bearer token validation
+   - **Demo User System**: Automatic demo user creation and management
    - WebSocket server for real-time communication
    - MCP connection management and health checking
    - Database integration with Prisma ORM
 
 3. **Database (PostgreSQL)**
-   - MCP server configurations and metadata
+   - **User Management**: JWT-authenticated user accounts
+   - **Token Persistence**: Session and refresh token storage
+   - MCP server configurations and metadata with user isolation
    - User settings and chat history
    - Memory storage for persistent AI memory
 
 4. **MCP Daemon Services**
-   - **Memory Daemon**: HTTP-based memory management
-   - **API Daemon**: HTTP-based MCP server administration
+   - **Memory Daemon**: HTTP-based memory management with JWT protection
+   - **API Daemon**: HTTP-based MCP server administration with user context
+   - **JWT Integration**: All daemons verify JWT tokens for user isolation
    - Health endpoints for monitoring
    - Containerized for scalability
 
@@ -176,17 +291,35 @@ AI: "I've disabled the weather server and testing the memory daemon... ✅ Memor
 dynamic-mcp/
 ├── client/                 # Vue.js frontend
 │   ├── src/
-│   │   ├── stores/mcp.ts  # MCP management store
-│   │   └── services/      # API and WebSocket services
+│   │   ├── services/
+│   │   │   └── auth.ts    # JWT authentication service
+│   │   ├── stores/
+│   │   │   ├── mcp.ts     # MCP management store
+│   │   │   └── user.ts    # User authentication store
+│   │   ├── components/
+│   │   │   └── auth/      # Authentication UI components
+│   │   └── router/        # Route guards and navigation
 │   └── package.json
 ├── server/                 # Fastify backend
 │   ├── src/
-│   │   ├── services/mcp/  # MCP connection management
-│   │   ├── mcp-servers/   # Built-in MCP servers
-│   │   └── plugins/       # WebSocket and other plugins
+│   │   ├── services/
+│   │   │   └── auth/
+│   │   │       └── jwtService.ts  # JWT token management
+│   │   ├── routes/
+│   │   │   └── api/
+│   │   │       └── auth.ts        # Authentication endpoints
+│   │   ├── middleware/
+│   │   │   └── auth.ts            # JWT middleware
+│   │   ├── services/mcp/          # MCP connection management
+│   │   ├── mcp-servers/           # Built-in MCP servers (JWT-enabled)
+│   │   └── plugins/               # WebSocket and other plugins
 │   └── package.json
 ├── shared/                 # Shared TypeScript types
+│   └── types/
+│       └── auth.ts         # Authentication type definitions
 ├── prisma/                 # Database schema and migrations
+│   ├── schema.prisma       # User and MCP server models
+│   └── migrations/         # Database migration history
 └── docker/                 # Database initialization
 ```
 
@@ -216,17 +349,20 @@ npm run build:server
 | Variable         | Description                             | Example                               |
 | ---------------- | --------------------------------------- | ------------------------------------- |
 | `DATABASE_URL`   | PostgreSQL connection string            | `postgresql://user:pass@host:port/db` |
+| `JWT_SECRET`     | JWT signing secret (auto-generated)     | `your-256-bit-secret`                 |
 | `OPENAI_API_KEY` | OpenAI API key (if using OpenAI)        | `sk-proj-...`                         |
 | `GEMINI_API_KEY` | Google Gemini API key (if using Gemini) | `AIzaSy...`                           |
 
 ### Optional Configuration
 
-| Variable          | Description                        | Default            |
-| ----------------- | ---------------------------------- | ------------------ |
-| `DEFAULT_MODEL`   | AI model to use                    | `gemini-2.5-flash` |
-| `LLM_PROVIDER`    | AI provider (`openai` or `google`) | `google`           |
-| `MCP_MEMORY_PORT` | Memory daemon port                 | `3001`             |
-| `MCP_API_PORT`    | API daemon port                    | `3002`             |
+| Variable          | Description                        | Default                 |
+| ----------------- | ---------------------------------- | ----------------------- |
+| `JWT_EXPIRES_IN`  | JWT token expiration time          | `24h`                   |
+| `DEFAULT_MODEL`   | AI model to use                    | `gemini-2.5-flash`      |
+| `LLM_PROVIDER`    | AI provider (`openai` or `google`) | `google`                |
+| `MCP_MEMORY_PORT` | Memory daemon port                 | `3001`                  |
+| `MCP_API_PORT`    | API daemon port                    | `3002`                  |
+| `VITE_API_URL`    | Client API base URL                | `http://localhost:3000` |
 
 ## 🚀 Production Deployment
 
@@ -307,22 +443,32 @@ SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
 
 ### Common Issues
 
+**Authentication failures:**
+
+- **Demo login not working**: Check client logs for URL construction issues
+- **Token expired errors**: Tokens expire after 24h, use demo login to get fresh token
+- **CORS errors on auth**: Verify `VITE_API_URL` matches server address in client environment
+- **JWT secret missing**: Server auto-generates JWT_SECRET if not provided
+
 **MCP servers showing as disconnected:**
 
 - Check that daemon containers are running: `docker-compose ps`
 - Verify health endpoints are responding
 - Check container logs for connection errors
+- Ensure JWT tokens are valid for MCP daemon authentication
 
 **Database connection issues:**
 
 - Ensure PostgreSQL container is running
 - Verify DATABASE_URL in .env file
 - Check database initialization logs
+- Verify user table exists for JWT authentication
 
 **WebSocket connection failures:**
 
 - Verify VITE_SOCKET_URL matches server address
 - Check for CORS configuration issues
 - Ensure server WebSocket plugin is loaded
+- Confirm JWT token is valid for WebSocket connections
 
 For more help, check the logs or open an issue in the repository.

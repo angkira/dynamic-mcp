@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { authService, type LoginCredentials, AuthError } from '@/services/auth'
 
 export interface User {
   id: number
@@ -38,57 +39,159 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
-    user.value = null
-    isAuthenticated.value = false
-    error.value = null
-  }
-
-  // For demo purposes, let's create a mock user
-  // In a real app, this would involve actual authentication
-  function initMockUser() {
-    const mockUser: User = {
-      id: 1,
-      email: 'demo@example.com',
-      name: 'Demo User',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+    try {
+      authService.logout()
+      user.value = null
+      isAuthenticated.value = false
+      error.value = null
+    } catch (err) {
+      console.error('Logout error:', err)
+      // Force clear local state even if logout service fails
+      user.value = null
+      isAuthenticated.value = false
+      error.value = null
     }
-    
-    setUser(mockUser)
   }
 
-  async function fetchUser() {
+  /**
+   * Initialize user from stored session data
+   */
+  function initializeFromStorage() {
+    try {
+      if (authService.isAuthenticated()) {
+        const storedUser = authService.getStoredUser()
+        if (storedUser) {
+          setUser(storedUser)
+          return true
+        }
+      }
+      return false
+    } catch (err) {
+      console.error('Failed to initialize from storage:', err)
+      return false
+    }
+  }
+
+  /**
+   * Login with credentials
+   */
+  async function login(credentials: LoginCredentials): Promise<void> {
     isLoading.value = true
     error.value = null
     
     try {
-      // In a real app, this would fetch the current user from an API
-      // For now, we'll use the mock user
-      initMockUser()
+      const authResponse = await authService.login(credentials)
+      setUser(authResponse.user)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch user'
-      console.error('Failed to fetch user:', err)
+      if (err instanceof AuthError) {
+        error.value = err.message
+      } else {
+        error.value = 'Login failed. Please try again.'
+        console.error('Unexpected login error:', err)
+      }
+      throw err
     } finally {
       isLoading.value = false
     }
   }
 
-  async function updateProfile(updates: Partial<Pick<User, 'name' | 'email'>>) {
-    if (!user.value) return
+  /**
+   * Login with demo credentials
+   */
+  async function loginDemo(): Promise<void> {
+    isLoading.value = true
+    error.value = null
+    
+    try {
+      const authResponse = await authService.getDemoToken()
+      setUser(authResponse.user)
+      console.log('Demo login successful, token updated:', !!authResponse.token)
+    } catch (err) {
+      if (err instanceof AuthError) {
+        error.value = err.message
+      } else {
+        error.value = 'Demo login failed. Please try again.'
+        console.error('Unexpected demo login error:', err)
+      }
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Verify and refresh user data from server
+   */
+  async function verifyAndRefreshUser(): Promise<void> {
+    if (!authService.isAuthenticated()) {
+      logout()
+      return
+    }
+
+    isLoading.value = true
+    error.value = null
+    
+    try {
+      const userData = await authService.verifyToken()
+      setUser(userData)
+    } catch (err) {
+      if (err instanceof AuthError) {
+        if (err.status === 401) {
+          // Token is invalid, logout user
+          logout()
+        } else {
+          error.value = err.message
+        }
+      } else {
+        error.value = 'Failed to verify authentication. Please try again.'
+        console.error('Unexpected verification error:', err)
+      }
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Update user profile
+   */
+  async function updateProfile(updates: Partial<Pick<User, 'name' | 'email'>>): Promise<void> {
+    if (!user.value) {
+      throw new Error('No user is currently logged in')
+    }
     
     isLoading.value = true
     error.value = null
     
     try {
-      // In a real app, this would make an API call
-      const updatedUser = { ...user.value, ...updates, updatedAt: new Date().toISOString() }
+      // Make authenticated request to update profile
+      const updatedUser = await authService.authenticatedRequest<User>('/api/user/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      })
+      
       setUser(updatedUser)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to update profile'
-      console.error('Failed to update profile:', err)
+      if (err instanceof AuthError) {
+        error.value = err.message
+        if (err.status === 401) {
+          logout()
+        }
+      } else {
+        error.value = 'Failed to update profile. Please try again.'
+        console.error('Unexpected profile update error:', err)
+      }
+      throw err
     } finally {
       isLoading.value = false
     }
+  }
+
+  /**
+   * Check if user should be redirected to login
+   */
+  function requiresAuthentication(): boolean {
+    return !isAuthenticated.value && !authService.isAuthenticated()
   }
 
   return {
@@ -106,8 +209,11 @@ export const useUserStore = defineStore('user', () => {
     // Actions
     setUser,
     logout,
-    initMockUser,
-    fetchUser,
-    updateProfile
+    login,
+    loginDemo,
+    initializeFromStorage,
+    verifyAndRefreshUser,
+    updateProfile,
+    requiresAuthentication
   }
 })

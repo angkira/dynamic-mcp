@@ -40,35 +40,32 @@ export const useChatsStore = defineStore('chats', () => {
     isFetching.value = true;
     if (!loadMore) {
       isLoading.value = true;
+      page.value = 1;
+      chats.value = [];
+      hasMore.value = true;
     }
-    error.value = null
+    error.value = null;
 
-    if (!loadMore) {
-      page.value = 1
-      chats.value = []
-      hasMore.value = true
-    }
-
+    const take = customTake ?? limit;
     try {
-      const take = customTake ?? limit
-      const response = await ChatAPIService.chats.getChats(userId, page.value, take)
-      if (response.chats && response.chats.length > 0) {
+      const response = await ChatAPIService.chats.getChats(userId, page.value, take);
+      if (response?.chats && response.chats.length > 0) {
         if (loadMore) {
-          chats.value.push(...response.chats)
+          chats.value.push(...response.chats);
         } else {
-          chats.value = response.chats
+          chats.value = response.chats;
         }
-        page.value++
-        hasMore.value = chats.value.length < response.total
+        page.value++;
+        hasMore.value = chats.value.length < response.total;
       } else {
-        hasMore.value = false
+        hasMore.value = false;
       }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Unknown error'
-      console.error('Failed to fetch chats:', err)
+    } catch (err: any) {
+      error.value = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Failed to fetch chats:', err);
     } finally {
-      isFetching.value = false
-      isLoading.value = false
+      isFetching.value = false;
+      isLoading.value = false;
     }
   }
 

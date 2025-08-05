@@ -114,14 +114,14 @@ export class McpConnectionManager {
   /**
    * Initialize the connection manager and auto-connect to enabled servers
    */
-  async initialize() {
+  async initialize(userId: number = 1) {
     console.log('🔌 Initializing MCP Connection Manager...')
     
-    // Get all enabled servers
+    // Get all enabled servers for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
       where: { 
         isEnabled: true,
-        userId: 1 // TODO: Support multiple users
+        userId: userId
       }
     })
 
@@ -292,15 +292,15 @@ export class McpConnectionManager {
   /**
    * Get all available tools from connected MCP servers
    */
-  async getAllAvailableTools(): Promise<MCPToolForLLM[]> {
+  async getAllAvailableTools(userId: number = 1): Promise<MCPToolForLLM[]> {
     const allTools: MCPToolForLLM[] = []
     
-    // Get enabled AND connected servers from database
+    // Get enabled AND connected servers from database for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
       where: { 
         isEnabled: true,
         status: 'CONNECTED',  // Only include connected servers
-        userId: 1 // TODO: Support multiple users
+        userId: userId
       }
     })
     
@@ -436,57 +436,203 @@ export class McpConnectionManager {
    * Call a tool on a specific MCP server
    */
   async callTool(serverId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    // Helper for error result
+    function errorResult(params: {
+      error: string;
+      toolName: string;
+      arguments: unknown;
+      stdout?: string;
+      stderr?: string;
+      daemonResponse?: unknown;
+      stack?: string;
+    }): CallToolResult {
+      return {
+        success: false,
+        error: params.error,
+        toolName: params.toolName,
+        arguments: params.arguments,
+        stdout: params.stdout ?? '',
+        stderr: params.stderr ?? params.error,
+        daemonResponse: params.daemonResponse,
+        stack: params.stack
+      };
+    }
+
     // First check if this is an HTTP daemon server
     const server = await this.prisma.mCPServer.findUnique({
       where: { id: serverId }
-    })
+    });
 
     if (!server) {
-      throw new Error(`Server ${serverId} not found`)
+      throw new Error(`Server ${serverId} not found`);
     }
 
     // Handle HTTP daemon servers
     if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+      const toolUrl = `${server.transportBaseUrl}/call-tool`;
+      const payload = {
+        name: toolName,
+        arguments: (arguments_ as Record<string, unknown>) || {}
+      };
       try {
-        const toolUrl = `${server.transportBaseUrl}/call-tool`
+        if (this.globalSettings?.mcpEnableDebugLogging) {
+          console.log(`[MCP] HTTP Tool Call Request`, { serverId, toolName, payload });
+        }
+        const headers: Record<string, string> = { 
+          'Content-Type': 'application/json' 
+        };
+        
+        // Add JWT token if available
+        if (server.authToken) {
+          headers['Authorization'] = `Bearer ${server.authToken}`;
+        }
+        
         const response = await fetch(toolUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(30000), // 30 second timeout
-          body: JSON.stringify({
-            name: toolName,
-            arguments: (arguments_ as Record<string, unknown>) || {}
-          })
-        })
+          headers,
+          signal: AbortSignal.timeout(30000),
+          body: JSON.stringify(payload)
+        });
 
-        if (!response.ok) {
-          throw new Error(`HTTP daemon tool call failed: ${response.status} ${response.statusText}`)
+        let result: unknown;
+        try {
+          result = await response.json();
+        } catch (jsonErr) {
+          const rawText = await response.text();
+          console.error(`[MCP] HTTP Tool Call Response not JSON`, { serverId, toolName, rawText });
+          return errorResult({
+            error: `Daemon returned non-JSON response: ${rawText}`,
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: rawText
+          });
         }
 
-        const result = await response.json()
-        return result as CallToolResult
+        if (this.globalSettings?.mcpEnableDebugLogging) {
+          console.log(`[MCP] HTTP Tool Call Response`, { serverId, toolName, result });
+        }
+
+        // Type guard for daemon error
+        if (!response.ok || (typeof result === 'object' && result !== null && 'error' in result)) {
+          const errorMsg = typeof result === 'object' && result !== null && 'error' in result ? (result as { error: string }).error : `${response.status} ${response.statusText}`;
+          console.error(`[MCP] Tool call failed`, { toolName, errorMsg, daemonResponse: result });
+          return errorResult({
+            error: errorMsg,
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: errorMsg,
+            daemonResponse: result
+          });
+        }
+
+        // Validate result structure
+        if (!result || typeof result !== 'object') {
+          return errorResult({
+            error: 'Daemon returned invalid response',
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: 'Daemon returned invalid response',
+            daemonResponse: result
+          });
+        }
+
+        // Strictly require a valid CallToolResult from daemon
+        if (!result || typeof result !== 'object' || !('success' in result) || typeof (result as any).success !== 'boolean') {
+          return errorResult({
+            error: 'Daemon returned malformed CallToolResult',
+            toolName,
+            arguments: payload.arguments,
+            stdout: '',
+            stderr: 'Daemon returned malformed CallToolResult',
+            daemonResponse: result
+          });
+        }
+
+        // Only return if success is boolean and all required fields exist
+        return result as unknown as CallToolResult;
       } catch (error) {
-        console.error(`Error calling tool ${toolName} on HTTP daemon server ${serverId}:`, error)
-        throw error
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[MCP] Exception in tool call`, { toolName, errorMsg, stack: error instanceof Error ? error.stack : undefined });
+        return errorResult({
+          error: errorMsg,
+          toolName,
+          arguments: payload.arguments,
+          stdout: '',
+          stderr: errorMsg,
+          stack: error instanceof Error ? error.stack : undefined
+        });
       }
     }
 
     // Handle internal/STDIO servers with MCP client connections
-    const connection = this.connections.get(serverId)
+    const connection = this.connections.get(serverId);
     if (!connection) {
-      throw new Error(`No connection to server ${serverId}`)
+      return errorResult({
+        error: `No connection to server ${serverId}`,
+        toolName,
+        arguments: arguments_,
+        stdout: '',
+        stderr: `No connection to server ${serverId}`
+      });
     }
 
     try {
       const result = await connection.client.callTool({
         name: toolName,
         arguments: arguments_ as Record<string, unknown>
-      })
-      
-      return result as CallToolResult
+      });
+      // Robust type guard for CallToolResult
+      const requiredFields = [
+        ['success', 'boolean'],
+        ['toolName', 'string'],
+        ['arguments', 'object'],
+        ['stdout', 'string'],
+        ['stderr', 'string']
+      ];
+      let malformedReason = '';
+      for (const [field, type] of requiredFields) {
+        if (!(field in result)) {
+          malformedReason = `Missing field: ${field}`;
+          break;
+        }
+        if (type === 'object') {
+          if (typeof (result as any)[field] !== 'object' || (result as any)[field] === null) {
+            malformedReason = `Field ${field} is not a valid object`;
+            break;
+          }
+        } else {
+          if (typeof (result as any)[field] !== type) {
+            malformedReason = `Field ${field} is not of type ${type}`;
+            break;
+          }
+        }
+      }
+      if (malformedReason) {
+        return errorResult({
+          error: `Internal tool call returned malformed CallToolResult: ${malformedReason}`,
+          toolName,
+          arguments: arguments_,
+          stdout: '',
+          stderr: `Internal tool call returned malformed CallToolResult: ${malformedReason}`,
+          daemonResponse: result
+        });
+      }
+      // All required fields exist and are valid
+      return result as unknown as CallToolResult;
     } catch (error) {
-      console.error(`Error calling tool ${toolName} on server ${serverId}:`, error)
-      throw error
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[MCP] Exception in STDIO/internal tool call`, { toolName, errorMsg, stack: error instanceof Error ? error.stack : undefined });
+      return errorResult({
+        error: errorMsg,
+        toolName,
+        arguments: arguments_,
+        stdout: '',
+        stderr: errorMsg,
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 

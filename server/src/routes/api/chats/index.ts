@@ -4,11 +4,9 @@ import type { FromSchema } from 'json-schema-to-ts';
 const getChatsQuerySchema = {
   type: 'object',
   properties: {
-    userId: { type: 'number' },
     page: { type: 'number', minimum: 1 },
     limit: { type: 'number', minimum: 1 },
   },
-  required: ['userId'],
 } as const;
 
 const deleteChatParamsSchema = {
@@ -27,9 +25,14 @@ export default async function (fastify: FastifyInstance) {
       },
     },
     async (
-      request: FastifyRequest<{ Querystring: FromSchema<typeof getChatsQuerySchema> }>
+      request: FastifyRequest<{ Querystring: FromSchema<typeof getChatsQuerySchema> }>,
+      reply
     ) => {
-      const { userId, page = 1, limit = 20 } = request.query;
+      if (!request.user) {
+        return reply.code(401).send({ error: 'Unauthorized', message: 'Missing or invalid JWT token' });
+      }
+      const { page = 1, limit = 20 } = request.query;
+      const userId = request.user.id; // Get userId from JWT
       const skip = (page - 1) * limit;
 
       const [total, chats] = await Promise.all([

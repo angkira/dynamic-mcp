@@ -40,6 +40,12 @@ import {
   faCodeBranch,
   faPlug,
   faClock,
+  
+  // Auth & Login
+  faEnvelope,
+  faLock,
+  faSignInAlt,
+  faPlay,
 } from '@fortawesome/free-solid-svg-icons'
 
 import {
@@ -89,6 +95,12 @@ library.add(
   faCodeBranch,
   faPlug,
   faClock,
+  
+  // Auth & Login
+  faEnvelope,
+  faLock,
+  faSignInAlt,
+  faPlay,
   
   // Regular icons
   faCommentRegular,

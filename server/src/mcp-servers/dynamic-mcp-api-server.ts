@@ -10,11 +10,17 @@ import {
 import { PrismaClient } from '@prisma/client';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import * as jwt from 'jsonwebtoken';
+
+interface JWTPayload {
+  userId: number;
+  email: string;
+  name?: string;
+}
 
 interface MCPServerArgs {
   id?: number;
   name?: string;
-  userId?: number;
 }
 
 interface CreateServerArgs {
@@ -28,7 +34,6 @@ interface CreateServerArgs {
   authType?: string;
   authApiKey?: string;
   isEnabled?: boolean;
-  userId?: number;
 }
 
 interface UpdateServerArgs extends MCPServerArgs {
@@ -46,8 +51,10 @@ interface ToggleServerArgs extends MCPServerArgs {
 class DynamicMCPAPIServer {
   private server: Server;
   private prisma: PrismaClient;
+  private jwtSecret: string;
 
   constructor() {
+    this.jwtSecret = process.env.JWT_SECRET || 'demo-secret-key-for-mvp';
     this.server = new Server(
       {
         name: "dynamic-mcp-api",
@@ -62,6 +69,24 @@ class DynamicMCPAPIServer {
 
     this.prisma = new PrismaClient();
     this.setupToolHandlers();
+  }
+
+  /**
+   * Extract and verify JWT token from Authorization header
+   */
+  private verifyJWT(authHeader?: string): JWTPayload | null {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
+      return decoded;
+    } catch (error) {
+      console.error('JWT verification failed:', error);
+      return null;
+    }
   }
 
   private setupToolHandlers() {
@@ -110,7 +135,6 @@ class DynamicMCPAPIServer {
                 },
                 authApiKey: { type: "string", description: "API key for authentication" },
                 isEnabled: { type: "boolean", description: "Whether the server is enabled" },
-                userId: { type: "number", description: "User ID that owns this server" },
               },
               required: ["name", "transportType", "transportCommand"],
             },
@@ -144,7 +168,6 @@ class DynamicMCPAPIServer {
               properties: {
                 id: { type: "number", description: "Server ID to delete" },
                 name: { type: "string", description: "Name of the server to delete" },
-                userId: { type: "number", description: "User ID for authorization" },
               },
             },
           },
@@ -157,7 +180,6 @@ class DynamicMCPAPIServer {
                 id: { type: "number", description: "Server ID to toggle" },
                 name: { type: "string", description: "Name of the server to toggle" },
                 enabled: { type: "boolean", description: "Whether to enable or disable the server" },
-                userId: { type: "number", description: "User ID for authorization" },
               },
               required: ["enabled"],
             },
@@ -170,7 +192,6 @@ class DynamicMCPAPIServer {
               properties: {
                 id: { type: "number", description: "Server ID to connect" },
                 name: { type: "string", description: "Name of the server to connect" },
-                userId: { type: "number", description: "User ID for authorization" },
               },
             },
           },
@@ -182,7 +203,6 @@ class DynamicMCPAPIServer {
               properties: {
                 id: { type: "number", description: "Server ID to disconnect" },
                 name: { type: "string", description: "Name of the server to disconnect" },
-                userId: { type: "number", description: "User ID for authorization" },
               },
             },
           },
@@ -194,7 +214,6 @@ class DynamicMCPAPIServer {
               properties: {
                 id: { type: "number", description: "Server ID to get tools from" },
                 name: { type: "string", description: "Name of the server to get tools from" },
-                userId: { type: "number", description: "User ID for authorization" },
               },
             },
           },
@@ -207,23 +226,26 @@ class DynamicMCPAPIServer {
       const { name, arguments: args } = request.params;
 
       try {
+        // For STDIO mode, use default user ID (in production, this should be handled differently)
+        const userId = 1; // Default demo user
+
         switch (name) {
           case "mcp_list_servers":
-            return await this.handleListServers(args as unknown as MCPServerArgs);
+            return await this.handleListServers(userId, args as unknown as MCPServerArgs);
           case "mcp_create_server":
-            return await this.handleCreateServer(args as unknown as CreateServerArgs);
+            return await this.handleCreateServer(userId, args as unknown as CreateServerArgs);
           case "mcp_update_server":
-            return await this.handleUpdateServer(args as unknown as UpdateServerArgs);
+            return await this.handleUpdateServer(userId, args as unknown as UpdateServerArgs);
           case "mcp_delete_server":
-            return await this.handleDeleteServer(args as unknown as MCPServerArgs);
+            return await this.handleDeleteServer(userId, args as unknown as MCPServerArgs);
           case "mcp_toggle_server":
-            return await this.handleToggleServer(args as unknown as ToggleServerArgs);
+            return await this.handleToggleServer(userId, args as unknown as ToggleServerArgs);
           case "mcp_connect_server":
-            return await this.handleConnectServer(args as unknown as MCPServerArgs);
+            return await this.handleConnectServer(userId, args as unknown as MCPServerArgs);
           case "mcp_disconnect_server":
-            return await this.handleDisconnectServer(args as unknown as MCPServerArgs);
+            return await this.handleDisconnectServer(userId, args as unknown as MCPServerArgs);
           case "mcp_get_server_tools":
-            return await this.handleGetServerTools(args as unknown as MCPServerArgs);
+            return await this.handleGetServerTools(userId, args as unknown as MCPServerArgs);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -240,9 +262,7 @@ class DynamicMCPAPIServer {
     });
   }
 
-  private async handleListServers(args: MCPServerArgs) {
-    const userId = args.userId || 1;
-    
+  private async handleListServers(userId: number, args: MCPServerArgs = {}) {
     const servers = await this.prisma.mCPServer.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -271,10 +291,10 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleCreateServer(args: CreateServerArgs) {
+  private async handleCreateServer(userId: number, args: CreateServerArgs) {
     const server = await this.prisma.mCPServer.create({
       data: {
-        userId: args.userId || 1,
+        userId: userId,
         name: args.name,
         version: args.version || '1.0.0',
         description: args.description || '',
@@ -315,7 +335,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleUpdateServer(args: UpdateServerArgs) {
+  private async handleUpdateServer(userId: number, args: UpdateServerArgs) {
     if (!args.id && !args.name) {
       throw new Error('Either id or name must be provided to identify the server');
     }
@@ -370,7 +390,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleDeleteServer(args: MCPServerArgs) {
+  private async handleDeleteServer(userId: number, args: MCPServerArgs) {
     if (!args.id && !args.name) {
       throw new Error('Either id or name must be provided to identify the server');
     }
@@ -402,7 +422,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleToggleServer(args: ToggleServerArgs) {
+  private async handleToggleServer(userId: number, args: ToggleServerArgs) {
     if (!args.id && !args.name) {
       throw new Error('Either id or name must be provided to identify the server');
     }
@@ -445,7 +465,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleConnectServer(args: MCPServerArgs) {
+  private async handleConnectServer(userId: number, args: MCPServerArgs) {
     // This would trigger the connection manager to connect to the server
     // For now, just return a placeholder response
     return {
@@ -461,7 +481,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleDisconnectServer(args: MCPServerArgs) {
+  private async handleDisconnectServer(userId: number, args: MCPServerArgs) {
     // This would trigger the connection manager to disconnect from the server
     // For now, just return a placeholder response
     return {
@@ -477,7 +497,7 @@ class DynamicMCPAPIServer {
     };
   }
 
-  private async handleGetServerTools(args: MCPServerArgs | any) {
+  private async handleGetServerTools(userId: number, args: MCPServerArgs | any) {
     // Handle different parameter formats that LLMs might use
     let serverId: number | undefined;
     let serverName: string | undefined;
@@ -546,6 +566,26 @@ class DynamicMCPAPIServer {
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     });
 
+    // JWT middleware for all endpoints except health
+    app.addHook('preHandler', async (request, reply) => {
+      // Skip JWT for health check
+      if (request.url === '/health') {
+        return;
+      }
+
+      const authHeader = request.headers.authorization;
+      const user = this.verifyJWT(authHeader);
+      
+      if (!user) {
+        return reply.status(401).send({ 
+          success: false,
+          error: 'Unauthorized: Invalid or missing JWT token' 
+        });
+      }
+      
+      (request as any).user = user;
+    });
+
     // Health check endpoint
     app.get('/health', async (request, reply) => {
       return { status: 'ok', service: 'dynamic-mcp-api-server' };
@@ -555,32 +595,33 @@ class DynamicMCPAPIServer {
     app.post('/call-tool', async (request, reply) => {
       try {
         const { name, arguments: args } = request.body as { name: string; arguments: any };
+        const userId = (request as any).user.userId;
         
         let result;
         switch (name) {
           case 'mcp_list_servers':
-            result = await this.handleListServers(args as MCPServerArgs);
+            result = await this.handleListServers(userId, args as MCPServerArgs);
             break;
           case 'mcp_create_server':
-            result = await this.handleCreateServer(args as CreateServerArgs);
+            result = await this.handleCreateServer(userId, args as CreateServerArgs);
             break;
           case 'mcp_update_server':
-            result = await this.handleUpdateServer(args as UpdateServerArgs);
+            result = await this.handleUpdateServer(userId, args as UpdateServerArgs);
             break;
           case 'mcp_delete_server':
-            result = await this.handleDeleteServer(args as MCPServerArgs);
+            result = await this.handleDeleteServer(userId, args as MCPServerArgs);
             break;
           case 'mcp_toggle_server':
-            result = await this.handleToggleServer(args as ToggleServerArgs);
+            result = await this.handleToggleServer(userId, args as ToggleServerArgs);
             break;
           case 'mcp_connect_server':
-            result = await this.handleConnectServer(args as MCPServerArgs);
+            result = await this.handleConnectServer(userId, args as MCPServerArgs);
             break;
           case 'mcp_disconnect_server':
-            result = await this.handleDisconnectServer(args as MCPServerArgs);
+            result = await this.handleDisconnectServer(userId, args as MCPServerArgs);
             break;
           case 'mcp_get_server_tools':
-            result = await this.handleGetServerTools(args as MCPServerArgs);
+            result = await this.handleGetServerTools(userId, args as MCPServerArgs);
             break;
           default:
             reply.code(400);
@@ -597,8 +638,9 @@ class DynamicMCPAPIServer {
     // MCP Server management endpoints
     app.get('/servers', async (request, reply) => {
       try {
+        const userId = (request as any).user.userId;
         const args = request.query as MCPServerArgs;
-        const result = await this.handleListServers(args);
+        const result = await this.handleListServers(userId, args);
         return { success: true, result };
       } catch (error) {
         reply.code(500);
@@ -608,8 +650,9 @@ class DynamicMCPAPIServer {
 
     app.post('/servers', async (request, reply) => {
       try {
+        const userId = (request as any).user.userId;
         const args = request.body as CreateServerArgs;
-        const result = await this.handleCreateServer(args);
+        const result = await this.handleCreateServer(userId, args);
         return { success: true, result };
       } catch (error) {
         reply.code(500);
@@ -619,9 +662,10 @@ class DynamicMCPAPIServer {
 
     app.put('/servers/:id', async (request, reply) => {
       try {
+        const userId = (request as any).user.userId;
         const id = parseInt((request.params as any).id);
         const args = { ...request.body as Partial<CreateServerArgs>, id };
-        const result = await this.handleUpdateServer(args);
+        const result = await this.handleUpdateServer(userId, args);
         return { success: true, result };
       } catch (error) {
         reply.code(500);
@@ -631,9 +675,10 @@ class DynamicMCPAPIServer {
 
     app.delete('/servers/:id', async (request, reply) => {
       try {
+        const userId = (request as any).user.userId;
         const id = parseInt((request.params as any).id);
         const args = { id };
-        const result = await this.handleDeleteServer(args);
+        const result = await this.handleDeleteServer(userId, args);
         return { success: true, result };
       } catch (error) {
         reply.code(500);
@@ -652,8 +697,7 @@ class DynamicMCPAPIServer {
               type: "object",
               properties: {
                 id: { type: "number", description: "Filter by server ID" },
-                name: { type: "string", description: "Filter by server name" },
-                userId: { type: "number", description: "Filter by user ID" }
+                name: { type: "string", description: "Filter by server name" }
               }
             }
           },
@@ -672,8 +716,7 @@ class DynamicMCPAPIServer {
                 transportBaseUrl: { type: "string", description: "Base URL for HTTP transport" },
                 authType: { type: "string", description: "Authentication type" },
                 authApiKey: { type: "string", description: "API key for authentication" },
-                isEnabled: { type: "boolean", description: "Whether server is enabled" },
-                userId: { type: "number", description: "User ID" }
+                isEnabled: { type: "boolean", description: "Whether server is enabled" }
               },
               required: ["name", "transportType", "transportCommand"]
             }

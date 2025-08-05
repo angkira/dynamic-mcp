@@ -10,12 +10,18 @@ import {
 import { PrismaClient } from '@prisma/client';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import * as jwt from 'jsonwebtoken';
+
+interface JWTPayload {
+  userId: number;
+  email: string;
+  name?: string;
+}
 
 interface RememberArgs {
   content: string;
   key?: string;
   metadata?: any;
-  userId?: number;
 }
 
 interface RecallArgs {
@@ -23,19 +29,19 @@ interface RecallArgs {
   search?: string;
   limit?: number;
   offset?: number;
-  userId?: number;
 }
 
 interface ResetArgs {
   key?: string;
-  userId?: number;
 }
 
 class MemoryMCPServer {
   private server: Server;
   private prisma: PrismaClient;
+  private jwtSecret: string;
 
   constructor() {
+    this.jwtSecret = process.env.JWT_SECRET || 'demo-secret-key-for-mvp';
     this.server = new Server(
       {
         name: "memory-server",
@@ -50,6 +56,43 @@ class MemoryMCPServer {
 
     this.prisma = new PrismaClient();
     this.setupToolHandlers();
+  }
+
+  /**
+   * Extract and verify JWT token from Authorization header
+   */
+  private verifyJWT(authHeader?: string): JWTPayload | null {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
+      return decoded;
+    } catch (error) {
+      console.error('JWT verification failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create JWT middleware for HTTP requests
+   */
+  private createJWTMiddleware() {
+    return async (request: any, reply: any) => {
+      const authHeader = request.headers.authorization;
+      const user = this.verifyJWT(authHeader);
+      
+      if (!user) {
+        return reply.status(401).send({ 
+          success: false,
+          error: 'Unauthorized: Invalid or missing JWT token' 
+        });
+      }
+      
+      request.user = user;
+    };
   }
 
   private setupToolHandlers() {
@@ -74,10 +117,6 @@ class MemoryMCPServer {
                 metadata: {
                   type: "object",
                   description: "Additional context like importance level, tags, expiration date, etc.",
-                },
-                userId: {
-                  type: "number",
-                  description: "User ID (optional, defaults to current user)",
                 },
               },
               required: ["content"],
@@ -108,10 +147,6 @@ class MemoryMCPServer {
                   description: "Number of memories to skip (for pagination, default 0)",
                   minimum: 0,
                 },
-                userId: {
-                  type: "number",
-                  description: "User ID (optional, defaults to current user)",
-                },
               },
             },
           },
@@ -125,10 +160,6 @@ class MemoryMCPServer {
                   type: "string",
                   description: "Only delete memories with this specific key/category. If not provided, deletes ALL memories for the user!",
                 },
-                userId: {
-                  type: "number",
-                  description: "User ID (optional, defaults to current user)",
-                },
               },
             },
           },
@@ -136,18 +167,21 @@ class MemoryMCPServer {
       };
     });
 
-    // Handle tool calls
+    // Handle tool calls (STDIO mode - use demo user)
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
       try {
+        // For STDIO mode, use demo user ID (1)
+        const userId = 1;
+        
         switch (name) {
           case "memory_remember":
-            return await this.handleRemember(args as unknown as RememberArgs);
+            return await this.handleRemember(args as unknown as RememberArgs, userId);
           case "memory_recall":
-            return await this.handleRecall(args as unknown as RecallArgs);
+            return await this.handleRecall(args as unknown as RecallArgs, userId);
           case "memory_reset":
-            return await this.handleReset(args as unknown as ResetArgs);
+            return await this.handleReset(args as unknown as ResetArgs, userId);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -164,8 +198,8 @@ class MemoryMCPServer {
     });
   }
 
-  private async handleRemember(args: RememberArgs) {
-    const { content, key, metadata, userId = 1 } = args;
+  private async handleRemember(args: RememberArgs, userId: number) {
+    const { content, key, metadata } = args;
 
     if (!content) {
       throw new Error("Content is required");
@@ -199,8 +233,8 @@ class MemoryMCPServer {
     };
   }
 
-  private async handleRecall(args: RecallArgs) {
-    const { key, search, limit = 50, offset = 0, userId = 1 } = args;
+  private async handleRecall(args: RecallArgs, userId: number) {
+    const { key, search, limit = 50, offset = 0 } = args;
 
     const where: any = { userId };
     if (key) where.key = key;
@@ -237,8 +271,8 @@ class MemoryMCPServer {
     };
   }
 
-  private async handleReset(args: ResetArgs) {
-    const { key, userId = 1 } = args;
+  private async handleReset(args: ResetArgs, userId: number) {
+    const { key } = args;
 
     const where: any = { userId };
     if (key) where.key = key;
@@ -278,21 +312,22 @@ class MemoryMCPServer {
       return { status: 'ok', service: 'memory-mcp-server' };
     });
 
-    // MCP-compatible /call-tool endpoint
-    app.post('/call-tool', async (request, reply) => {
+    // MCP-compatible /call-tool endpoint (JWT protected)
+    app.post('/call-tool', { preHandler: [this.createJWTMiddleware()] }, async (request: any, reply) => {
       try {
         const { name, arguments: args } = request.body as { name: string; arguments: any };
+        const userId = request.user.userId;
         
         let result;
         switch (name) {
           case 'memory_remember':
-            result = await this.handleRemember(args as RememberArgs);
+            result = await this.handleRemember(args as RememberArgs, userId);
             break;
           case 'memory_recall':
-            result = await this.handleRecall(args as RecallArgs);
+            result = await this.handleRecall(args as RecallArgs, userId);
             break;
           case 'memory_reset':
-            result = await this.handleReset(args as ResetArgs);
+            result = await this.handleReset(args as ResetArgs, userId);
             break;
           default:
             reply.code(400);
@@ -306,37 +341,82 @@ class MemoryMCPServer {
       }
     });
 
-    // MCP Tools endpoint - expose memory tools as HTTP API
-    app.post('/tools/memory_remember', async (request, reply) => {
+    // MCP Tools endpoint - expose memory tools as HTTP API (JWT protected)
+    app.post('/tools/memory_remember', { preHandler: [this.createJWTMiddleware()] }, async (request: any, reply) => {
       try {
         const args = request.body as RememberArgs;
-        const result = await this.handleRemember(args);
-        return { success: true, result };
+        const userId = request.user.userId;
+        const result = await this.handleRemember(args, userId);
+        return {
+          success: true,
+          toolName: "memory_remember",
+          arguments: args,
+          stdout: typeof result === 'string' ? result : JSON.stringify(result),
+          stderr: "",
+          result
+        };
       } catch (error) {
         reply.code(500);
-        return { success: false, error: (error as Error).message };
+        return {
+          success: false,
+          toolName: "memory_remember",
+          arguments: request.body,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
+        };
       }
     });
 
-    app.post('/tools/memory_recall', async (request, reply) => {
+    app.post('/tools/memory_recall', { preHandler: [this.createJWTMiddleware()] }, async (request: any, reply) => {
       try {
         const args = request.body as RecallArgs;
-        const result = await this.handleRecall(args);
-        return { success: true, result };
+        const userId = request.user.userId;
+        const result = await this.handleRecall(args, userId);
+        return {
+          success: true,
+          toolName: "memory_recall",
+          arguments: args,
+          stdout: typeof result === 'string' ? result : JSON.stringify(result),
+          stderr: "",
+          result
+        };
       } catch (error) {
         reply.code(500);
-        return { success: false, error: (error as Error).message };
+        return {
+          success: false,
+          toolName: "memory_recall",
+          arguments: request.body,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
+        };
       }
     });
 
-    app.post('/tools/memory_reset', async (request, reply) => {
+    app.post('/tools/memory_reset', { preHandler: [this.createJWTMiddleware()] }, async (request: any, reply) => {
       try {
         const args = request.body as ResetArgs;
-        const result = await this.handleReset(args);
-        return { success: true, result };
+        const userId = request.user.userId;
+        const result = await this.handleReset(args, userId);
+        return {
+          success: true,
+          toolName: "memory_reset",
+          arguments: args,
+          stdout: typeof result === 'string' ? result : JSON.stringify(result),
+          stderr: "",
+          result
+        };
       } catch (error) {
         reply.code(500);
-        return { success: false, error: (error as Error).message };
+        return {
+          success: false,
+          toolName: "memory_reset",
+          arguments: request.body,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
+        };
       }
     });
 

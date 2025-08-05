@@ -43,10 +43,10 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
         200: ApiResponseSchema(Type.Array(MCPServerResponseSchema))
       }
     }
-  }, async (_request, reply) => {
+  }, async (request, reply) => {
     try {
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       const servers = await mcpService.getServers(userId)
 
@@ -75,8 +75,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
   }, async (request, reply) => {
     try {
       const validatedData = request.body as CreateMCPServerType
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       const createdServer = await mcpService.createServer(validatedData, userId)
 
@@ -106,8 +106,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
   }, async (request: FastifyRequest<{ Params: Static<typeof MCPServerParamsSchema> }>, reply) => {
     try {
       const serverId = parseInt(request.params.id)
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       const server = await mcpService.getServer(serverId, userId)
 
@@ -146,8 +146,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
     try {
       const serverId = parseInt(request.params.id)
       const validatedData = request.body
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       await mcpService.updateServer(serverId, validatedData, userId)
 
@@ -183,8 +183,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
     try {
       const serverId = parseInt(request.params.id)
       const validatedData = request.body
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       const lastConnected = validatedData.lastConnected ? new Date(validatedData.lastConnected) : undefined
 
@@ -220,8 +220,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
   }, async (request: FastifyRequest<{ Params: Static<typeof MCPServerParamsSchema> }>, reply) => {
     try {
       const serverId = parseInt(request.params.id)
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       await mcpService.deleteServer(serverId, userId)
 
@@ -258,8 +258,8 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
   }, async (request: FastifyRequest<{ Params: Static<typeof MCPServerParamsSchema> }>, reply) => {
     try {
       const serverId = parseInt(request.params.id)
-      // TODO: Get userId from authentication middleware
-      const userId = 1 // Hardcoded for now
+      // Get userId from JWT authentication
+      const userId = request.user!.id;
 
       const result = await mcpService.testConnection(serverId, userId)
 
