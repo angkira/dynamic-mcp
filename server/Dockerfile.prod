@@ -29,10 +29,10 @@ COPY shared/ ./shared/
 COPY packages/ ./packages/
 COPY prisma/ ./prisma/
 
-# Build with optimizations
-RUN cd shared && npm run build && \
-    cd ../server && npm run build:all && \
-    npx prisma generate
+# Build with proper order: Prisma first, then TypeScript
+RUN npx prisma generate && \
+    cd shared && npm run build && \
+    cd ../server && npm run build:all
 
 # Production dependencies only
 FROM base AS prod-deps
@@ -40,8 +40,10 @@ COPY package*.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
+COPY prisma/ ./prisma/
 
 RUN npm ci --only=production --prefer-offline --no-audit --no-fund && \
+    npx prisma generate --schema=./prisma/schema.prisma && \
     npm cache clean --force
 
 # Production runtime
