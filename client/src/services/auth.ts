@@ -48,11 +48,14 @@ class AuthService {
   }
 
   /**
-   * Store JWT token in sessionStorage
+   * Store JWT token in sessionStorage and trigger socket connection
    */
   setToken(token: string): void {
     try {
       sessionStorage.setItem(this.TOKEN_KEY, token)
+      
+      // Trigger socket connection when token is set
+      this.triggerSocketConnection()
     } catch (error) {
       console.error('Failed to store token in sessionStorage:', error)
       throw new AuthError('Failed to store authentication token', 500)
@@ -60,14 +63,42 @@ class AuthService {
   }
 
   /**
-   * Remove JWT token from sessionStorage
+   * Trigger socket connection after authentication
+   */
+  private async triggerSocketConnection(): Promise<void> {
+    try {
+      const { socketService } = await import('./socket')
+      // Connect socket now that we have a token
+      socketService.connectIfAuthenticated()
+    } catch (err) {
+      console.warn('Could not trigger socket connection:', err)
+    }
+  }
+
+  /**
+   * Remove JWT token from sessionStorage and disconnect socket
    */
   clearToken(): void {
     try {
       sessionStorage.removeItem(this.TOKEN_KEY)
       sessionStorage.removeItem(this.USER_KEY)
+      
+      // Disconnect socket when clearing token
+      this.disconnectSocket()
     } catch (error) {
       console.warn('Failed to clear auth data from sessionStorage:', error)
+    }
+  }
+
+  /**
+   * Disconnect socket when authentication is cleared
+   */
+  private async disconnectSocket(): Promise<void> {
+    try {
+      const { socketService } = await import('./socket')
+      socketService.disconnect()
+    } catch (err) {
+      console.warn('Could not disconnect socket:', err)
     }
   }
 

@@ -23,16 +23,19 @@ export default async function mcpRoutes(fastify: FastifyInstance, _opts: Fastify
   // Use TypeBox type provider for automatic validation and type inference
   const server = fastify.withTypeProvider<TypeBoxTypeProvider>()
   
-  // Initialize MCP service asynchronously without blocking plugin registration
+  // Initialize MCP service asynchronously but with proper error handling
   if (!mcpService) {
     mcpService = new McpService(fastify)
     
     // Make MCP service available globally on the fastify instance
     fastify.decorate('mcpService', mcpService)
     
-    // Initialize MCP service in the background (don't await)
-    mcpService.initialize().catch(error => {
+    // Initialize MCP service and log the result
+    mcpService.initialize().then(() => {
+      fastify.log.info('MCP service initialized successfully')
+    }).catch(error => {
       fastify.log.error('Failed to initialize MCP service:', error)
+      // Don't set mcpService to null here, as it may still be partially functional
     })
   }
   

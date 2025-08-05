@@ -535,11 +535,11 @@ export class McpService {
       version: server.version,
       description: server.description,
       isEnabled: server.isEnabled,
-      status: server.status.toLowerCase(),
+      status: server.status, // Keep status in uppercase to match schema
       lastConnected: server.lastConnected,
       
       transport: {
-        type: server.transportType.toLowerCase().replace('_', '-'),
+        type: server.transportType, // Keep transport type in uppercase to match schema
         config: {
           command: server.transportCommand,
           args: (server.transportArgs as string[]) || [],
@@ -552,7 +552,7 @@ export class McpService {
       },
       
       authentication: {
-        type: server.authType.toLowerCase(),
+        type: server.authType, // Keep auth type in uppercase to match schema
         config: {
           clientId: server.authClientId,
           clientSecret: server.authClientSecret,

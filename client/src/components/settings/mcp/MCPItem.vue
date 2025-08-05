@@ -2,7 +2,6 @@
   <div class="mcp-item" :class="{ disabled: !server.isEnabled }">
     <n-card :bordered="false" embedded>
       <div class="mcp-item-content">
-        <!-- Header Section -->
         <div class="mcp-header">
           <div class="mcp-info">
             <div class="mcp-title-row">
@@ -38,7 +37,7 @@
                 size="small"
               />
               <n-button
-                v-if="server.status === 'disconnected' && server.isEnabled"
+                v-if="server.status === MCPServerStatus.DISCONNECTED && server.isEnabled"
                 size="small"
                 type="primary"
                 @click="$emit('connect', server.id)"
@@ -46,7 +45,7 @@
                 Connect
               </n-button>
               <n-button
-                v-else-if="server.status === 'connected'"
+                v-else-if="server.status === MCPServerStatus.CONNECTED"
                 size="small"
                 @click="$emit('disconnect', server.id)"
               >
@@ -206,6 +205,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useMcpStore } from '@/stores/mcp'
 import { socketService } from '@/services/socket'
 import type { MCPServer } from '@/types'
+import { MCPServerStatus } from '@/types'
 
 // Props
 interface Props {
@@ -233,73 +233,16 @@ const testResult = ref<{ success: boolean; message: string } | null>(null)
 // Store
 const mcpStore = useMcpStore()
 
-// WebSocket event handlers
-const setupWebSocketListeners = () => {
-  if (!socketService.socket) {
-    socketService.connect()
-  }
-
-  // Listen for test events specific to this server
-  socketService.on('mcp:test:start', (data: { serverId: string }) => {
-    if (data.serverId === props.server.id) {
-      testing.value = true
-      testResult.value = { success: true, message: 'Testing connection...' }
-    }
-  })
-
-  socketService.on(
-    'mcp:test:complete',
-    (data: { serverId: string; success: boolean; message: string }) => {
-      if (data.serverId === props.server.id) {
-        testing.value = false
-        testResult.value = { success: data.success, message: data.message }
-
-        // Auto-hide result after 5 seconds
-        setTimeout(() => {
-          testResult.value = null
-        }, 5000)
-      }
-    },
-  )
-
-  socketService.on('mcp:test:error', (data: { serverId: string; error: string }) => {
-    if (data.serverId === props.server.id) {
-      testing.value = false
-      testResult.value = { success: false, message: data.error }
-
-      // Auto-hide result after 5 seconds
-      setTimeout(() => {
-        testResult.value = null
-      }, 5000)
-    }
-  })
-}
-
-const cleanupWebSocketListeners = () => {
-  socketService.off('mcp:test:start')
-  socketService.off('mcp:test:complete')
-  socketService.off('mcp:test:error')
-}
-
-// Lifecycle hooks
-onMounted(() => {
-  setupWebSocketListeners()
-})
-
-onUnmounted(() => {
-  cleanupWebSocketListeners()
-})
-
 // Computed properties
 const statusTagType = computed(() => {
   switch (props.server.status) {
-    case 'connected':
+    case MCPServerStatus.CONNECTED:
       return 'success'
-    case 'disconnected':
+    case MCPServerStatus.DISCONNECTED:
       return 'error'
-    case 'connecting':
+    case MCPServerStatus.CONNECTING:
       return 'info'
-    case 'error':
+    case MCPServerStatus.ERROR:
       return 'warning'
     default:
       return 'default'
@@ -308,13 +251,13 @@ const statusTagType = computed(() => {
 
 const statusIcon = computed(() => {
   switch (props.server.status) {
-    case 'connected':
+    case MCPServerStatus.CONNECTED:
       return 'check-circle'
-    case 'disconnected':
+    case MCPServerStatus.DISCONNECTED:
       return 'times-circle'
-    case 'connecting':
+    case MCPServerStatus.CONNECTING:
       return 'spinner'
-    case 'error':
+    case MCPServerStatus.ERROR:
       return 'exclamation-circle'
     default:
       return 'circle'
@@ -359,14 +302,10 @@ const testConnection = async () => {
   if (testing.value) return // Prevent multiple simultaneous tests
 
   testing.value = true
-  testResult.value = { success: true, message: 'Initializing test...' }
+  testResult.value = { success: true, message: 'Testing connection...' }
 
   try {
     const result = await mcpStore.testConnection(props.server.id)
-
-    // The WebSocket handlers will update the UI, but as fallback:
-    if (!testing.value) return // WebSocket already handled it
-
     testResult.value = result
     testing.value = false
 
@@ -376,6 +315,7 @@ const testConnection = async () => {
     }, 5000)
   } catch (error) {
     testing.value = false
+
     const errorMessage =
       error instanceof Error ? error.message : 'Connection test failed with an error.'
     testResult.value = {

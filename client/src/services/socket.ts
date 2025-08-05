@@ -13,13 +13,20 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return
 
+    // Get authentication token first
+    const token = authService.getToken()
+    
+    // Don't connect if no token is available
+    if (!token) {
+      console.log('Socket connection skipped: No authentication token available')
+      this.state.error = 'No authentication token'
+      return
+    }
+
     // Use dedicated socket URL or fallback to API URL without /api suffix
     const socketUrl = import.meta.env.VITE_SOCKET_URL || 
                      (import.meta.env.VITE_API_URL?.replace('/api', '')) || 
                      "http://localhost:3000"
-
-    // Get authentication token
-    const token = authService.getToken()
     
     // Configure socket with authentication
     const socketOptions: any = {
@@ -27,15 +34,11 @@ class SocketService {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-    }
-
-    // Add auth token if available
-    if (token) {
-      socketOptions.auth = {
+      auth: {
         token: token
-      }
+      },
       // Also send as header for compatibility
-      socketOptions.extraHeaders = {
+      extraHeaders: {
         'Authorization': `Bearer ${token}`
       }
     }
@@ -96,6 +99,18 @@ class SocketService {
     this.state.isConnected = false
     this.state.isAuthenticated = false
     this.state.error = null
+  }
+
+  /**
+   * Connect only if authenticated, otherwise skip connection
+   */
+  connectIfAuthenticated() {
+    const token = authService.getToken()
+    if (token) {
+      this.connect()
+    } else {
+      console.log('Socket connection skipped: Not authenticated')
+    }
   }
 
   /**

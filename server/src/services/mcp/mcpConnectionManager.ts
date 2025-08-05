@@ -40,6 +40,9 @@ export class McpConnectionManager {
     mcpAutoDiscovery: boolean
   } | null = null
 
+  private pollingTimer: NodeJS.Timeout | null = null
+  private readonly POLLING_INTERVAL_MS = 20000 // 20 seconds
+
   constructor(_fastify?: FastifyInstance) {
     this.prisma = new PrismaClient()
   }
@@ -138,6 +141,136 @@ export class McpConnectionManager {
         console.error(`❌ Failed to auto-connect to ${server.name}:`, error)
         await this.updateServerStatus(server.id, 'ERROR')
       }
+    }
+    
+    // Start polling for disconnected servers
+    this.startPolling(userId)
+  }
+
+  /**
+   * Start polling for disconnected enabled servers
+   */
+  private startPolling(userId: number = 1) {
+    if (this.pollingTimer) {
+      return // Already polling
+    }
+    
+    console.log(`🔄 Starting MCP server polling every ${this.POLLING_INTERVAL_MS / 1000} seconds`)
+    
+    this.pollingTimer = setInterval(async () => {
+      try {
+        await this.checkAndReconnectServers(userId)
+      } catch (error) {
+        console.error('❌ Error during MCP server polling:', error)
+      }
+    }, this.POLLING_INTERVAL_MS)
+  }
+
+  /**
+   * Stop polling for disconnected servers
+   */
+  private stopPolling() {
+    if (this.pollingTimer) {
+      clearInterval(this.pollingTimer)
+      this.pollingTimer = null
+      console.log('⏹️ Stopped MCP server polling')
+    }
+  }
+
+  /**
+   * Manually trigger a check for disconnected servers (public method)
+   */
+  async triggerReconnectionCheck(userId: number = 1) {
+    console.log('🔄 Manually triggered reconnection check...')
+    await this.checkAndReconnectServers(userId)
+  }
+
+  /**
+   * Get the current polling status
+   */
+  getPollingStatus() {
+    return {
+      isPolling: this.pollingTimer !== null,
+      intervalMs: this.POLLING_INTERVAL_MS,
+      intervalSeconds: this.POLLING_INTERVAL_MS / 1000
+    }
+  }
+
+  /**
+   * Check for enabled servers that are not connected and attempt to reconnect
+   */
+  private async checkAndReconnectServers(userId: number = 1) {
+    try {
+      // Get all enabled servers that are not currently connected
+      const disconnectedServers = await this.prisma.mCPServer.findMany({
+        where: { 
+          isEnabled: true,
+          userId: userId,
+          status: { in: ['DISCONNECTED', 'ERROR', 'CONNECTING'] }
+        }
+      })
+
+      if (disconnectedServers.length === 0) {
+        return
+      }
+
+      if (this.globalSettings?.mcpEnableDebugLogging) {
+        console.log(`🔄 Polling check: Found ${disconnectedServers.length} disconnected enabled servers`)
+      }
+
+      for (const server of disconnectedServers) {
+        try {
+          // Skip if we've reached max connections
+          if (this.globalSettings && this.connections.size >= this.globalSettings.mcpMaxConcurrentConnections) {
+            if (this.globalSettings.mcpEnableDebugLogging) {
+              console.log(`⚠️ Max connections reached, skipping reconnection attempt for ${server.name}`)
+            }
+            continue
+          }
+
+          // Skip if already in connections map (shouldn't happen, but safety check)
+          if (this.connections.has(server.id)) {
+            continue
+          }
+
+          // Check if server has been stuck in CONNECTING state for too long (more than 2 minutes)
+          if (server.status === 'CONNECTING' && server.updatedAt) {
+            const timeSinceConnecting = Date.now() - server.updatedAt.getTime()
+            const maxConnectingTime = 2 * 60 * 1000 // 2 minutes
+            
+            if (timeSinceConnecting < maxConnectingTime) {
+              // Still within reasonable connecting time, skip this iteration
+              if (this.globalSettings?.mcpEnableDebugLogging) {
+                console.log(`⏳ Server ${server.name} still connecting, waiting...`)
+              }
+              continue
+            } else {
+              // Been connecting too long, reset to ERROR state
+              if (this.globalSettings?.mcpEnableDebugLogging) {
+                console.log(`⚠️ Server ${server.name} stuck in CONNECTING state, resetting to ERROR`)
+              }
+              await this.updateServerStatus(server.id, 'ERROR')
+            }
+          }
+
+          if (this.globalSettings?.mcpEnableDebugLogging) {
+            console.log(`🔄 Attempting to reconnect to ${server.name} (${server.transportType})`)
+          }
+
+          const connected = await this.connectToServer(server)
+          if (connected) {
+            console.log(`✅ Successfully reconnected to MCP server: ${server.name}`)
+          }
+        } catch (error) {
+          if (this.globalSettings?.mcpEnableDebugLogging) {
+            console.error(`❌ Failed to reconnect to ${server.name}:`, error)
+          }
+          // Don't spam logs for failed reconnections, just update status
+          await this.updateServerStatus(server.id, 'ERROR')
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking and reconnecting servers:', error)
     }
   }
 
@@ -733,6 +866,9 @@ export class McpConnectionManager {
   async cleanup() {
     console.log('🧹 Cleaning up MCP connections...')
     
+    // Stop polling first
+    this.stopPolling()
+    
     for (const [serverId, connection] of this.connections) {
       try {
         await connection.client.close()
@@ -749,16 +885,19 @@ export class McpConnectionManager {
   /**
    * Refresh connections - reconnect to all enabled servers
    */
-  async refreshConnections() {
+  async refreshConnections(userId: number = 1) {
     console.log('🔄 Refreshing MCP connections...')
+    
+    // Stop polling temporarily
+    this.stopPolling()
     
     // Close existing connections
     for (const [serverId] of this.connections) {
       await this.disconnectFromServer(serverId)
     }
     
-    // Reinitialize
-    await this.initialize()
+    // Reinitialize (this will restart polling)
+    await this.initialize(userId)
   }
 
   /**

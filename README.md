@@ -6,16 +6,10 @@ Dynamic MCP is an innovative system that allows you to **register and manage MCP
 
 ### 🎯 **Chat-Based MCP Registration**
 
-- **Register MCP servers by simply talking to the AI** - no configuration files needed
-- **Automatic server discovery and configuration** through conversational interface
-- **Real-time connection testing** and health monitoring via WebSocket
-- **Visual server management** with connection status indicators
+**Automatic polling for enabled MCP servers**: The system periodically checks and reconnects to enabled MCP servers that are not yet connected or healthy, ensuring late-starting daemons are detected and connected automatically.
 
 ### 🏗️ **Dual Architecture Support**
 
-- **Legacy STDIO Transport**: Traditional process-based MCP servers
-- **Modern HTTP Daemon Services**: Containerized HTTP-based MCP servers
-- **Seamless coexistence** of both architectures for gradual migration
 - **Performance comparison** capabilities between transport types
 
 ### 🛠️ **Built-in MCP Servers**

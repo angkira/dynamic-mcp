@@ -35,6 +35,7 @@ import {
   // States
   faSpinner,
   faCheckCircle,
+  faTimesCircle,
   
   // MCP & Development
   faCodeBranch,
@@ -69,6 +70,10 @@ library.add(
   faGear,
   faArrowRight,
   faEllipsisV,
+  // Ensure we have both solid and regular versions of icons
+  faCommentRegular,
+  faCopyRegular,
+  faTimesCircle,
   
   // Chat & Communication
   faComments,

@@ -47,15 +47,18 @@ async function initializeApp() {
   if (wasInitialized && userStore.isAuthenticated) {
     try {
       await userStore.verifyAndRefreshUser()
+      
+      // Connect socket only after successful authentication
+      socketService.connectIfAuthenticated()
     } catch (error) {
       console.warn('Token verification failed during app initialization:', error)
       // User will be redirected to login by router guards
+      // Don't connect socket if auth failed
     }
+  } else {
+    // No stored session or not authenticated - don't connect socket
+    console.log('No stored authentication - socket connection deferred until login')
   }
-
-  // Connect socket service after auth is initialized
-  // Socket will use auth token from storage
-  socketService.connect()
 
   // Mount the app
   app.mount('#app')

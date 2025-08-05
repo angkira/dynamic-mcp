@@ -78,6 +78,9 @@ export class JWTService {
       console.log('✅ Created demo user:', user.email);
     }
 
+    // Ensure demo user has default settings
+    await this.ensureDemoUserSettings(user.id);
+
     // Generate token
     const token = this.generateToken({
       id: user.id,
@@ -93,6 +96,32 @@ export class JWTService {
 
     console.log('✅ Demo user token generated and stored in MCP servers');
     return { user, token };
+  }
+
+  /**
+   * Ensure demo user has default settings
+   */
+  private async ensureDemoUserSettings(userId: number): Promise<void> {
+    try {
+      // Check if settings already exist
+      const existingSettings = await this.prisma.settings.findUnique({
+        where: { userId }
+      });
+
+      if (!existingSettings) {
+        // Create default settings for demo user
+        await this.prisma.settings.create({
+          data: {
+            userId,
+            // All other fields will use their default values from the schema
+          }
+        });
+        console.log('✅ Created default settings for demo user');
+      }
+    } catch (error) {
+      console.error('Failed to ensure demo user settings:', error);
+      throw error;
+    }
   }
 
   /**

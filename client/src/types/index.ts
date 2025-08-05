@@ -164,14 +164,6 @@ export interface MCPPromptArgument {
   type: string
 }
 
-export enum MCPServerStatus {
-  Connected = 'connected',
-  Disconnected = 'disconnected',
-  Connecting = 'connecting',
-  Error = 'error',
-  Unknown = 'unknown'
-}
-
 // Database enums (matching Prisma schema)
 export enum MCPServerStatusDB {
   CONNECTED = 'CONNECTED',
