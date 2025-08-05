@@ -47,6 +47,7 @@ import {
   faLock,
   faSignInAlt,
   faPlay,
+  faArrowRightFromBracket,
 } from '@fortawesome/free-solid-svg-icons'
 
 import {
@@ -106,6 +107,7 @@ library.add(
   faLock,
   faSignInAlt,
   faPlay,
+  faArrowRightFromBracket,
   
   // Regular icons
   faCommentRegular,

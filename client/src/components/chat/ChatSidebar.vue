@@ -46,6 +46,9 @@
             <div class="user-email">{{ user.user?.email }}</div>
           </div>
         </div>
+        <button v-if="ui.sidebarState === 'open'" @click="handleLogout" class="logout-btn" title="Logout">
+          <FontAwesomeIcon icon="arrow-right-from-bracket" />
+        </button>
       </div>
     </aside>
     <ChatSettings v-model:show="showSettingsModal" />
@@ -110,6 +113,11 @@ async function deleteChat(chatId: number) {
 
 function openSettingsModal() {
   showSettingsModal.value = true
+}
+
+function handleLogout() {
+  user.logout()
+  router.push('/login')
 }
 </script>
 
@@ -196,6 +204,22 @@ function openSettingsModal() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.logout-btn {
+  @include button-secondary;
+  padding: var(--spacing-xs);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+
+  &:hover {
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface);
+  }
 }
 
 .sidebar-header {
