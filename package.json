@@ -34,7 +34,10 @@
     "mcp:test": "./scripts/test-mcp-daemons.sh",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
-    "prisma:studio": "npx prisma studio"
+    "prisma:studio": "npx prisma studio",
+    "prisma:generate_init": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > docker/db/schema.sql",
+    "db:generate": "npm run prisma:generate_init && echo 'Database schema generated from Prisma. Use docker:rebuild to apply changes.'",
+    "docker:rebuild": "docker compose -f docker-compose.prod.yml down && docker volume rm dynamic-mcp_db-data || true && docker compose -f docker-compose.prod.yml build db && docker compose -f docker-compose.prod.yml up"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
