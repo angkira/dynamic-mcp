@@ -1,13 +1,16 @@
 import JWTService from './auth/jwtService';
 import { PrismaClient } from '@prisma/client';
+import McpConfigService from './config/mcpConfigService';
 
 export class InitializationService {
   private jwtService: JWTService;
   private prisma: PrismaClient;
+  private mcpConfigService: McpConfigService;
 
   constructor() {
     this.jwtService = new JWTService();
     this.prisma = new PrismaClient();
+    this.mcpConfigService = McpConfigService.getInstance();
   }
 
   /**
@@ -30,24 +33,8 @@ export class InitializationService {
    * Ensure default MCP servers exist with the correct token
    */
   private async ensureDefaultMCPServers(userId: number, token: string) {
-    const defaultServers = [
-      {
-        name: 'memory',
-        version: '1.0.0',
-        description: 'Memory management server',
-        transportType: 'STREAMABLE_HTTP' as const,
-        transportBaseUrl: 'http://mcp-memory:3001',
-        configAutoConnect: true
-      },
-      {
-        name: 'dynamic-mcp-api',
-        version: '1.0.0',
-        description: 'Dynamic MCP API server',
-        transportType: 'STREAMABLE_HTTP' as const,
-        transportBaseUrl: 'http://mcp-api:3002',
-        configAutoConnect: true
-      }
-    ];
+    // Load default server configurations from JSON files
+    const defaultServers = this.mcpConfigService.getDefaultServers();
 
     for (const serverConfig of defaultServers) {
       // Check if server already exists
@@ -59,17 +46,18 @@ export class InitializationService {
       });
 
       if (existingServer) {
-        // Update existing server with new token and auth type
+        // Update existing server with new token, auth type, and capabilities
         await this.prisma.mCPServer.update({
           where: { id: existingServer.id },
           data: { 
             authToken: token,
-            authType: 'BEARER'
+            authType: 'BEARER',
+            capabilities: serverConfig.capabilities
           }
         });
-        console.log(`✅ Updated token for existing MCP server: ${serverConfig.name}`);
+        console.log(`✅ Updated token and capabilities for existing MCP server: ${serverConfig.name}`);
       } else {
-        // Create new server
+        // Create new server with full configuration including capabilities
         await this.prisma.mCPServer.create({
           data: {
             userId,
@@ -78,13 +66,16 @@ export class InitializationService {
             description: serverConfig.description,
             transportType: serverConfig.transportType,
             transportBaseUrl: serverConfig.transportBaseUrl,
+            transportCommand: serverConfig.transportCommand,
+            transportArgs: serverConfig.transportArgs,
             configAutoConnect: serverConfig.configAutoConnect,
             authToken: token,
             authType: 'BEARER',
-            isEnabled: true
+            isEnabled: true,
+            capabilities: serverConfig.capabilities
           }
         });
-        console.log(`✅ Created new MCP server: ${serverConfig.name}`);
+        console.log(`✅ Created new MCP server with capabilities: ${serverConfig.name}`);
       }
     }
   }

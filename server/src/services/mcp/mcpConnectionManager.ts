@@ -479,16 +479,17 @@ export class McpConnectionManager {
   /**
    * Get all available resources from connected MCP servers
    */
-  async getAllAvailableResources(): Promise<MCPResourceForLLM[]> {
+  async getAllAvailableResources(userId: number = 1): Promise<MCPResourceForLLM[]> {
     const allResources: MCPResourceForLLM[] = []
     
-    // Get enabled AND connected internal servers that have resources
+    // Get enabled AND connected internal servers that have resources for this user
     const internalServers = await this.prisma.mCPServer.findMany({
       where: { 
         name: { in: ['dynamic-mcp-api', 'memory'] },
         isEnabled: true,
         status: 'CONNECTED',  // Only include connected servers
-        transportCommand: 'internal'
+        transportCommand: 'internal',
+        userId: userId
       }
     })
     
@@ -568,7 +569,7 @@ export class McpConnectionManager {
   /**
    * Call a tool on a specific MCP server
    */
-  async callTool(serverId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
+  async callTool(userId: number, serverId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
     // Helper for error result
     function errorResult(params: {
       error: string;
@@ -591,13 +592,16 @@ export class McpConnectionManager {
       };
     }
 
-    // First check if this is an HTTP daemon server
-    const server = await this.prisma.mCPServer.findUnique({
-      where: { id: serverId }
+    // First check if this is an HTTP daemon server for the specific user
+    const server = await this.prisma.mCPServer.findFirst({
+      where: { 
+        id: serverId,
+        userId: userId 
+      }
     });
 
     if (!server) {
-      throw new Error(`Server ${serverId} not found`);
+      throw new Error(`Server ${serverId} not found for user ${userId}`);
     }
 
     // Handle HTTP daemon servers
@@ -673,7 +677,7 @@ export class McpConnectionManager {
         }
 
         // Strictly require a valid CallToolResult from daemon
-        if (!result || typeof result !== 'object' || !('success' in result) || typeof (result as any).success !== 'boolean') {
+        if (!result || typeof result !== 'object') {
           return errorResult({
             error: 'Daemon returned malformed CallToolResult',
             toolName,
@@ -684,8 +688,63 @@ export class McpConnectionManager {
           });
         }
 
-        // Only return if success is boolean and all required fields exist
-        return result as unknown as CallToolResult;
+        // Handle MCP standard response format with content array
+        if ('content' in result && Array.isArray((result as any).content)) {
+          const mcpResult = result as any;
+          if (mcpResult.content.length > 0 && mcpResult.content[0].type === 'text') {
+            try {
+              // Parse the JSON content from the MCP response
+              const actualData = JSON.parse(mcpResult.content[0].text);
+              
+              return {
+                stdout: mcpResult.content[0].text,
+                stderr: '',
+                success: true,
+                ...actualData // Include the parsed data for easy access
+              } as CallToolResult;
+            } catch (parseError) {
+              // If JSON parsing fails, treat the text as raw output
+              return {
+                stdout: mcpResult.content[0].text,
+                stderr: '',
+                success: true,
+                content: mcpResult.content
+              } as CallToolResult;
+            }
+          }
+        }
+
+        // Handle direct JSON response format (legacy daemon format)
+        if ('success' in result && typeof (result as any).success === 'boolean') {
+          const daemonResult = result as any;
+          if (daemonResult.success) {
+            // Success case - return the data as stdout in JSON format
+            return {
+              stdout: JSON.stringify(daemonResult),
+              stderr: '',
+              success: true,
+              ...daemonResult // Include all the original data
+            } as CallToolResult;
+          } else {
+            // Error case from daemon
+            return errorResult({
+              error: daemonResult.error || 'Tool execution failed',
+              toolName,
+              arguments: payload.arguments,
+              stdout: '',
+              stderr: daemonResult.error || 'Tool execution failed',
+              daemonResponse: result
+            });
+          }
+        }
+
+        // If it doesn't match any known format, assume it's raw result data
+        return {
+          stdout: JSON.stringify(result),
+          stderr: '',
+          success: true,
+          ...result
+        } as CallToolResult;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`[MCP] Exception in tool call`, { toolName, errorMsg, stack: error instanceof Error ? error.stack : undefined });
@@ -772,7 +831,19 @@ export class McpConnectionManager {
   /**
    * Read a resource from a specific MCP server
    */
-  async readResource(serverId: number, uri: string): Promise<ReadResourceResult> {
+  async readResource(userId: number, serverId: number, uri: string): Promise<ReadResourceResult> {
+    // Verify server belongs to user
+    const server = await this.prisma.mCPServer.findFirst({
+      where: { 
+        id: serverId,
+        userId: userId 
+      }
+    });
+
+    if (!server) {
+      throw new Error(`Server ${serverId} not found for user ${userId}`);
+    }
+
     const connection = this.connections.get(serverId)
     if (!connection) {
       throw new Error(`No connection to server ${serverId}`)
@@ -810,18 +881,21 @@ export class McpConnectionManager {
   }
 
   /**
-   * Get connection status for all servers
+   * Get connection status for all connected servers for a specific user
    */
-  getConnectionStatus(): MCPConnectionInfo[] {
+  getConnectionStatus(userId: number): MCPConnectionInfo[] {
     const status: MCPConnectionInfo[] = []
     
     for (const [serverId, connection] of this.connections) {
-      status.push({
-        serverId,
-        serverName: connection.server.name,
-        isConnected: true,
-        lastConnected: connection.lastConnected
-      })
+      // Only include servers that belong to this user
+      if (connection.server.userId === userId) {
+        status.push({
+          serverId,
+          serverName: connection.server.name,
+          isConnected: true,
+          lastConnected: connection.lastConnected
+        })
+      }
     }
     
     return status
@@ -901,30 +975,33 @@ export class McpConnectionManager {
   }
 
   /**
-   * Health check for all connections
+   * Health check for all connections for a specific user
    */
-  async healthCheck(): Promise<MCPHealthCheckResult[]> {
+  async healthCheck(userId: number): Promise<MCPHealthCheckResult[]> {
     const results: MCPHealthCheckResult[] = []
     
     for (const [serverId, connection] of this.connections) {
-      try {
-        // Test connection by making a simple call
-        await connection.client.ping()
-        results.push({
-          serverId,
-          serverName: connection.server.name,
-          healthy: true
-        })
-      } catch (error) {
-        results.push({
-          serverId,
-          serverName: connection.server.name,
-          healthy: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-        
-        // Update status to error
-        await this.updateServerStatus(serverId, 'ERROR')
+      // Only check health for servers that belong to this user
+      if (connection.server.userId === userId) {
+        try {
+          // Test connection by making a simple call
+          await connection.client.ping()
+          results.push({
+            serverId,
+            serverName: connection.server.name,
+            healthy: true
+          })
+        } catch (error) {
+          results.push({
+            serverId,
+            serverName: connection.server.name,
+            healthy: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })
+          
+          // Update status to error
+          await this.updateServerStatus(serverId, 'ERROR')
+        }
       }
     }
     

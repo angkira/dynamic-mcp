@@ -31,18 +31,12 @@ export class McpService {
 
   /**
    * Initialize the service and connection manager
+   * Note: This should be called once during server startup
    */
   async initialize() {
-    // Load global settings and pass them to connection manager
-    const settings = await this.getUserSettings()
-    this.connectionManager.updateGlobalSettings({
-      mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
-      mcpDefaultTimeout: settings.mcpDefaultTimeout,
-      mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
-      mcpAutoDiscovery: settings.mcpAutoDiscovery
-    })
-    
-    await this.connectionManager.initialize()
+    // The service is now user-aware, so we don't initialize connections here
+    // Connections will be managed per user when they make requests
+    console.log('🔌 MCP Service initialized (user-aware mode)')
   }
 
   /**
@@ -90,7 +84,7 @@ export class McpService {
   /**
    * Update global settings (call this when settings change)
    */
-  async updateGlobalSettings(userId: number = 1) {
+  async updateGlobalSettings(userId: number) {
     const settings = await this.getUserSettings(userId)
     this.connectionManager.updateGlobalSettings({
       mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
@@ -98,6 +92,19 @@ export class McpService {
       mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
       mcpAutoDiscovery: settings.mcpAutoDiscovery
     })
+  }
+
+  /**
+   * Ensure user's MCP connections are initialized
+   * This is called the first time a user makes an MCP-related request
+   */
+  private async ensureUserInitialized(userId: number) {
+    // Update global settings for this user
+    await this.updateGlobalSettings(userId)
+    
+    // Initialize connections for this user if not already done
+    // The connection manager will handle checking if already initialized
+    await this.connectionManager.initialize(userId)
   }
 
   // CRUD Operations
@@ -333,7 +340,7 @@ export class McpService {
         
         if (isConnected) {
           // Server is connected, perform a ping test
-          const healthResults = await this.connectionManager.healthCheck()
+          const healthResults = await this.connectionManager.healthCheck(userId)
           const serverHealth = healthResults.find(h => h.serverId === id)
           
           if (serverHealth) {
@@ -416,23 +423,57 @@ export class McpService {
   // Integration with LLM system
 
   /**
-   * Get all available tools from enabled MCP servers for LLM integration
+   * Get all available tools from enabled MCP servers for LLM integration (user-aware)
+   */
+  async getAvailableToolsForUser(userId: number): Promise<MCPToolForLLM[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.getAllAvailableTools(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async getAvailableToolsForLLM(): Promise<MCPToolForLLM[]> {
-    return await this.connectionManager.getAllAvailableTools()
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.getAvailableToolsForUser(demoUser.id)
   }
 
   /**
-   * Get all available resources from enabled MCP servers for LLM integration
+   * Get all available resources from enabled MCP servers for LLM integration (user-aware)
+   */
+  async getAvailableResourcesForUser(userId: number): Promise<MCPResourceForLLM[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.getAllAvailableResources(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async getAvailableResourcesForLLM(): Promise<MCPResourceForLLM[]> {
-    return await this.connectionManager.getAllAvailableResources()
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.getAvailableResourcesForUser(demoUser.id)
   }
 
   /**
-   * Execute an MCP tool call from LLM
+   * Execute an MCP tool call from LLM (user-aware)
    */
-  async executeMCPTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
+  async executeMCPToolForUser(userId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    await this.ensureUserInitialized(userId)
+    
     // Parse server and tool name from format "serverName__toolName"
     let serverName: string;
     let originalToolName: string;
@@ -451,7 +492,7 @@ export class McpService {
       const servers = await this.prisma.mCPServer.findMany({
         where: { 
           isEnabled: true,
-          userId: 1 // TODO: Support multiple users
+          userId: userId
         }
       });
 
@@ -481,7 +522,7 @@ export class McpService {
       where: { 
         name: serverName,
         isEnabled: true,
-        userId: 1 // TODO: Support multiple users
+        userId: userId
       }
     })
 
@@ -489,38 +530,105 @@ export class McpService {
       throw new Error(`MCP server "${serverName}" not found or not enabled`)
     }
 
-    // All tools now go through the connection manager - no more internal handling
-    return await this.connectionManager.callTool(server.id, originalToolName, arguments_)
+    // All tools now go through the connection manager
+    return await this.connectionManager.callTool(userId, server.id, originalToolName, arguments_)
   }
 
   /**
-   * Read an MCP resource for LLM
+   * Legacy method for backwards compatibility (uses demo user)
+   */
+  async executeMCPTool(toolName: string, arguments_: unknown): Promise<CallToolResult> {
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.executeMCPToolForUser(demoUser.id, toolName, arguments_)
+  }
+
+  /**
+   * Read an MCP resource for LLM (user-aware)
+   */
+  async readMCPResourceForUser(userId: number, serverId: number, uri: string): Promise<ReadResourceResult> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.readResource(userId, serverId, uri)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async readMCPResource(serverId: number, uri: string): Promise<ReadResourceResult> {
-    return await this.connectionManager.readResource(serverId, uri)
+    const demoUser = await this.prisma.user.findUnique({
+      where: { email: 'demo@example.com' }
+    })
+    
+    if (!demoUser) {
+      throw new Error('Demo user not found')
+    }
+    
+    return await this.readMCPResourceForUser(demoUser.id, serverId, uri)
   }
 
   // Utility methods
 
   /**
-   * Get connection status for all servers
+   * Get connection status for all servers (user-aware)
+   */
+  getConnectionStatusForUser(userId: number): MCPConnectionInfo[] {
+    return this.connectionManager.getConnectionStatus(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   getConnectionStatus(): MCPConnectionInfo[] {
-    return this.connectionManager.getConnectionStatus()
+    // For legacy compatibility, return status for demo user or empty array
+    try {
+      return this.connectionManager.getConnectionStatus(1) // Fallback to userId 1 for legacy compatibility
+    } catch {
+      return []
+    }
   }
 
   /**
-   * Health check for all connections
+   * Health check for all connections (user-aware)
+   */
+  async healthCheckForUser(userId: number): Promise<MCPHealthCheckResult[]> {
+    await this.ensureUserInitialized(userId)
+    return await this.connectionManager.healthCheck(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async healthCheck(): Promise<MCPHealthCheckResult[]> {
-    return await this.connectionManager.healthCheck()
+    try {
+      return await this.connectionManager.healthCheck(1) // Fallback to userId 1 for legacy compatibility
+    } catch {
+      return []
+    }
   }
 
   /**
-   * Refresh all connections
+   * Refresh all connections (user-aware)
+   */
+  async refreshConnectionsForUser(userId: number) {
+    await this.ensureUserInitialized(userId)
+    await this.connectionManager.refreshConnections(userId)
+  }
+
+  /**
+   * Legacy method for backwards compatibility (uses demo user)
    */
   async refreshConnections() {
-    await this.connectionManager.refreshConnections()
+    try {
+      await this.connectionManager.refreshConnections(1) // Fallback to userId 1 for legacy compatibility
+    } catch (error) {
+      console.error('Error refreshing connections for legacy call:', error)
+    }
   }
 
 
