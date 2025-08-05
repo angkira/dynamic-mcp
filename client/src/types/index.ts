@@ -2,21 +2,16 @@
  * Centralized type exports
  */
 
-import type {
+// Import enums as regular imports (they're used as runtime values)
+import {
   MCPAuthType,
   MCPTransportType,
   MCPServerStatus,
+} from '@dynamic-mcp/shared'
+
+// Import types that exist in shared
+import type {
   MCPServer,
-  MCPCapabilities,
-  MCPAuthentication,
-  MCPTransport,
-  MCPServerConfig,
-  MCPSettings,
-  MCPGlobalConfig,
-  MCPTool,
-  MCPResource,
-  MCPPrompt,
-  MCPPromptArgument,
 } from '@dynamic-mcp/shared'
 
 // Re-export shared types for local use
@@ -28,118 +23,21 @@ export {
 
 export type {
   MCPServer,
-  MCPCapabilities,
-  MCPAuthentication,
-  MCPTransport,
-  MCPServerConfig,
-  MCPSettings,
-  MCPGlobalConfig,
-  MCPTool,
-  MCPResource,
-  MCPPrompt,
-  MCPPromptArgument,
 }
 
-
-// Message types
-export * from './message'
-
-// Chat types  
-export * from './chat'
-
-// WebSocket types
-export * from './websocket'
-
-// Model types
-export * from './model'
-
-// UI types
-export * from './ui'
-
-// Note: User types from './user' are commented out to avoid conflict with shared User type
-// Client-specific user types can be imported directly from './user' when needed
-
-// Common utility types
-export interface ApiResponse<T = unknown> {
-  data: T
-  message?: string
-  success: boolean
-}
-
-export class ApiError extends Error {
-  code?: string | number
-  details?: unknown
-  constructor(message: string, code?: string | number, details?: unknown) {
-    super(message)
-    this.name = 'ApiError'
-    this.code = code
-    this.details = details
-  }
-}
-
-export enum SortOrder {
-  Asc = 'asc',
-  Desc = 'desc'
-}
-
-export interface PaginationParams {
-  page?: number
-  limit?: number
-  sort?: string
-  order?: SortOrder
-}
-
-// Settings types
-export interface Settings {
-  defaultProvider: string
-  defaultModel: string
-  thinkingBudget: number
-  responseBudget: number
-  // MCP Global Settings
-  mcpEnableDebugLogging: boolean
-  mcpDefaultTimeout: number
-  mcpMaxConcurrentConnections: number
-  mcpAutoDiscovery: boolean
-}
-
-export interface GetSettingsResponse extends Settings {}
-
-export interface UpdateSettingsRequest extends Partial<Settings> {}
-
-export interface UpdateSettingsResponse extends Settings {}
-
-// MCP (Model Context Protocol) types
-export interface MCPServer {
-  id: string
-  name: string
-  version: string
-  description?: string
-  transport: MCPTransport
-  authentication?: MCPAuthentication
-  capabilities: MCPCapabilities
-  status: MCPServerStatus
-  config: MCPServerConfig
-  lastConnected?: Date
-  isEnabled: boolean
-}
-
+// Local MCP type definitions (should eventually move to shared)
 export interface MCPTransport {
   type: MCPTransportType
   config: MCPTransportConfig
 }
 
 export interface MCPTransportConfig {
-  // For stdio transport
   command?: string
   args?: string[]
   env?: Record<string, string>
-  
-  // For HTTP transports
   baseUrl?: string
   timeout?: number
   retryAttempts?: number
-  
-  // For streamable HTTP
   sessionId?: string
 }
 
@@ -149,18 +47,13 @@ export interface MCPAuthentication {
 }
 
 export interface MCPAuthConfig {
-  // OAuth config
   clientId?: string
   clientSecret?: string
   authUrl?: string
   tokenUrl?: string
   scopes?: string[]
-  
-  // API Key config
   apiKey?: string
   headerName?: string
-  
-  // Bearer token config
   token?: string
 }
 
@@ -201,6 +94,15 @@ export interface MCPPromptArgument {
   type: string
 }
 
+export interface MCPServerConfig {
+  autoConnect: boolean
+  connectionTimeout: number
+  maxRetries: number
+  retryDelay: number
+  validateCertificates: boolean
+  debug: boolean
+}
+
 // Database enums (matching Prisma schema)
 export enum MCPTransportTypeDB {
   STDIO = 'STDIO',
@@ -215,23 +117,80 @@ export enum MCPAuthTypeDB {
   BEARER = 'BEARER'
 }
 
-export interface MCPServerConfig {
-  autoConnect: boolean
-  connectionTimeout: number
-  maxRetries: number
-  retryDelay: number
-  validateCertificates: boolean
-  debug: boolean
+// Message types
+export * from './message'
+
+// Chat types  
+export * from './chat'
+
+// WebSocket types
+export * from './websocket'
+
+// Model types
+export * from './model'
+
+// UI types
+export * from './ui'
+
+// Common utility types
+export interface ApiResponse<T = unknown> {
+  data: T
+  message?: string
+  success: boolean
 }
 
+export class ApiError extends Error {
+  code?: string | number
+  details?: unknown
+  constructor(message: string, code?: string | number, details?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.details = details
+  }
+}
+
+export enum SortOrder {
+  Asc = 'asc',
+  Desc = 'desc'
+}
+
+export interface PaginationParams {
+  page?: number
+  limit?: number
+  sort?: string
+  order?: SortOrder
+}
+
+// Settings types
+export interface Settings {
+  defaultProvider: string
+  defaultModel: string
+  thinkingBudget: number
+  responseBudget: number
+  mcpEnableDebugLogging: boolean
+  mcpDefaultTimeout: number
+  mcpMaxConcurrentConnections: number
+  mcpAutoDiscovery: boolean
+}
+
+export interface GetSettingsResponse extends Settings {}
+
+export interface UpdateSettingsRequest extends Partial<Settings> {}
+
+export interface UpdateSettingsResponse extends Settings {}
+
+// Client-specific MCP types
 export interface MCPSettings {
   servers: MCPServer[]
-  globalConfig: {
-    enableDebugLogging: boolean
-    defaultTimeout: number
-    maxConcurrentConnections: number
-    autoDiscovery: boolean
-  }
+  globalConfig: MCPGlobalConfig
+}
+
+export interface MCPGlobalConfig {
+  enableDebugLogging: boolean
+  defaultTimeout: number
+  maxConcurrentConnections: number
+  autoDiscovery: boolean
 }
 
 export interface PaginatedResponse<T> {

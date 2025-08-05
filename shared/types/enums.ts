@@ -11,14 +11,13 @@ export enum MCPServerStatus {
 
 export enum MCPTransportType {
   STDIO = 'STDIO',
-  HTTP = 'HTTP',
+  SSE = 'SSE',
   STREAMABLE_HTTP = 'STREAMABLE_HTTP',
-  WEBSOCKET = 'WEBSOCKET',
 }
 
 export enum MCPAuthType {
   NONE = 'NONE',
-  API_KEY = 'API_KEY',
+  OAUTH = 'OAUTH',
+  APIKEY = 'APIKEY',
   BEARER = 'BEARER',
-  OAUTH2 = 'OAUTH2',
 }
