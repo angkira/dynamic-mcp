@@ -51,7 +51,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const { email, password } = request.body;
+    const { email, password } = request.body as { email: string; password: string };
     try {
       const result = await fastify.jwtService.login(email, password);
       if (!result) {

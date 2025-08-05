@@ -433,6 +433,8 @@ SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
 
 - **Interactive tools** - interactive tools widgets - from regular confirmation to the data collection
 - **Internet access** - live chat retrieving the data from the real world, helping you to generate your MCP
+- **Welcome message** - instructions, guide, tools and capabilities overview
+- **Fastify:5 migration** - usage of up-to-date libs is important
 
 ## 📝 License
 

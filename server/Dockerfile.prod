@@ -25,6 +25,9 @@ COPY prisma/ ./prisma/
 # Install all dependencies
 RUN npm ci
 
+# Create dist directories with proper permissions
+RUN mkdir -p server/dist shared/dist && chmod 755 server/dist shared/dist
+
 # Build shared first, then server
 RUN cd shared && npm run build
 RUN cd server && npm run build:all
@@ -46,8 +49,8 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
 
-# Make MCP servers executable
-RUN chmod +x ./server/dist/mcp-servers/*.js
+# Make MCP servers executable if they exist
+RUN find ./server/dist -name "*.js" -path "*/mcp-servers/*" -exec chmod +x {} \; 2>/dev/null || true
 
 EXPOSE 3000
 CMD ["node", "server/dist/app.js"]

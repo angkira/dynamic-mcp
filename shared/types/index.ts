@@ -18,6 +18,11 @@ export type {
   StreamingMessage,
 } from './message';
 
+export type {
+  ConversationMessage,
+  LlmService,
+} from './llm';
+
 export type { Chat, User, Settings } from './chat';
 
 // API types - all interfaces
