@@ -2,8 +2,7 @@
   <div>
     <aside class="chat-sidebar" :style="{ width: ui.sidebarWidth }">
       <div class="sidebar-header">
-        <button v-if="!ui.isMobile" @click="toggleSidebarAndContent" class="collapse-btn"
-          :title="isCollapsed ? 'Expand' : 'Collapse'">
+        <button @click="toggleSidebarAndContent" class="collapse-btn" :title="isCollapsed ? 'Expand' : 'Collapse'">
           <FontAwesomeIcon icon="bars" class="collapse-icon" :class="{ 'rotate-180': isCollapsed }" />
         </button>
         <!-- Settings Button -->
