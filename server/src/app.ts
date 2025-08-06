@@ -58,16 +58,16 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   });
 
   // Register auth routes (no JWT required)
-  await fastify.register(authRoute, { prefix: '/api/auth' });
+  await fastify.register(authRoute, { prefix: '/auth' });
 
   // Register the root route separately (no JWT required)
   await fastify.register(root, { prefix: '/' });
 
     // JWT-protected routes
   fastify.addHook('preHandler', async (request, reply) => {
-    // Skip JWT for certain routes - need to be more specific with route matching
+    // Skip JWT for certain routes - nginx strips /api prefix so we check both patterns
     const url = request.url.split('?')[0]; // Remove query parameters for matching
-    const publicRoutes = ['/api/auth', '/health', '/docs'];
+    const publicRoutes = ['/api/auth', '/auth', '/health', '/docs'];
     const isRootRoute = url === '/';
     const isPublicRoute = publicRoutes.some(route => url.startsWith(route)) || isRootRoute;
     
@@ -77,16 +77,16 @@ export default async function (fastify: FastifyInstance, opts: FastifyPluginOpti
   });
 
   // Register specific API routes (JWT protected)
-  await fastify.register(modelsRoute, { prefix: '/api/models' });
-  await fastify.register(chatsRoute, { prefix: '/api/chats' });
-  await fastify.register(configRoute, { prefix: '/api/config' });
-  await fastify.register(messageRoute, { prefix: '/api/message' });
+  await fastify.register(modelsRoute, { prefix: '/models' });
+  await fastify.register(chatsRoute, { prefix: '/chats' });
+  await fastify.register(configRoute, { prefix: '/config' });
+  await fastify.register(messageRoute, { prefix: '/message' });
   
-  await fastify.register(settingsRoute, { prefix: '/api/settings' });
+  await fastify.register(settingsRoute, { prefix: '/settings' });
   
-  await fastify.register(mcpRoute, { prefix: '/api/mcp' });
+  await fastify.register(mcpRoute, { prefix: '/mcp' });
   
-  await fastify.register(memoryRoute, { prefix: '/api/memory' });
+  await fastify.register(memoryRoute, { prefix: '/memory' });
 }
 
 // Start the server if this file is run directly
