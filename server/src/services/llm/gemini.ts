@@ -226,140 +226,172 @@ export class GeminiService implements LlmService {
   }
 
   formatTools(tools: MCPToolForLLM[]): FunctionDeclaration[] {
-    return tools.map(tool => {
-      const { metadata, parameters, ...rest } = tool;
+    return tools.map((tool, index) => {
+      try {
+        const { metadata, parameters, ...rest } = tool;
 
-      // Handle JSON Schema format (parameters contains inputSchema structure)
-      const schema = parameters;
-      const properties: Record<string, Schema> = {};
+        // Initialize with empty schema
+        let properties: Record<string, Schema> = {};
+        let required: string[] = [];
 
-      // Extract properties from JSON Schema format
-      if (schema?.properties) {
-        Object.entries(schema.properties).forEach(([key, value]: [string, any]) => {
-          // Map JSON Schema types to Google SchemaType enum values
-          let schemaType: SchemaType;
-          switch (value.type?.toLowerCase()) {
-            case 'string':
-              schemaType = SchemaType.STRING;
-              break;
-            case 'number':
-            case 'integer':
-              schemaType = SchemaType.NUMBER;
-              break;
-            case 'boolean':
-              schemaType = SchemaType.BOOLEAN;
-              break;
-            case 'array':
-              schemaType = SchemaType.ARRAY;
-              break;
-            case 'object':
-              schemaType = SchemaType.OBJECT;
-              break;
-            default:
-              console.warn(`Unknown parameter type: ${value.type}, defaulting to STRING`);
-              schemaType = SchemaType.STRING;
-          }
-
-          // Build the property schema based on type
-          let propertySchema: Schema;
-
-          // Build description with constraints
-          let description = value.description || '';
-          if (value.minimum !== undefined) {
-            description += ` (minimum: ${value.minimum})`;
-          }
-          if (value.maximum !== undefined) {
-            description += ` (maximum: ${value.maximum})`;
-          }
-
-          // Create schema based on type
-          switch (schemaType) {
-            case SchemaType.STRING:
-              if (value.enum) {
-                propertySchema = {
-                  type: SchemaType.STRING,
-                  enum: value.enum,
-                  description
-                };
-              } else {
-                propertySchema = {
-                  type: SchemaType.STRING,
-                  description
-                };
+        // Handle different parameter formats
+        if (parameters && typeof parameters === 'object') {
+          // Case 1: JSON Schema format (new format)
+          if (parameters.type === 'object' && parameters.properties) {
+            Object.entries(parameters.properties).forEach(([key, value]: [string, any]) => {
+              if (typeof value === 'object' && value !== null) {
+                properties[key] = this.convertJsonSchemaToGoogleSchema(value);
               }
-              break;
-            case SchemaType.NUMBER:
-              propertySchema = {
-                type: SchemaType.NUMBER,
-                description
-              };
-              break;
-            case SchemaType.BOOLEAN:
-              propertySchema = {
-                type: SchemaType.BOOLEAN,
-                description
-              };
-              break;
-            case SchemaType.ARRAY:
-              // Handle array item types
-              let itemSchema: Schema;
-              if (value.items?.type) {
-                switch (value.items.type.toLowerCase()) {
-                  case 'string':
-                    itemSchema = { type: SchemaType.STRING };
-                    break;
-                  case 'number':
-                  case 'integer':
-                    itemSchema = { type: SchemaType.NUMBER };
-                    break;
-                  case 'boolean':
-                    itemSchema = { type: SchemaType.BOOLEAN };
-                    break;
-                  case 'object':
-                    itemSchema = { type: SchemaType.OBJECT, properties: {} };
-                    break;
-                  default:
-                    itemSchema = { type: SchemaType.STRING };
+            });
+            required = Array.isArray(parameters.required) ? parameters.required : [];
+          }
+          // Case 2: Legacy format with optional field
+          else if (Object.values(parameters).some((v: any) => typeof v === 'object' && 'optional' in v)) {
+            Object.entries(parameters).forEach(([key, value]: [string, any]) => {
+              if (typeof value === 'object' && value !== null) {
+                properties[key] = this.convertLegacyParameterToGoogleSchema(value);
+                if (!value.optional) {
+                  required.push(key);
                 }
-              } else {
-                itemSchema = { type: SchemaType.STRING };
               }
-              propertySchema = {
-                type: SchemaType.ARRAY,
-                items: itemSchema,
-                description
-              };
-              break;
-            case SchemaType.OBJECT:
-              propertySchema = {
-                type: SchemaType.OBJECT,
-                properties: {},
-                description
-              };
-              break;
-            default:
-              propertySchema = {
-                type: SchemaType.STRING,
-                description
-              };
+            });
           }
+          // Case 3: Direct properties (fallback)
+          else {
+            Object.entries(parameters).forEach(([key, value]: [string, any]) => {
+              if (typeof value === 'object' && value !== null) {
+                properties[key] = this.convertJsonSchemaToGoogleSchema(value);
+              } else {
+                // Simple value, treat as string
+                properties[key] = {
+                  type: SchemaType.STRING,
+                  description: `Parameter: ${key}`
+                };
+              }
+            });
+          }
+        }
 
-          properties[key] = propertySchema;
-        });
+        return {
+          name: rest.name,
+          description: rest.description || `Tool: ${rest.name}`,
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties,
+            required,
+          },
+        };
+      } catch (error) {
+        console.error(`Error formatting tool ${index} (${tool.name}):`, error);
+        // Return a safe fallback
+        return {
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {},
+            required: [],
+          },
+        };
       }
+    }) as FunctionDeclaration[];
+  }
 
-      // Get required fields from JSON Schema
-      const required = schema?.required || [];
+  private convertJsonSchemaToGoogleSchema(jsonSchema: any): Schema {
+    const description = jsonSchema.description || '';
 
-      return {
-        name: rest.name,
-        description: rest.description,
-        parameters: {
+    switch (jsonSchema.type?.toLowerCase()) {
+      case 'string':
+        if (jsonSchema.enum && Array.isArray(jsonSchema.enum)) {
+          return {
+            type: SchemaType.STRING,
+            enum: jsonSchema.enum,
+            description
+          };
+        }
+        return {
+          type: SchemaType.STRING,
+          description
+        };
+
+      case 'number':
+      case 'integer':
+        return {
+          type: SchemaType.NUMBER,
+          description
+        };
+
+      case 'boolean':
+        return {
+          type: SchemaType.BOOLEAN,
+          description
+        };
+
+      case 'array':
+        return {
+          type: SchemaType.ARRAY,
+          items: jsonSchema.items ? this.convertJsonSchemaToGoogleSchema(jsonSchema.items) : { type: SchemaType.STRING, description: 'Array item' },
+          description
+        };
+
+      case 'object':
+        const properties: Record<string, Schema> = {};
+        if (jsonSchema.properties) {
+          Object.entries(jsonSchema.properties).forEach(([key, value]: [string, any]) => {
+            properties[key] = this.convertJsonSchemaToGoogleSchema(value);
+          });
+        }
+        return {
           type: SchemaType.OBJECT,
           properties,
-          required,
-        },
-      };
-    }) as FunctionDeclaration[];
+          description
+        };
+
+      default:
+        return {
+          type: SchemaType.STRING,
+          description
+        };
+    }
+  }
+
+  private convertLegacyParameterToGoogleSchema(param: any): Schema {
+    const description = param.description || '';
+
+    switch (param.type?.toLowerCase()) {
+      case 'string':
+        return {
+          type: SchemaType.STRING,
+          description
+        };
+      case 'number':
+      case 'integer':
+        return {
+          type: SchemaType.NUMBER,
+          description
+        };
+      case 'boolean':
+        return {
+          type: SchemaType.BOOLEAN,
+          description
+        };
+      case 'array':
+        return {
+          type: SchemaType.ARRAY,
+          items: { type: SchemaType.STRING, description: 'Array item' },
+          description
+        };
+      case 'object':
+        return {
+          type: SchemaType.OBJECT,
+          properties: {},
+          description
+        };
+      default:
+        return {
+          type: SchemaType.STRING,
+          description
+        };
+    }
   }
 }
