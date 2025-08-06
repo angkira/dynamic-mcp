@@ -23,10 +23,9 @@ class SocketService {
       return
     }
 
-    // Use dedicated socket URL or fallback to API URL without /api suffix
+    // Use dedicated socket URL or fallback to current origin
     const socketUrl = import.meta.env.VITE_SOCKET_URL || 
-                     (import.meta.env.VITE_API_URL?.replace('/api', '')) || 
-                     "http://localhost:3000"
+                     window.location.origin
     
     // Configure socket with authentication
     const socketOptions: any = {
