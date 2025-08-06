@@ -77,6 +77,10 @@ model MCPServer {
   transportTimeout           Int?
   transportRetryAttempts     Int?
   transportSessionId         String?
+  transportToolEndpoint      String?          @default("/call-tool")
+  transportHealthEndpoint    String?          @default("/health")
+  transportToolsEndpoint     String?          @default("/tools")
+  transportResourcesEndpoint String?          @default("/resources")
   authType                   MCPAuthType      @default(NONE)
   authClientId               String?
   authClientSecret           String?

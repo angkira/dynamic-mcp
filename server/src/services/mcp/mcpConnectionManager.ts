@@ -5,10 +5,10 @@ import { PrismaClient } from '@prisma/client'
 import type { MCPServer, MCPServerStatus } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import type { 
-  MCPCapabilities, 
-  MCPToolForLLM, 
-  MCPResourceForLLM, 
+import type {
+  MCPCapabilities,
+  MCPToolForLLM,
+  MCPResourceForLLM,
   MCPConnectionInfo,
   MCPHealthCheckResult,
   MCPServerStatusUpdateData,
@@ -31,7 +31,7 @@ export class McpConnectionManager {
     server: MCPServer,
     lastConnected: Date
   }> = new Map()
-  
+
   private prisma: PrismaClient
   private globalSettings: {
     mcpEnableDebugLogging: boolean
@@ -56,7 +56,8 @@ export class McpConnectionManager {
     }
 
     try {
-      const healthUrl = `${server.transportBaseUrl}/health`
+      const healthEndpoint = (server as any).transportHealthEndpoint || '/health'
+      const healthUrl = `${server.transportBaseUrl}${healthEndpoint}`
       const response = await fetch(healthUrl, {
         method: 'GET',
         signal: AbortSignal.timeout(timeoutMs),
@@ -77,17 +78,17 @@ export class McpConnectionManager {
     if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
       return await this.checkHttpDaemonHealth(server, timeoutMs)
     }
-    
+
     // For STDIO servers, verify connection exists in our connections map
     if (server.transportType === 'STDIO') {
       return this.connections.has(server.id)
     }
-    
+
     // For internal servers, assume they're always available
     if (server.transportCommand === 'internal') {
       return true
     }
-    
+
     return false
   }
 
@@ -101,11 +102,11 @@ export class McpConnectionManager {
     mcpAutoDiscovery: boolean
   }) {
     this.globalSettings = settings
-    
+
     if (settings.mcpEnableDebugLogging) {
       console.log('🔧 MCP Debug logging enabled')
     }
-    
+
     console.log(`🔧 MCP Settings updated:`, {
       debugLogging: settings.mcpEnableDebugLogging,
       defaultTimeout: settings.mcpDefaultTimeout,
@@ -119,10 +120,10 @@ export class McpConnectionManager {
    */
   async initialize(userId: number = 1) {
     console.log('🔌 Initializing MCP Connection Manager...')
-    
+
     // Get all enabled servers for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
-      where: { 
+      where: {
         isEnabled: true,
         userId: userId
       }
@@ -132,7 +133,7 @@ export class McpConnectionManager {
 
     // Connect to servers with autoConnect enabled
     const autoConnectServers = enabledServers.filter(s => s.configAutoConnect)
-    
+
     for (const server of autoConnectServers) {
       try {
         await this.connectToServer(server)
@@ -142,7 +143,7 @@ export class McpConnectionManager {
         await this.updateServerStatus(server.id, 'ERROR')
       }
     }
-    
+
     // Start polling for disconnected servers
     this.startPolling(userId)
   }
@@ -154,9 +155,9 @@ export class McpConnectionManager {
     if (this.pollingTimer) {
       return // Already polling
     }
-    
+
     console.log(`🔄 Starting MCP server polling every ${this.POLLING_INTERVAL_MS / 1000} seconds`)
-    
+
     this.pollingTimer = setInterval(async () => {
       try {
         await this.checkAndReconnectServers(userId)
@@ -203,7 +204,7 @@ export class McpConnectionManager {
     try {
       // Get all enabled servers that are not currently connected
       const disconnectedServers = await this.prisma.mCPServer.findMany({
-        where: { 
+        where: {
           isEnabled: true,
           userId: userId,
           status: { in: ['DISCONNECTED', 'ERROR', 'CONNECTING'] }
@@ -237,7 +238,7 @@ export class McpConnectionManager {
           if (server.status === 'CONNECTING' && server.updatedAt) {
             const timeSinceConnecting = Date.now() - server.updatedAt.getTime()
             const maxConnectingTime = 2 * 60 * 1000 // 2 minutes
-            
+
             if (timeSinceConnecting < maxConnectingTime) {
               // Still within reasonable connecting time, skip this iteration
               if (this.globalSettings?.mcpEnableDebugLogging) {
@@ -286,7 +287,7 @@ export class McpConnectionManager {
       }
 
       console.log(`🔌 Connecting to MCP server: ${server.name} (${server.transportType})`)
-      
+
       // Skip connection for internal server
       if (server.transportCommand === 'internal') {
         console.log(`⚡ Internal server ${server.name} - marking as connected`)
@@ -294,13 +295,22 @@ export class McpConnectionManager {
         return true
       }
 
-      // For HTTP daemon services, just check health endpoint instead of creating MCP client connection
+      // For HTTP daemon services, just check health endpoint and discover capabilities
       if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
         console.log(`🔌 Testing HTTP daemon health: ${server.name} at ${server.transportBaseUrl}`)
-        
+
         const isHealthy = await this.checkHttpDaemonHealth(server, 5000)
         if (isHealthy) {
           console.log(`✅ HTTP daemon ${server.name} is healthy`)
+
+          // Discover capabilities from HTTP daemon
+          try {
+            await this.discoverHttpDaemonCapabilities(server)
+          } catch (error) {
+            console.warn(`⚠️ Failed to discover capabilities for ${server.name}:`, error)
+            // Don't fail connection if capability discovery fails
+          }
+
           await this.updateServerStatus(server.id, 'CONNECTED')
           return true
         } else {
@@ -309,7 +319,7 @@ export class McpConnectionManager {
           return false
         }
       }
-      
+
       // Update status to connecting
       await this.updateServerStatus(server.id, 'CONNECTING')
 
@@ -321,7 +331,7 @@ export class McpConnectionManager {
 
       // Create transport based on server configuration
       let transport: Transport
-      
+
       switch (server.transportType) {
         case 'STDIO':
           if (!server.transportCommand) {
@@ -333,7 +343,7 @@ export class McpConnectionManager {
             env: (server.transportEnv as Record<string, string>) || {}
           })
           break
-          
+
         case 'STREAMABLE_HTTP':
           if (!server.transportBaseUrl) {
             throw new Error('Streamable HTTP transport requires a base URL')
@@ -342,14 +352,14 @@ export class McpConnectionManager {
             new URL(server.transportBaseUrl)
           ) as Transport
           break
-          
+
         default:
           throw new Error(`Unsupported transport type: ${server.transportType}`)
       }
 
       // Connect with timeout
       const connectPromise = client.connect(transport)
-      const timeoutPromise = new Promise<void>((_, reject) => 
+      const timeoutPromise = new Promise<void>((_, reject) =>
         setTimeout(() => reject(new Error('Connection timeout')), server.configConnectionTimeout)
       )
 
@@ -406,13 +416,13 @@ export class McpConnectionManager {
 
       // Close the client connection
       await connection.client.close()
-      
+
       // Remove from connections map
       this.connections.delete(serverId)
-      
+
       // Update status
       await this.updateServerStatus(serverId, 'DISCONNECTED')
-      
+
       console.log(`🔌 Disconnected from MCP server: ${connection.server.name}`)
       return true
 
@@ -427,16 +437,16 @@ export class McpConnectionManager {
    */
   async getAllAvailableTools(userId: number = 1): Promise<MCPToolForLLM[]> {
     const allTools: MCPToolForLLM[] = []
-    
+
     // Get enabled AND connected servers from database for this user
     const enabledServers = await this.prisma.mCPServer.findMany({
-      where: { 
+      where: {
         isEnabled: true,
         status: 'CONNECTED',  // Only include connected servers
         userId: userId
       }
     })
-    
+
     for (const server of enabledServers) {
       try {
         // Verify server is actually reachable before including its tools
@@ -445,11 +455,11 @@ export class McpConnectionManager {
           console.warn(`⚠️ Server ${server.name} (${server.transportType}) is not reachable, skipping tools`)
           continue
         }
-        
+
         // Get tools from server capabilities stored in database
         const capabilities = server.capabilities as any
         const tools = capabilities?.tools || []
-        
+
         // Convert each tool to the LLM format
         for (const tool of tools) {
           allTools.push({
@@ -465,13 +475,13 @@ export class McpConnectionManager {
             }
           })
         }
-        
+
         console.log(`📋 Loaded ${tools.length} tools from connected ${server.name} (${server.transportCommand})`)
       } catch (error) {
         console.error(`❌ Error getting tools from server ${server.name}:`, error)
       }
     }
-    
+
     console.log(`🔧 Total tools available for LLM: ${allTools.length} from ${enabledServers.length} connected servers`)
     return allTools
   }
@@ -481,10 +491,10 @@ export class McpConnectionManager {
    */
   async getAllAvailableResources(userId: number = 1): Promise<MCPResourceForLLM[]> {
     const allResources: MCPResourceForLLM[] = []
-    
+
     // Get enabled AND connected internal servers that have resources for this user
     const internalServers = await this.prisma.mCPServer.findMany({
-      where: { 
+      where: {
         name: { in: ['dynamic-mcp-api', 'memory'] },
         isEnabled: true,
         status: 'CONNECTED',  // Only include connected servers
@@ -492,7 +502,7 @@ export class McpConnectionManager {
         userId: userId
       }
     })
-    
+
     for (const internalServer of internalServers) {
       try {
         // Verify internal server connectivity
@@ -501,11 +511,11 @@ export class McpConnectionManager {
           console.warn(`⚠️ Internal server ${internalServer.name} is not available, skipping resources`)
           continue
         }
-        
+
         // Load internal resources from JSON configuration
         const configLoader = InternalMCPConfigLoader.getInstance()
         const internalResourceConfigs = await configLoader.getResourcesForServer(internalServer.name)
-        
+
         for (const resourceConfig of internalResourceConfigs) {
           allResources.push({
             uri: resourceConfig.uri,
@@ -516,13 +526,13 @@ export class McpConnectionManager {
             serverId: internalServer.id
           })
         }
-        
+
         console.log(`📋 Loaded ${internalResourceConfigs.length} resources from connected internal server ${internalServer.name}`)
       } catch (error) {
         console.error(`❌ Error loading resources from internal server ${internalServer.name}:`, error)
       }
     }
-    
+
     // Add resources from connected external servers (only those with active connections)
     for (const [serverId, connection] of this.connections) {
       try {
@@ -530,21 +540,21 @@ export class McpConnectionManager {
         const server = await this.prisma.mCPServer.findUnique({
           where: { id: serverId }
         })
-        
+
         if (!server?.isEnabled || server.status !== 'CONNECTED') {
           console.warn(`⚠️ Server ${serverId} (${connection.server.name}) is no longer enabled or connected, skipping resources`)
           continue
         }
-        
+
         // Double-check connectivity using our verification method
         const isConnected = await this.verifyServerConnectivity(server)
         if (!isConnected) {
           console.warn(`⚠️ Server ${connection.server.name} connectivity verification failed, skipping resources`)
           continue
         }
-        
+
         const resources = await connection.client.listResources() as any;
-        
+
         for (const resource of resources.resources || []) {
           allResources.push({
             serverId,
@@ -555,13 +565,13 @@ export class McpConnectionManager {
             mimeType: resource.mimeType || undefined
           })
         }
-        
+
         console.log(`📋 Loaded ${resources.resources?.length || 0} resources from connected external server ${connection.server.name}`)
       } catch (error) {
         console.error(`Error getting resources from server ${serverId}:`, error)
       }
     }
-    
+
     console.log(`🔧 Total resources available for LLM: ${allResources.length} from connected servers`)
     return allResources
   }
@@ -594,9 +604,9 @@ export class McpConnectionManager {
 
     // First check if this is an HTTP daemon server for the specific user
     const server = await this.prisma.mCPServer.findFirst({
-      where: { 
+      where: {
         id: serverId,
-        userId: userId 
+        userId: userId
       }
     });
 
@@ -606,7 +616,8 @@ export class McpConnectionManager {
 
     // Handle HTTP daemon servers
     if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
-      const toolUrl = `${server.transportBaseUrl}/call-tool`;
+      const toolEndpoint = (server as any).transportToolEndpoint || '/call-tool'
+      const toolUrl = `${server.transportBaseUrl}${toolEndpoint}`;
       const payload = {
         name: toolName,
         arguments: (arguments_ as Record<string, unknown>) || {}
@@ -615,15 +626,15 @@ export class McpConnectionManager {
         if (this.globalSettings?.mcpEnableDebugLogging) {
           console.log(`[MCP] HTTP Tool Call Request`, { serverId, toolName, payload });
         }
-        const headers: Record<string, string> = { 
-          'Content-Type': 'application/json' 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json'
         };
-        
+
         // Add JWT token if available
         if (server.authToken) {
           headers['Authorization'] = `Bearer ${server.authToken}`;
         }
-        
+
         const response = await fetch(toolUrl, {
           method: 'POST',
           headers,
@@ -695,7 +706,7 @@ export class McpConnectionManager {
             try {
               // Parse the JSON content from the MCP response
               const actualData = JSON.parse(mcpResult.content[0].text);
-              
+
               return {
                 stdout: mcpResult.content[0].text,
                 stderr: '',
@@ -834,9 +845,9 @@ export class McpConnectionManager {
   async readResource(userId: number, serverId: number, uri: string): Promise<ReadResourceResult> {
     // Verify server belongs to user
     const server = await this.prisma.mCPServer.findFirst({
-      where: { 
+      where: {
         id: serverId,
-        userId: userId 
+        userId: userId
       }
     });
 
@@ -872,7 +883,7 @@ export class McpConnectionManager {
         name: promptName,
         arguments: arguments_ as Record<string, string>
       })
-      
+
       return result as any;
     } catch (error) {
       console.error(`Error getting prompt ${promptName} from server ${serverId}:`, error)
@@ -885,7 +896,7 @@ export class McpConnectionManager {
    */
   getConnectionStatus(userId: number): MCPConnectionInfo[] {
     const status: MCPConnectionInfo[] = []
-    
+
     for (const [serverId, connection] of this.connections) {
       // Only include servers that belong to this user
       if (connection.server.userId === userId) {
@@ -897,7 +908,7 @@ export class McpConnectionManager {
         })
       }
     }
-    
+
     return status
   }
 
@@ -910,13 +921,46 @@ export class McpConnectionManager {
       if (status === 'CONNECTED') {
         updateData.lastConnected = new Date()
       }
-      
+
       await this.prisma.mCPServer.update({
         where: { id: serverId },
         data: updateData
       })
     } catch (error) {
       console.error(`Error updating server status for ${serverId}:`, error)
+    }
+  }
+
+  /**
+   * Discover capabilities from HTTP daemon server
+   */
+  private async discoverHttpDaemonCapabilities(server: MCPServer) {
+    const toolsEndpoint = (server as any).transportToolsEndpoint || '/tools'
+    const toolsUrl = `${server.transportBaseUrl}${toolsEndpoint}`
+
+    try {
+      const response = await fetch(toolsUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (response.ok) {
+        const capabilitiesData = await response.json() as any
+        console.log(`📋 Discovered capabilities for ${server.name}:`, capabilitiesData)
+
+        // Update server capabilities in database
+        await this.updateServerCapabilities(server.id, {
+          tools: capabilitiesData.tools || [],
+          resources: capabilitiesData.resources || [],
+          prompts: capabilitiesData.prompts || []
+        })
+      } else {
+        console.warn(`⚠️ Failed to fetch capabilities from ${toolsUrl}: ${response.status} ${response.statusText}`)
+      }
+    } catch (error) {
+      console.warn(`⚠️ Error discovering capabilities for ${server.name}:`, error)
+      throw error
     }
   }
 
@@ -939,10 +983,10 @@ export class McpConnectionManager {
    */
   async cleanup() {
     console.log('🧹 Cleaning up MCP connections...')
-    
+
     // Stop polling first
     this.stopPolling()
-    
+
     for (const [serverId, connection] of this.connections) {
       try {
         await connection.client.close()
@@ -951,7 +995,7 @@ export class McpConnectionManager {
         console.error(`Error closing connection to server ${serverId}:`, error)
       }
     }
-    
+
     this.connections.clear()
     await this.prisma.$disconnect()
   }
@@ -961,15 +1005,15 @@ export class McpConnectionManager {
    */
   async refreshConnections(userId: number = 1) {
     console.log('🔄 Refreshing MCP connections...')
-    
+
     // Stop polling temporarily
     this.stopPolling()
-    
+
     // Close existing connections
     for (const [serverId] of this.connections) {
       await this.disconnectFromServer(serverId)
     }
-    
+
     // Reinitialize (this will restart polling)
     await this.initialize(userId)
   }
@@ -979,7 +1023,7 @@ export class McpConnectionManager {
    */
   async healthCheck(userId: number): Promise<MCPHealthCheckResult[]> {
     const results: MCPHealthCheckResult[] = []
-    
+
     for (const [serverId, connection] of this.connections) {
       // Only check health for servers that belong to this user
       if (connection.server.userId === userId) {
@@ -998,13 +1042,13 @@ export class McpConnectionManager {
             healthy: false,
             error: error instanceof Error ? error.message : 'Unknown error'
           })
-          
+
           // Update status to error
           await this.updateServerStatus(serverId, 'ERROR')
         }
       }
     }
-    
+
     return results
   }
 }

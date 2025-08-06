@@ -31,6 +31,10 @@ interface CreateServerArgs {
   transportCommand: string;
   transportArgs?: string[];
   transportBaseUrl?: string;
+  transportToolEndpoint?: string;
+  transportHealthEndpoint?: string;
+  transportToolsEndpoint?: string;
+  transportResourcesEndpoint?: string;
   authType?: string;
   authApiKey?: string;
   isEnabled?: boolean;
@@ -42,6 +46,11 @@ interface UpdateServerArgs extends MCPServerArgs {
   isEnabled?: boolean;
   transportCommand?: string;
   transportArgs?: string[];
+  transportBaseUrl?: string;
+  transportToolEndpoint?: string;
+  transportHealthEndpoint?: string;
+  transportToolsEndpoint?: string;
+  transportResourcesEndpoint?: string;
 }
 
 interface ToggleServerArgs extends MCPServerArgs {
@@ -128,6 +137,10 @@ class DynamicMCPAPIServer {
                   description: "Arguments for the transport command",
                 },
                 transportBaseUrl: { type: "string", description: "Base URL for HTTP-based transports" },
+                transportToolEndpoint: { type: "string", description: "Endpoint for tool calls (default: /call-tool)" },
+                transportHealthEndpoint: { type: "string", description: "Endpoint for health checks (default: /health)" },
+                transportToolsEndpoint: { type: "string", description: "Endpoint for tools discovery (default: /tools)" },
+                transportResourcesEndpoint: { type: "string", description: "Endpoint for resources (default: /resources)" },
                 authType: {
                   type: "string",
                   enum: ["NONE", "OAUTH", "APIKEY", "BEARER"],
@@ -156,6 +169,11 @@ class DynamicMCPAPIServer {
                   items: { type: "string" },
                   description: "New transport arguments",
                 },
+                transportBaseUrl: { type: "string", description: "New base URL for HTTP transport" },
+                transportToolEndpoint: { type: "string", description: "New tool call endpoint" },
+                transportHealthEndpoint: { type: "string", description: "New health check endpoint" },
+                transportToolsEndpoint: { type: "string", description: "New tools discovery endpoint" },
+                transportResourcesEndpoint: { type: "string", description: "New resources endpoint" },
                 userId: { type: "number", description: "User ID for authorization" },
               },
             },
@@ -292,6 +310,7 @@ class DynamicMCPAPIServer {
   }
 
   private async handleCreateServer(userId: number, args: CreateServerArgs) {
+    // Create server with basic fields
     const server = await this.prisma.mCPServer.create({
       data: {
         userId: userId,
@@ -304,6 +323,7 @@ class DynamicMCPAPIServer {
         transportCommand: args.transportCommand,
         transportArgs: args.transportArgs || [],
         transportEnv: {},
+        transportBaseUrl: args.transportBaseUrl,
         authType: args.authType as any || 'NONE',
         authApiKey: args.authApiKey,
         configAutoConnect: true,
@@ -315,6 +335,19 @@ class DynamicMCPAPIServer {
         capabilities: { tools: [], resources: [], prompts: [] },
       },
     });
+
+    // Update with endpoint configuration using raw SQL since Prisma types aren't updated yet
+    if (args.transportToolEndpoint || args.transportHealthEndpoint || args.transportToolsEndpoint || args.transportResourcesEndpoint) {
+      await this.prisma.$executeRaw`
+        UPDATE "MCPServer" 
+        SET 
+          "transportToolEndpoint" = ${args.transportToolEndpoint || '/call-tool'},
+          "transportHealthEndpoint" = ${args.transportHealthEndpoint || '/health'},
+          "transportToolsEndpoint" = ${args.transportToolsEndpoint || '/tools'},
+          "transportResourcesEndpoint" = ${args.transportResourcesEndpoint || '/resources'}
+        WHERE id = ${server.id}
+      `;
+    }
 
     return {
       content: [
@@ -361,6 +394,11 @@ class DynamicMCPAPIServer {
     if (args.isEnabled !== undefined) updateData.isEnabled = args.isEnabled;
     if (args.transportCommand !== undefined) updateData.transportCommand = args.transportCommand;
     if (args.transportArgs !== undefined) updateData.transportArgs = args.transportArgs;
+    if (args.transportBaseUrl !== undefined) updateData.transportBaseUrl = args.transportBaseUrl;
+    if (args.transportToolEndpoint !== undefined) updateData.transportToolEndpoint = args.transportToolEndpoint;
+    if (args.transportHealthEndpoint !== undefined) updateData.transportHealthEndpoint = args.transportHealthEndpoint;
+    if (args.transportToolsEndpoint !== undefined) updateData.transportToolsEndpoint = args.transportToolsEndpoint;
+    if (args.transportResourcesEndpoint !== undefined) updateData.transportResourcesEndpoint = args.transportResourcesEndpoint;
 
     if (Object.keys(updateData).length === 0) {
       throw new Error('No update fields provided');
@@ -397,7 +435,7 @@ class DynamicMCPAPIServer {
 
     const whereClause = args.id ? { id: args.id } : { name: args.name };
     const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
+
     if (!server) {
       throw new Error('Server not found');
     }
@@ -501,7 +539,7 @@ class DynamicMCPAPIServer {
     // Handle different parameter formats that LLMs might use
     let serverId: number | undefined;
     let serverName: string | undefined;
-    
+
     // Try to extract server identifier from various possible parameter names
     if (args.id) {
       serverId = typeof args.id === 'string' ? parseInt(args.id) : args.id;
@@ -530,7 +568,7 @@ class DynamicMCPAPIServer {
 
     const whereClause = serverId ? { id: serverId } : { name: serverName };
     const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
+
     if (!server) {
       throw new Error(`Server not found with ${serverId ? `id: ${serverId}` : `name: ${serverName}`}`);
     }
@@ -559,7 +597,7 @@ class DynamicMCPAPIServer {
   async run() {
     // Create HTTP server daemon
     const app = fastify({ logger: true });
-    
+
     // Register CORS
     await app.register(cors, {
       origin: true,
@@ -575,14 +613,14 @@ class DynamicMCPAPIServer {
 
       const authHeader = request.headers.authorization;
       const user = this.verifyJWT(authHeader);
-      
+
       if (!user) {
-        return reply.status(401).send({ 
+        return reply.status(401).send({
           success: false,
-          error: 'Unauthorized: Invalid or missing JWT token' 
+          error: 'Unauthorized: Invalid or missing JWT token'
         });
       }
-      
+
       (request as any).user = user;
     });
 
@@ -596,7 +634,7 @@ class DynamicMCPAPIServer {
       try {
         const { name, arguments: args } = request.body as { name: string; arguments: any };
         const userId = (request as any).user.userId;
-        
+
         let result;
         switch (name) {
           case 'mcp_list_servers':
@@ -627,7 +665,7 @@ class DynamicMCPAPIServer {
             reply.code(400);
             return { error: `Unknown tool: ${name}` };
         }
-        
+
         return result;
       } catch (error) {
         reply.code(500);
@@ -714,6 +752,10 @@ class DynamicMCPAPIServer {
                 transportCommand: { type: "string", description: "Command to run the server" },
                 transportArgs: { type: "array", items: { type: "string" }, description: "Command arguments" },
                 transportBaseUrl: { type: "string", description: "Base URL for HTTP transport" },
+                transportToolEndpoint: { type: "string", description: "Endpoint for tool calls (default: /call-tool)" },
+                transportHealthEndpoint: { type: "string", description: "Endpoint for health checks (default: /health)" },
+                transportToolsEndpoint: { type: "string", description: "Endpoint for tools discovery (default: /tools)" },
+                transportResourcesEndpoint: { type: "string", description: "Endpoint for resources (default: /resources)" },
                 authType: { type: "string", description: "Authentication type" },
                 authApiKey: { type: "string", description: "API key for authentication" },
                 isEnabled: { type: "boolean", description: "Whether server is enabled" }
@@ -726,7 +768,7 @@ class DynamicMCPAPIServer {
     });
 
     const PORT = parseInt(process.env.MCP_API_PORT || '3002');
-    
+
     try {
       await app.listen({ port: PORT, host: '0.0.0.0' });
       console.log(`🚀 Dynamic MCP API Server daemon running on http://0.0.0.0:${PORT}`);

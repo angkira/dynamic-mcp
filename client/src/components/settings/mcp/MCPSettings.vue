@@ -1,23 +1,13 @@
 <template>
   <div class="mcp-settings">
-    <n-form
-      ref="formRef"
-      :model="formData"
-      :rules="formRules"
-      label-placement="left"
-      label-width="140px"
-      require-mark-placement="right-hanging"
-    >
+    <n-form ref="formRef" :model="formData" :rules="formRules" label-placement="left" label-width="140px"
+      require-mark-placement="right-hanging">
       <!-- Basic Information -->
       <div class="form-section">
         <h3 class="section-title">Basic Information</h3>
 
         <n-form-item label="Server Name" path="name" required>
-          <n-input
-            v-model:value="formData.name"
-            placeholder="Enter server name"
-            :disabled="isEditing"
-          />
+          <n-input v-model:value="formData.name" placeholder="Enter server name" :disabled="isEditing" />
         </n-form-item>
 
         <n-form-item label="Version" path="version" required>
@@ -25,12 +15,8 @@
         </n-form-item>
 
         <n-form-item label="Description" path="description">
-          <n-input
-            v-model:value="formData.description"
-            type="textarea"
-            placeholder="Optional description of the MCP server"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-          />
+          <n-input v-model:value="formData.description" type="textarea"
+            placeholder="Optional description of the MCP server" :autosize="{ minRows: 2, maxRows: 4 }" />
         </n-form-item>
 
         <n-form-item label="Enabled" path="isEnabled">
@@ -46,51 +32,29 @@
         <h3 class="section-title">Transport Configuration</h3>
 
         <n-form-item label="Transport Type" path="transport.type" required>
-          <n-select
-            v-model:value="formData.transport.type"
-            :options="transportOptions"
-            @update:value="onTransportTypeChange"
-          />
+          <n-select v-model:value="formData.transport.type" :options="transportOptions"
+            @update:value="onTransportTypeChange" />
         </n-form-item>
 
         <!-- STDIO Transport Config -->
         <template v-if="formData.transport.type === MCPTransportType.STDIO">
           <n-form-item label="Command" path="transport.config.command" required>
-            <n-input
-              v-model:value="formData.transport.config.command"
-              placeholder="e.g., node, python, ./server"
-            />
+            <n-input v-model:value="formData.transport.config.command" placeholder="e.g., node, python, ./server" />
           </n-form-item>
 
           <n-form-item label="Arguments" path="transport.config.args">
-            <n-dynamic-input
-              v-model:value="formData.transport.config.args"
-              placeholder="Add argument"
-              :min="0"
-            />
+            <n-dynamic-input v-model:value="formData.transport.config.args" placeholder="Add argument" :min="0" />
           </n-form-item>
 
           <n-form-item label="Environment Variables" path="transport.config.env">
-            <n-dynamic-input
-              v-model:value="envPairs"
-              :on-create="createEnvPair"
-              placeholder="Add environment variable"
-              :min="0"
-            >
+            <n-dynamic-input v-model:value="envPairs" :on-create="createEnvPair" placeholder="Add environment variable"
+              :min="0">
               <template #default="{ value, index }">
                 <div style="display: flex; gap: 8px; width: 100%">
-                  <n-input
-                    v-model:value="value.key"
-                    placeholder="Variable name"
-                    style="flex: 1"
-                    @update:value="updateEnvKey(index, $event)"
-                  />
-                  <n-input
-                    v-model:value="value.value"
-                    placeholder="Variable value"
-                    style="flex: 1"
-                    @update:value="updateEnvValue(index, $event)"
-                  />
+                  <n-input v-model:value="value.key" placeholder="Variable name" style="flex: 1"
+                    @update:value="updateEnvKey(index, $event)" />
+                  <n-input v-model:value="value.value" placeholder="Variable value" style="flex: 1"
+                    @update:value="updateEnvValue(index, $event)" />
                 </div>
               </template>
             </n-dynamic-input>
@@ -100,30 +64,45 @@
         <!-- HTTP Transport Config -->
         <template v-else-if="['sse', 'streamable-http'].includes(formData.transport.type)">
           <n-form-item label="Base URL" path="transport.config.baseUrl" required>
-            <n-input
-              v-model:value="formData.transport.config.baseUrl"
-              placeholder="https://example.com/mcp"
-            />
+            <n-input v-model:value="formData.transport.config.baseUrl" placeholder="https://example.com/mcp" />
+          </n-form-item>
+
+          <n-form-item label="Tool Call Endpoint" path="transport.config.toolEndpoint">
+            <n-input v-model:value="formData.transport.config.toolEndpoint" placeholder="/call-tool" />
+            <template #suffix>
+              <span class="field-help">Endpoint for executing tools</span>
+            </template>
+          </n-form-item>
+
+          <n-form-item label="Health Check Endpoint" path="transport.config.healthEndpoint">
+            <n-input v-model:value="formData.transport.config.healthEndpoint" placeholder="/health" />
+            <template #suffix>
+              <span class="field-help">Endpoint for health checks</span>
+            </template>
+          </n-form-item>
+
+          <n-form-item label="Tools Discovery Endpoint" path="transport.config.toolsEndpoint">
+            <n-input v-model:value="formData.transport.config.toolsEndpoint" placeholder="/tools" />
+            <template #suffix>
+              <span class="field-help">Endpoint for listing available tools</span>
+            </template>
+          </n-form-item>
+
+          <n-form-item label="Resources Endpoint" path="transport.config.resourcesEndpoint">
+            <n-input v-model:value="formData.transport.config.resourcesEndpoint" placeholder="/resources" />
+            <template #suffix>
+              <span class="field-help">Endpoint for accessing resources</span>
+            </template>
           </n-form-item>
 
           <n-form-item label="Timeout (ms)" path="transport.config.timeout">
-            <n-input-number
-              v-model:value="formData.transport.config.timeout"
-              :min="1000"
-              :max="30000"
-              :step="1000"
-              placeholder="10000"
-            />
+            <n-input-number v-model:value="formData.transport.config.timeout" :min="1000" :max="30000" :step="1000"
+              placeholder="10000" />
           </n-form-item>
 
           <n-form-item label="Retry Attempts" path="transport.config.retryAttempts">
-            <n-input-number
-              v-model:value="formData.transport.config.retryAttempts"
-              :min="0"
-              :max="10"
-              :step="1"
-              placeholder="3"
-            />
+            <n-input-number v-model:value="formData.transport.config.retryAttempts" :min="0" :max="10" :step="1"
+              placeholder="3" />
           </n-form-item>
         </template>
       </div>
@@ -135,11 +114,8 @@
         <h3 class="section-title">Authentication</h3>
 
         <n-form-item label="Authentication Type" path="authentication.type">
-          <n-select
-            v-model:value="formData.authentication.type"
-            :options="authOptions"
-            @update:value="onAuthTypeChange"
-          />
+          <n-select v-model:value="formData.authentication.type" :options="authOptions"
+            @update:value="onAuthTypeChange" />
         </n-form-item>
 
         <!-- OAuth Configuration -->
@@ -149,11 +125,8 @@
           </n-form-item>
 
           <n-form-item label="Client Secret" path="authentication.config.clientSecret" required>
-            <n-input
-              v-model:value="formData.authentication.config.clientSecret"
-              type="password"
-              show-password-on="mousedown"
-            />
+            <n-input v-model:value="formData.authentication.config.clientSecret" type="password"
+              show-password-on="mousedown" />
           </n-form-item>
 
           <n-form-item label="Authorization URL" path="authentication.config.authUrl" required>
@@ -165,40 +138,27 @@
           </n-form-item>
 
           <n-form-item label="Scopes" path="authentication.config.scopes">
-            <n-dynamic-input
-              v-model:value="formData.authentication.config.scopes"
-              placeholder="Add scope"
-              :min="0"
-            />
+            <n-dynamic-input v-model:value="formData.authentication.config.scopes" placeholder="Add scope" :min="0" />
           </n-form-item>
         </template>
 
         <!-- API Key Configuration -->
         <template v-else-if="formData.authentication.type === MCPAuthType.APIKEY">
           <n-form-item label="API Key" path="authentication.config.apiKey" required>
-            <n-input
-              v-model:value="formData.authentication.config.apiKey"
-              type="password"
-              show-password-on="mousedown"
-            />
+            <n-input v-model:value="formData.authentication.config.apiKey" type="password"
+              show-password-on="mousedown" />
           </n-form-item>
 
           <n-form-item label="Header Name" path="authentication.config.headerName">
-            <n-input
-              v-model:value="formData.authentication.config.headerName"
-              placeholder="X-API-Key"
-            />
+            <n-input v-model:value="formData.authentication.config.headerName" placeholder="X-API-Key" />
           </n-form-item>
         </template>
 
         <!-- Bearer Token Configuration -->
         <template v-else-if="formData.authentication.type === MCPAuthType.BEARER">
           <n-form-item label="Bearer Token" path="authentication.config.token" required>
-            <n-input
-              v-model:value="formData.authentication.config.token"
-              type="password"
-              show-password-on="mousedown"
-            />
+            <n-input v-model:value="formData.authentication.config.token" type="password"
+              show-password-on="mousedown" />
           </n-form-item>
         </template>
       </div>
@@ -215,12 +175,7 @@
         </n-form-item>
 
         <n-form-item label="Connection Timeout" path="config.connectionTimeout">
-          <n-input-number
-            v-model:value="formData.config.connectionTimeout"
-            :min="5000"
-            :max="60000"
-            :step="1000"
-          />
+          <n-input-number v-model:value="formData.config.connectionTimeout" :min="5000" :max="60000" :step="1000" />
           <template #suffix>ms</template>
         </n-form-item>
 
@@ -229,12 +184,7 @@
         </n-form-item>
 
         <n-form-item label="Retry Delay" path="config.retryDelay">
-          <n-input-number
-            v-model:value="formData.config.retryDelay"
-            :min="1000"
-            :max="30000"
-            :step="1000"
-          />
+          <n-input-number v-model:value="formData.config.retryDelay" :min="1000" :max="30000" :step="1000" />
           <template #suffix>ms</template>
         </n-form-item>
 
@@ -323,6 +273,10 @@ const formData = reactive({
       args: [] as string[],
       env: {} as Record<string, string>,
       baseUrl: '',
+      toolEndpoint: '/call-tool',
+      healthEndpoint: '/health',
+      toolsEndpoint: '/tools',
+      resourcesEndpoint: '/resources',
       timeout: 10000,
       retryAttempts: 3,
     },
@@ -442,6 +396,10 @@ const onTransportTypeChange = (type: string) => {
     args: [],
     env: {},
     baseUrl: '',
+    toolEndpoint: '/call-tool',
+    healthEndpoint: '/health',
+    toolsEndpoint: '/tools',
+    resourcesEndpoint: '/resources',
     timeout: 10000,
     retryAttempts: 3,
   }

@@ -72,6 +72,10 @@ export interface MCPServerUpdateData {
   transportTimeout?: number | null;
   transportRetryAttempts?: number | null;
   transportSessionId?: string | null;
+  transportToolEndpoint?: string | null;
+  transportHealthEndpoint?: string | null;
+  transportToolsEndpoint?: string | null;
+  transportResourcesEndpoint?: string | null;
   authType?: string;
   authClientId?: string | null;
   authClientSecret?: string | null;

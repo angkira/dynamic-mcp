@@ -6,24 +6,50 @@ Dynamic MCP is an innovative system that allows you to **register and manage MCP
 
 ### 🎯 **Chat-Based MCP Registration**
 
-**Automatic polling for enabled MCP servers**: The system periodically checks and reconnects to enabled MCP servers that are not yet connected or healthy, ensuring late-starting daemons are detected and connected automatically.
+Register and manage MCP servers through natural language conversations - no configuration files needed! Simply describe what you want and the AI will set it up for you.
 
-### 🏗️ **Dual Architecture Support**
+**Features:**
+- **Natural Language Setup**: "Add a weather API server with API key auth"
+- **Automatic Discovery**: Capability detection from MCP servers
+- **Live Status Monitoring**: Real-time connection health checks
+- **Intelligent Retry Logic**: Automatic reconnection for failed servers
 
-- **Performance comparison** capabilities between transport types
+### 🔧 **Configurable HTTP Endpoints**
+
+**NEW**: Full control over HTTP-based MCP server endpoints:
+
+- **Custom Tool Endpoints**: Configure `/call-tool`, `/execute`, or any custom path
+- **Health Check Paths**: Set `/health`, `/status`, or your preferred monitoring endpoint  
+- **Discovery Endpoints**: Customize `/tools`, `/capabilities` for capability detection
+- **Resource Paths**: Configure `/resources`, `/files` or any resource endpoint
+- **UI Configuration**: User-friendly forms for endpoint management
+
+### 🏗️ **Multi-Transport Architecture**
+
+- **STDIO Servers**: Traditional command-line MCP servers
+- **HTTP Daemons**: High-performance containerized services
+- **WebSocket Support**: Real-time communication capabilities
+- **SSE Transport**: Server-sent events for streaming data
 
 ### 🛠️ **Built-in MCP Servers**
 
-- **Memory System**: Persistent memory across conversations with categorization
-- **Dynamic MCP API**: Self-managing MCP server registration and administration
-- **HTTP Daemon Versions**: High-performance containerized variants of internal servers
+- **Memory System**: 
+  - Persistent memory across conversations with smart categorization
+  - Tools: `memory_remember`, `memory_recall`, `memory_reset`
+  - Support for metadata, search, and content organization
+  
+- **Dynamic MCP API**: 
+  - Self-managing MCP server registration and administration
+  - Tools: `mcp_list_servers`, `mcp_create_server`, `mcp_update_server`, etc.
+  - Complete CRUD operations for MCP server management
 
-### 🔧 **Advanced Management**
+### 🔧 **Enterprise-Grade Management**
 
-- **WebSocket-based health checking** for real-time status updates
-- **Database-driven configuration** with PostgreSQL persistence
-- **Docker containerization** for scalable deployment
-- **Hot-reload capabilities** for development
+- **JWT Authentication**: Secure token-based authentication with user isolation
+- **Database-Driven Config**: PostgreSQL persistence with migration support
+- **Docker Containerization**: Production-ready deployment with health checks
+- **Real-time Monitoring**: WebSocket-based status updates
+- **Auto-Scaling**: Horizontal scaling support for MCP daemons
 
 ## 🏃‍♂️ Quick Start
 
@@ -55,7 +81,7 @@ DB_NAME=agentdb
 OPENAI_API_KEY="your-openai-api-key"
 GEMINI_API_KEY="your-gemini-api-key"
 
-# AI Model Configuration
+# AI Model Configuration  
 DEFAULT_MODEL=gemini-2.5-flash
 LLM_PROVIDER=google
 
@@ -195,9 +221,24 @@ This is the **core innovation** of Dynamic MCP - you can register and manage MCP
 **Register a new MCP server:**
 
 ```
-User: "I want to add a new MCP server for weather data. It's located at https://api.weather.com/mcp and uses API key authentication."
+User: "I want to add a new MCP server for weather data. It's located at https://api.weather.com and uses API key authentication. The tool endpoint is at /api/execute instead of /call-tool."
 
-AI: "I'll register a new weather MCP server for you. Let me set it up with STREAMABLE_HTTP transport and API key authentication..."
+AI: "I'll register a new weather MCP server for you. Let me set it up with STREAMABLE_HTTP transport, API key authentication, and custom endpoint configuration:
+- Base URL: https://api.weather.com
+- Tool Endpoint: /api/execute  
+- Health Endpoint: /health
+- Tools Discovery: /tools"
+```
+
+**Configure endpoint paths:**
+
+```
+User: "Update the weather server to use /check for health instead of /health"
+
+AI: "I've updated the weather server configuration to use /check as the health endpoint. The server will now use:
+- Tool calls: /api/execute
+- Health checks: /check  
+- Capability discovery: /tools"
 ```
 
 **Check server status:**
@@ -206,18 +247,17 @@ AI: "I'll register a new weather MCP server for you. Let me set it up with STREA
 User: "Show me all my MCP servers and their connection status"
 
 AI: "Here are your current MCP servers:
-- memory: ✅ Connected (STDIO)
-- dynamic-mcp-api: ✅ Connected (STDIO)
-- memory-daemon: ✅ Connected (HTTP)
-- weather-api: ❌ Disconnected (HTTP)"
+- memory-daemon: ✅ Connected (HTTP) - /call-tool, /health, /tools
+- dynamic-mcp-api-daemon: ✅ Connected (HTTP) - /call-tool, /health, /tools  
+- weather-api: ❌ Disconnected (HTTP) - /api/execute, /check, /tools"
 ```
 
-**Manage servers:**
+**Test custom endpoints:**
 
 ```
-User: "Disable the weather server and test the memory daemon connection"
+User: "Test the weather server connection and check if the custom endpoints are working"
 
-AI: "I've disabled the weather server and testing the memory daemon... ✅ Memory daemon is responding correctly."
+AI: "Testing weather server with custom endpoints... ✅ Health check successful at /check, ✅ Tools discovered at /tools, Ready for tool calls at /api/execute"
 ```
 
 ## 🏗️ Architecture Overview
@@ -368,28 +408,57 @@ docker-compose -f docker-compose.prod.yml up -d
 docker-compose -f docker-compose.prod.yml up -d --scale mcp-memory=2
 ```
 
-## 🛠️ MCP Server Types
+## 🛠️ MCP Server Types & Configuration
 
 ### Built-in Servers
 
-1. **Memory System**
-   - **STDIO Version**: `memory` - Traditional process-based
-   - **HTTP Version**: `memory-daemon` - High-performance HTTP daemon
+1. **Memory System** (`memory-daemon`)
+   - **Transport**: STREAMABLE_HTTP
+   - **Default Endpoints**: 
+     - Tool calls: `/call-tool`
+     - Health: `/health` 
+     - Discovery: `/tools`
+     - Resources: `/resources`
    - **Tools**: `memory_remember`, `memory_recall`, `memory_reset`
+   - **Features**: Persistent memory with categorization, search, and metadata
 
-2. **Dynamic MCP API**
-   - **STDIO Version**: `dynamic-mcp-api` - Traditional process-based
-   - **HTTP Version**: `dynamic-mcp-api-daemon` - HTTP daemon
-   - **Tools**: Server management, connection testing, configuration
+2. **Dynamic MCP API** (`dynamic-mcp-api-daemon`)
+   - **Transport**: STREAMABLE_HTTP  
+   - **Default Endpoints**: 
+     - Tool calls: `/call-tool`
+     - Health: `/health`
+     - Discovery: `/tools`
+     - Resources: `/resources`
+   - **Tools**: `mcp_list_servers`, `mcp_create_server`, `mcp_update_server`, `mcp_delete_server`, etc.
+   - **Features**: Complete MCP server lifecycle management
 
 ### External Servers
 
-Register any MCP-compatible server through chat:
+Register any MCP-compatible server through chat with full endpoint customization:
 
-- File system servers
-- API integration servers
-- Database connection servers
-- Custom business logic servers
+**File System Servers:**
+```
+User: "Add a filesystem server running on localhost:8080 with /api/files for tool calls"
+AI: "Setting up filesystem server with custom /api/files endpoint..."
+```
+
+**API Integration Servers:**
+```  
+User: "Register a Slack API server at https://slack-mcp.company.com using /slack/execute for tools"
+AI: "Configuring Slack MCP server with /slack/execute tool endpoint..."
+```
+
+**Database Servers:**
+```
+User: "Add PostgreSQL MCP server with health checks at /db/status"  
+AI: "Registering database server with custom /db/status health endpoint..."
+```
+
+**Custom Protocol Servers:**
+```
+User: "Add server with /custom/health, /custom/tools, and /custom/execute endpoints"
+AI: "Creating server with fully custom endpoint configuration..."
+```
 
 ## 🔍 Monitoring and Debugging
 
@@ -417,9 +486,30 @@ docker-compose logs -f mcp-api
 # Connect to database
 docker-compose exec db psql -U postgres -d agentdb
 
-# View MCP servers
-SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
+# View MCP servers with endpoint configuration
+SELECT name, status, "transportType", "transportBaseUrl", 
+       "transportToolEndpoint", "transportHealthEndpoint", 
+       "transportToolsEndpoint", "transportResourcesEndpoint" 
+FROM "MCPServer";
+
+# Check server capabilities  
+SELECT name, capabilities FROM "MCPServer" WHERE capabilities IS NOT NULL;
 ```
+
+## 📚 Documentation
+
+### Core Guides
+- **[Quick Start Guide](QUICK_START.md)** - Get up and running in minutes
+- **[Docker Setup Guide](DOCKER_SETUP.md)** - Advanced containerization details
+- **[Environment Setup](ENVIRONMENT_SETUP.md)** - Configuration reference
+
+### New Features
+- **[Endpoint Configuration Guide](ENDPOINT_CONFIGURATION.md)** - Complete guide to HTTP endpoint customization
+- **[Migration Guide](MIGRATION_GUIDE.md)** - Upgrading to configurable endpoints
+
+### Development
+- **[API Documentation](server/src/routes/README.md)** - REST API reference
+- **[Plugin System](server/src/plugins/README.md)** - Extending functionality
 
 ## 🤝 Contributing
 
@@ -429,13 +519,37 @@ SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
 4. Add tests if applicable
 5. Submit a pull request
 
-## TODO
+## 🗺️ Roadmap
 
-- **Interactive tools** - interactive tools widgets - from regular confirmation to the data collection
-- **Internet access** - live chat retrieving the data from the real world, helping you to generate your MCP
-- **Welcome message** - instructions, guide, tools and capabilities overview
-- **Fastify:5 migration** - usage of up-to-date libs is important
-- **Google / GitHub sign up** - must have in 2025
+### ✅ Recently Completed
+
+- **✅ Configurable HTTP Endpoints** - Full customization of MCP server API paths
+- **✅ Enhanced UI Forms** - Comprehensive endpoint configuration in web interface
+- **✅ Automatic Capability Discovery** - Dynamic tool detection from HTTP servers
+- **✅ Database Schema Migration** - Proper endpoint storage and defaults
+- **✅ Chat-Based Endpoint Config** - Natural language endpoint configuration
+
+### 🚧 In Progress
+
+- **Real-time Status Monitoring** - Enhanced WebSocket updates for endpoint health
+- **Endpoint Validation** - Pre-flight checks for custom endpoint configurations
+- **Performance Optimization** - Caching and connection pooling for HTTP endpoints
+
+### 🎯 Near-term Priorities (Next Release)
+
+- **Interactive Tools** - Interactive tool widgets for data collection and confirmation dialogs
+- **Welcome Guide** - In-app instructions and capabilities overview for new users
+- **Advanced Authentication** - OAuth integration for Google/GitHub sign-up
+- **Internet Access Tools** - Live web data retrieval for dynamic MCP generation
+
+### 🔮 Future Enhancements
+
+- **Fastify 5.0 Migration** - Upgrade to latest framework version
+- **Multi-user Workspaces** - Team collaboration and server sharing
+- **Visual MCP Designer** - Drag-and-drop MCP server configuration
+- **Health Dashboard** - Comprehensive monitoring and analytics
+- **Auto-scaling Groups** - Dynamic MCP server scaling based on load
+- **Plugin Marketplace** - Community-driven MCP server templates
 
 ## 📝 License
 

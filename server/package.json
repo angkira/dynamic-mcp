@@ -45,7 +45,8 @@
     "openai": "^5.11.0",
     "socket.io": "^4.8.1",
     "uuid": "^11.1.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "prisma": "^6.13.0"
   },
   "devDependencies": {
     "@dynamic-mcp/typescript-config": "file:../packages/typescript-config",
@@ -57,7 +58,6 @@
     "concurrently": "^8.2.2",
     "nodemon": "^3.0.2",
     "pino-pretty": "^13.1.1",
-    "prisma": "^6.13.0",
     "typescript": "^5.5.4"
   },
   "_moduleAliases": {

@@ -46,22 +46,34 @@ Once the system is running, visit http://localhost:5173 and try these conversati
 User: "Show me all my MCP servers and their status"
 ```
 
-### Register a New MCP Server
+### Register a New MCP Server with Default Endpoints
 
 ```
 User: "I want to add a new MCP server for file operations. It's a local server that I can run with 'npx @modelcontextprotocol/server-filesystem' and it should connect to my documents folder."
 ```
 
+### Register with Custom Endpoints
+
+```
+User: "Add a weather API server at https://weather-mcp.api.com with custom endpoints: use /api/call for tool execution, /status for health checks, and /capabilities for tool discovery."
+```
+
+### Update Endpoint Configuration
+
+```
+User: "Change the filesystem server to use /fs/health for health checks instead of /health"
+```
+
 ### Test Server Connections
 
 ```
-User: "Test the connection to the memory server"
+User: "Test the connection to the memory server and verify all endpoints are working"
 ```
 
-### Manage Server Status
+### Advanced Configuration
 
 ```
-User: "Disable the filesystem server temporarily"
+User: "Create a database server with these endpoints: /db/execute for tools, /db/ping for health, /db/schema for discovery, and /db/tables for resources"
 ```
 
 ## 🔧 Local Development
@@ -104,17 +116,26 @@ npm run mcp:test
 
 ## 🔍 Service Testing
 
-Test the HTTP daemon services:
+Test the HTTP daemon services and their configurable endpoints:
 
 ```bash
-# Test memory MCP daemon
-curl http://localhost:3001/health
+# Test memory MCP daemon (default endpoints)
+curl http://localhost:3001/health          # Health check
+curl http://localhost:3001/tools           # Tool discovery
+curl -X POST http://localhost:3001/call-tool \
+  -H "Content-Type: application/json" \
+  -d '{"name": "memory_recall", "arguments": {"search": "test"}}'
 
-# Test API MCP daemon
-curl http://localhost:3002/health
+# Test API MCP daemon (default endpoints)  
+curl http://localhost:3002/health          # Health check
+curl http://localhost:3002/tools           # Tool discovery
 
 # Test main server
-curl http://localhost:3000/api/health
+curl http://localhost:3000/api/health      # Main API health
+
+# Test custom endpoint configurations (after setup)
+curl http://your-server:port/custom/health  # Custom health endpoint
+curl http://your-server:port/custom/tools   # Custom discovery endpoint
 ```
 
 ## 🏗️ Production

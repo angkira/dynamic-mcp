@@ -160,6 +160,20 @@ export class McpService {
       }
     })
 
+    // Update with endpoint configuration using raw SQL since Prisma types aren't updated yet
+    const endpointData = serverData as any;
+    if (endpointData.transportToolEndpoint || endpointData.transportHealthEndpoint || endpointData.transportToolsEndpoint || endpointData.transportResourcesEndpoint) {
+      await this.prisma.$executeRaw`
+        UPDATE "MCPServer" 
+        SET 
+          "transportToolEndpoint" = ${endpointData.transportToolEndpoint || '/call-tool'},
+          "transportHealthEndpoint" = ${endpointData.transportHealthEndpoint || '/health'},
+          "transportToolsEndpoint" = ${endpointData.transportToolsEndpoint || '/tools'},
+          "transportResourcesEndpoint" = ${endpointData.transportResourcesEndpoint || '/resources'}
+        WHERE id = ${server.id}
+      `;
+    }
+
     // If server is enabled and autoConnect is true, attempt to connect
     if (server.isEnabled && server.configAutoConnect) {
       await this.connectionManager.connectToServer(server)
@@ -220,6 +234,44 @@ export class McpService {
       where: { id },
       data: updateObj as any
     })
+
+    // Handle endpoint configuration updates using raw SQL since Prisma types aren't updated yet
+    const hasEndpointUpdates = updateData.transportToolEndpoint !== undefined ||
+      updateData.transportHealthEndpoint !== undefined ||
+      updateData.transportToolsEndpoint !== undefined ||
+      updateData.transportResourcesEndpoint !== undefined;
+
+    if (hasEndpointUpdates) {
+      const endpointUpdates: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (updateData.transportToolEndpoint !== undefined) {
+        endpointUpdates.push(`"transportToolEndpoint" = $${paramIndex}`);
+        params.push(updateData.transportToolEndpoint);
+        paramIndex++;
+      }
+      if (updateData.transportHealthEndpoint !== undefined) {
+        endpointUpdates.push(`"transportHealthEndpoint" = $${paramIndex}`);
+        params.push(updateData.transportHealthEndpoint);
+        paramIndex++;
+      }
+      if (updateData.transportToolsEndpoint !== undefined) {
+        endpointUpdates.push(`"transportToolsEndpoint" = $${paramIndex}`);
+        params.push(updateData.transportToolsEndpoint);
+        paramIndex++;
+      }
+      if (updateData.transportResourcesEndpoint !== undefined) {
+        endpointUpdates.push(`"transportResourcesEndpoint" = $${paramIndex}`);
+        params.push(updateData.transportResourcesEndpoint);
+        paramIndex++;
+      }
+
+      params.push(id); // Add server ID as last parameter
+      const query = `UPDATE "MCPServer" SET ${endpointUpdates.join(', ')} WHERE id = $${paramIndex}`;
+
+      await this.prisma.$executeRawUnsafe(query, ...params);
+    }
 
     // Handle enable/disable state changes
     if (updateData.isEnabled !== undefined) {
@@ -626,6 +678,10 @@ export class McpService {
           args: (server.transportArgs as string[]) || [],
           env: (server.transportEnv as Record<string, string>) || {},
           baseUrl: server.transportBaseUrl,
+          toolEndpoint: (server as any).transportToolEndpoint,
+          healthEndpoint: (server as any).transportHealthEndpoint,
+          toolsEndpoint: (server as any).transportToolsEndpoint,
+          resourcesEndpoint: (server as any).transportResourcesEndpoint,
           timeout: server.transportTimeout,
           retryAttempts: server.transportRetryAttempts,
           sessionId: server.transportSessionId

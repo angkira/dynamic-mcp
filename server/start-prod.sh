@@ -5,12 +5,12 @@ echo "🚀 Starting production server..."
 
 # Wait for database to be ready
 echo "📊 Waiting for database connection..."
-echo "🔄 Syncing database schema..."
-npx prisma db push --accept-data-loss --skip-generate --schema=./prisma/schema.prisma || echo "✅ Database schema already up to date"
+echo "🔄 Applying database migrations..."
+npx prisma migrate deploy --schema=./prisma/schema.prisma
 
-# Generate Prisma client (in case it's not available)
-echo "🔧 Generating Prisma client..."
-npx prisma generate --schema=./prisma/schema.prisma
+# Now that migrations are applied, seed the database
+echo "🌱 Seeding database..."
+node dist/seed.js
 
 echo "🚀 Starting application..."
 exec node dist/app.js

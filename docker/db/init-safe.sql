@@ -92,6 +92,10 @@ CREATE TABLE IF NOT EXISTS "public"."MCPServer" (
     "transportTimeout" INTEGER,
     "transportRetryAttempts" INTEGER,
     "transportSessionId" TEXT,
+    "transportToolEndpoint" TEXT DEFAULT '/call-tool',
+    "transportHealthEndpoint" TEXT DEFAULT '/health',
+    "transportToolsEndpoint" TEXT DEFAULT '/tools',
+    "transportResourcesEndpoint" TEXT DEFAULT '/resources',
     
     -- Authentication configuration
     "authType" "public"."MCPAuthType" NOT NULL DEFAULT 'NONE',
