@@ -89,7 +89,7 @@ export class GeminiService implements LlmService {
             parts: [{
               functionCall: {
                 name: toolCall.name,
-                args: toolCall.arguments || {}
+                args: toolCall.args || toolCall.arguments || {}
               }
             }]
           });
