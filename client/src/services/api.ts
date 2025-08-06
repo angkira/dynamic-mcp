@@ -143,16 +143,20 @@ class HttpClient {
   }
 
   async get<T>(endpoint: string, params?: Record<string, string | number | boolean>): Promise<T> {
-    const url = new URL(buildApiUrl(endpoint))
+    const fullUrl = buildApiUrl(endpoint)
+    
+    // Handle query parameters
     if (params) {
+      const url = new URL(fullUrl, window.location.origin) // Use window.location.origin as base for relative URLs
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           url.searchParams.append(key, String(value))
         }
       })
+      return this.request<T>(url.toString())
     }
 
-    return this.request<T>(url.toString())
+    return this.request<T>(fullUrl)
   }
 
   async post<T>(endpoint: string, data?: object): Promise<T> {
