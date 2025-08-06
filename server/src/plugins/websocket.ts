@@ -50,11 +50,14 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
 
   // Register fastify-socket.io plugin
   await fastify.register(require('fastify-socket.io'), {
+    path: '/socket.io/',
     cors: {
       origin: allowedOrigins,
       methods: ["GET", "POST"],
       credentials: true
-    }
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
   });
 
   fastify.ready((err) => {
