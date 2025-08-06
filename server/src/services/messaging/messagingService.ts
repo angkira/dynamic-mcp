@@ -97,7 +97,7 @@ export class MessagingService {
           // Add the AI message with tool call to history BEFORE executing the tool
           const cleanToolCall = {
             name: toolCall.name,
-            arguments: toolCall.arguments
+            arguments: toolCall.args || toolCall.arguments || {}
           };
 
           history.push({
@@ -118,13 +118,14 @@ export class MessagingService {
             status: 'executing' | 'completed' | 'error';
           } = {
             name: toolCall.name,
-            arguments: toolCall.arguments,
+            arguments: toolCall.args || toolCall.arguments || {},
             status: 'executing'
           };
           executedToolCalls.push(trackedToolCall);
 
           try {
-            console.log(`🔧 Executing MCP tool: ${toolCall.name} with args:`, toolCall.arguments);
+            const actualArgs = toolCall.args || toolCall.arguments || {};
+            console.log(`🔧 Executing MCP tool: ${toolCall.name} with args:`, actualArgs);
 
             // Add timeout to prevent hanging
             const executionTimeout = 30000; // 30 seconds
@@ -132,7 +133,7 @@ export class MessagingService {
               setTimeout(() => reject(new Error(`Tool execution timeout after ${executionTimeout}ms`)), executionTimeout);
             });
 
-            const executionPromise = this.mcpService.executeMCPTool(toolCall.name, toolCall.arguments);
+            const executionPromise = this.mcpService.executeMCPTool(toolCall.name, actualArgs);
 
             console.log(`⏱️ Starting tool execution with ${executionTimeout}ms timeout...`);
             const result = await Promise.race([executionPromise, timeoutPromise]);
