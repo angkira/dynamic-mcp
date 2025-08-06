@@ -113,8 +113,11 @@ services:
         - dynamic-mcp-client:latest
       target: runner
       args:
-        - VITE_API_URL=${VUE_API_URL}
-        - VITE_SOCKET_URL=${VITE_SOCKET_URL}
+        - VITE_API_URL=/api
+        - VITE_SOCKET_URL=/socket.io
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST:-server}
+      - BACKEND_PORT=${BACKEND_PORT:-3000}
     env_file:
       - .env
     depends_on:

@@ -56,34 +56,12 @@ RUN mkdir -p /var/cache/nginx/client_temp \
 # Copy built app
 COPY --from=builder /app/client/dist /usr/share/nginx/html
 
-# Optimized nginx config for SPA
-COPY <<EOF /etc/nginx/conf.d/default.conf
-server {
-    listen 80;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-    
-    # Security headers
-    add_header X-Frame-Options "DENY" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    
-    # SPA routing
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-    
-    # Cache static assets
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-    
-    # Disable server tokens
-    server_tokens off;
-}
-EOF
+# Copy nginx configuration template
+COPY client/nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Set default values for environment variables
+ENV BACKEND_HOST=server
+ENV BACKEND_PORT=3000
 
 # Configure nginx for non-root execution  
 RUN cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak && \
