@@ -27,17 +27,31 @@ declare module 'fastify' {
 async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
   const messageHandler = new WebSocketMessageHandlerService(fastify);
 
+  // Build CORS origins list from environment and defaults
+  const defaultOrigins = [
+    process.env.CLIENT_URL || "http://localhost:5173",  // Development
+    "http://localhost",      // Production client (nginx)
+    "http://localhost:80",   // Production client (nginx) with port
+    "http://localhost:5173", // Development fallback
+    "http://127.0.0.1",      // Alternative localhost
+    "http://127.0.0.1:80"    // Alternative with port
+  ];
+
+  // Parse additional origins from environment
+  const envOrigins = process.env.CORS_ORIGINS || '';
+  const additionalOrigins = envOrigins
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(origin => origin.length > 0);
+
+  const allowedOrigins = [...defaultOrigins, ...additionalOrigins];
+  
+  fastify.log.info('WebSocket CORS allowed origins:', allowedOrigins);
+
   // Register fastify-socket.io plugin
   await fastify.register(require('fastify-socket.io'), {
     cors: {
-      origin: [
-        process.env.CLIENT_URL || "http://localhost:5173",  // Development
-        "http://localhost",      // Production client (nginx)
-        "http://localhost:80",   // Production client (nginx) with port
-        "http://localhost:5173", // Development fallback
-        "http://127.0.0.1",      // Alternative localhost
-        "http://127.0.0.1:80"    // Alternative with port
-      ],
+      origin: allowedOrigins,
       methods: ["GET", "POST"],
       credentials: true
     }
