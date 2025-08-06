@@ -56,50 +56,50 @@ export class OpenAiService implements LlmService {
 
   async *sendMessageStream(message: string): AsyncIterable<string> {
     for await (const chunk of this.sendMessageStreamWithTools(message, [], [])) {
-        if (typeof chunk === 'string') {
-            yield chunk;
-        }
+      if (typeof chunk === 'string') {
+        yield chunk;
+      }
     }
   }
 
   private convertHistoryToOpenAIMessages(history: ConversationMessage[], currentMessage: string, isThinking: boolean): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-    
+
     // Determine if it's the first message in the chat for prompt building
     const isFirstMessageInChat = history.length === 0;
     const promptOptions = {
-        isFirstMessage: isFirstMessageInChat,
-        hasHistory: history.length > 0,
-        enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
-        restrictToMCP: false, // Allow general assistance, not restricted to MCP tools only
+      isFirstMessage: isFirstMessageInChat,
+      hasHistory: history.length > 0,
+      enableReasoning: !!isThinking, // Only enable reasoning when thinking mode is requested
+      restrictToMCP: false, // Allow general assistance, not restricted to MCP tools only
     };
     console.debug(` OpenAI prompt options:`, promptOptions);
-    
+
     const systemPrompt = buildSystemPrompt(promptOptions);
     console.debug(` OpenAI system prompt preview: "${systemPrompt.substring(0, 100)}..."`);
-    
-    messages.push({ 
-        role: 'system', 
-        content: systemPrompt
+
+    messages.push({
+      role: 'system',
+      content: systemPrompt
     });
-    
+
     history.forEach(msg => {
       const messageText = msg.content?.text || String(msg.content);
       if (msg.role === 'USER') {
         messages.push({ role: 'user', content: messageText });
       } else if (msg.role === 'AI') {
         if (msg.content?.tool_calls) {
-            messages.push({ role: 'assistant', tool_calls: msg.content.tool_calls });
+          messages.push({ role: 'assistant', tool_calls: msg.content.tool_calls });
         } else {
-            messages.push({ role: 'assistant', content: messageText });
+          messages.push({ role: 'assistant', content: messageText });
         }
       } else if (msg.role === 'TOOL') {
         messages.push({ role: 'tool', tool_call_id: msg.content.tool_call_id, content: msg.content.result });
       }
     });
-    
+
     messages.push({ role: 'user', content: currentMessage });
-    
+
     return messages;
   }
 
@@ -114,12 +114,12 @@ export class OpenAiService implements LlmService {
   async *sendMessageStreamWithTools(message: string, history: ConversationMessage[], tools: any[], isThinking?: boolean): AsyncIterable<any> {
     try {
       const messages = this.convertHistoryToOpenAIMessages(history, message, !!isThinking);
-      
+
       const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
-          messages,
-          model: this.model,
-          max_tokens: this.responseBudget,
-          stream: true,
+        messages,
+        model: this.model,
+        max_tokens: this.responseBudget,
+        stream: true,
       };
 
       if (tools.length > 0) {
@@ -131,15 +131,15 @@ export class OpenAiService implements LlmService {
       const stream = await this.openai.chat.completions.create(options);
 
       for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta;
-          if (delta?.content) {
-              yield { type: 'text', content: delta.content };
+        const delta = chunk.choices[0]?.delta;
+        if (delta?.content) {
+          yield { type: 'text', content: delta.content };
+        }
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            yield { type: 'toolCall', call: toolCall };
           }
-          if (delta?.tool_calls) {
-              for (const toolCall of delta.tool_calls) {
-                  yield { type: 'toolCall', call: toolCall };
-              }
-          }
+        }
       }
     } catch (error) {
       this.handleError(error);
@@ -174,49 +174,74 @@ export class OpenAiService implements LlmService {
     return tools.map(tool => {
       const { metadata, parameters, ...rest } = tool;
 
-      // Convert MCP parameter format to JSON schema format for OpenAI
-      const properties = Object.entries(parameters).reduce((acc, [key, value]) => {
-        const { optional, type, ...paramProps } = value as any;
-        
-        // Map parameter types to JSON schema types
-        let jsonSchemaType: string;
-        switch (type?.toLowerCase()) {
-          case 'number':
-          case 'integer':
-            jsonSchemaType = 'number';
-            break;
-          case 'boolean':
-            jsonSchemaType = 'boolean';
-            break;
-          case 'array':
-            jsonSchemaType = 'array';
-            break;
-          case 'object':
-            jsonSchemaType = 'object';
-            break;
-          case 'string':
-          default:
-            jsonSchemaType = 'string';
-        }
-        
-        acc[key] = { ...paramProps, type: jsonSchemaType };
-        return acc;
-      }, {} as Record<string, any>);
+      // Parameters now contains the inputSchema (JSON Schema format) from connection manager
+      // OpenAI expects JSON Schema directly, so we can use it as-is
+      let functionParameters: any;
 
-      const required = Object.entries(parameters)
-          .filter(([, value]) => !(value as { optional?: boolean }).optional)
-          .map(([key]) => key);
+      if (parameters && typeof parameters === 'object' && parameters.type === 'object') {
+        // This is JSON Schema format - use directly
+        functionParameters = parameters;
+      } else if (parameters && typeof parameters === 'object') {
+        // Check if this looks like old format (has properties with 'optional' field)
+        const firstProperty = Object.values(parameters)[0] as any;
+        if (firstProperty && typeof firstProperty === 'object' && 'optional' in firstProperty) {
+          // Old format - convert to JSON Schema
+          const properties = Object.entries(parameters).reduce((acc, [key, value]) => {
+            const { optional, type, ...paramProps } = value as any;
+
+            // Map parameter types to JSON schema types
+            let jsonSchemaType: string;
+            switch (type?.toLowerCase()) {
+              case 'number':
+              case 'integer':
+                jsonSchemaType = 'number';
+                break;
+              case 'boolean':
+                jsonSchemaType = 'boolean';
+                break;
+              case 'array':
+                jsonSchemaType = 'array';
+                break;
+              case 'object':
+                jsonSchemaType = 'object';
+                break;
+              case 'string':
+              default:
+                jsonSchemaType = 'string';
+            }
+
+            acc[key] = { ...paramProps, type: jsonSchemaType };
+            return acc;
+          }, {} as Record<string, any>);
+
+          const required = Object.entries(parameters)
+            .filter(([, value]) => !(value as { optional?: boolean }).optional)
+            .map(([key]) => key);
+
+          functionParameters = {
+            type: 'object',
+            properties,
+            required,
+          };
+        } else {
+          // Assume it's already in JSON Schema format or similar
+          functionParameters = parameters;
+        }
+      } else {
+        // No parameters
+        functionParameters = {
+          type: 'object',
+          properties: {},
+          required: [],
+        };
+      }
 
       return {
         type: 'function' as const,
         function: {
           name: rest.name,
           description: rest.description,
-          parameters: {
-            type: 'object',
-            properties,
-            required,
-          },
+          parameters: functionParameters,
         },
       };
     });
