@@ -2,25 +2,12 @@
   <div>
     <aside class="chat-sidebar" :style="{ width: ui.sidebarWidth }">
       <div class="sidebar-header">
-        <button
-          v-if="!ui.isMobile"
-          @click="toggleSidebarAndContent"
-          class="collapse-btn"
-          :title="isCollapsed ? 'Expand' : 'Collapse'"
-        >
-          <FontAwesomeIcon
-            icon="bars"
-            class="collapse-icon"
-            :class="{ 'rotate-180': isCollapsed }"
-          />
+        <button v-if="!ui.isMobile" @click="toggleSidebarAndContent" class="collapse-btn"
+          :title="isCollapsed ? 'Expand' : 'Collapse'">
+          <FontAwesomeIcon icon="bars" class="collapse-icon" :class="{ 'rotate-180': isCollapsed }" />
         </button>
         <!-- Settings Button -->
-        <button
-          @click="openSettingsModal"
-          class="settings-btn"
-          :class="{ collapsed: isCollapsed }"
-          title="Settings"
-        >
+        <button @click="openSettingsModal" class="settings-btn" :class="{ collapsed: isCollapsed }" title="Settings">
           <FontAwesomeIcon icon="fa-solid fa-gear" class="settings-icon" />
           <span v-if="!isCollapsed">Settings</span>
         </button>
@@ -46,12 +33,7 @@
             <div class="user-email">{{ user.user?.email }}</div>
           </div>
         </div>
-        <button
-          v-if="ui.sidebarState === 'open'"
-          @click="handleLogout"
-          class="logout-btn"
-          title="Logout"
-        >
+        <button v-if="ui.sidebarState === 'open'" @click="handleLogout" class="logout-btn" title="Logout">
           <FontAwesomeIcon icon="arrow-right-from-bracket" />
         </button>
       </div>
@@ -228,7 +210,7 @@ function handleLogout() {
 }
 
 .sidebar-header {
-  padding: 1rem;
+  padding: 1.4rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
