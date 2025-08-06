@@ -87,9 +87,9 @@ export class JWTService {
   /**
    * Get or create demo user and generate token
    */
-  async ensureDemoUserWithToken(): Promise<{ user: any; token:string }> {
+  async ensureDemoUserWithToken(): Promise<{ user: any; token: string }> {
     const demoEmail = 'demo@example.com';
-    
+
     // Try to find existing demo user
     let user = await this.prisma.user.findUnique({
       where: { email: demoEmail }
@@ -132,20 +132,8 @@ export class JWTService {
   private async ensureDemoUserSettings(userId: number): Promise<void> {
     try {
       // Check if settings already exist
-      const existingSettings = await this.prisma.settings.findUnique({
-        where: { userId }
-      });
-
-      if (!existingSettings) {
-        // Create default settings for demo user
-        await this.prisma.settings.create({
-          data: {
-            userId,
-            // All other fields will use their default values from the schema
-          }
-        });
-        console.log('✅ Created default settings for demo user');
-      }
+      // Settings are now created via database initialization script (fill.sql)
+      // No need to create default settings here
     } catch (error) {
       console.error('Failed to ensure demo user settings:', error);
       throw error;

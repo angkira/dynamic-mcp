@@ -21,8 +21,8 @@ INSERT INTO "public"."Settings" (
 )
 SELECT 
   u.id,
-  'openai',
-  'o3-mini',
+  'google',
+  'gemini-2.5-flash',
   2048,
   8192,
   true,

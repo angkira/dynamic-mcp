@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import type { MCPServer, MCPServerStatus } from '@prisma/client'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
-import type { 
+import type {
   MCPServerUpdateData,
   MCPToolForLLM,
   MCPResourceForLLM,
@@ -43,39 +43,12 @@ export class McpService {
    * Get user settings (including MCP global settings)
    */
   private async getUserSettings(userId: number = 1) {
-    let settings = await this.prisma.settings.findUnique({
+    const settings = await this.prisma.settings.findUnique({
       where: { userId }
     })
 
-    // If no settings exist, create default ones
     if (!settings) {
-      // Ensure user exists
-      let user = await this.prisma.user.findUnique({
-        where: { id: userId }
-      })
-
-      if (!user) {
-        user = await this.prisma.user.create({
-          data: {
-            email: 'user@example.com',
-            name: 'Default User'
-          }
-        })
-      }
-
-      settings = await this.prisma.settings.create({
-        data: {
-          userId: user.id,
-          defaultProvider: 'google',
-          defaultModel: 'gemini-2.5-flash-lite',
-          thinkingBudget: 2048,
-          responseBudget: 8192,
-          mcpEnableDebugLogging: false,
-          mcpDefaultTimeout: 10000,
-          mcpMaxConcurrentConnections: 5,
-          mcpAutoDiscovery: true
-        }
-      })
+      throw new Error(`User settings not found for userId ${userId}. Please ensure database is properly initialized.`)
     }
 
     return settings
@@ -101,7 +74,7 @@ export class McpService {
   private async ensureUserInitialized(userId: number) {
     // Update global settings for this user
     await this.updateGlobalSettings(userId)
-    
+
     // Initialize connections for this user if not already done
     // The connection manager will handle checking if already initialized
     await this.connectionManager.initialize(userId)
@@ -148,7 +121,7 @@ export class McpService {
         description: serverData.description as string | null,
         isEnabled: (serverData.isEnabled as boolean) ?? true,
         status: 'DISCONNECTED',
-        
+
         // Transport configuration
         transportType: serverData.transportType as any,
         transportCommand: serverData.transportCommand as string | null,
@@ -158,7 +131,7 @@ export class McpService {
         transportTimeout: serverData.transportTimeout as number | null,
         transportRetryAttempts: serverData.transportRetryAttempts as number | null,
         transportSessionId: serverData.transportSessionId as string | null,
-        
+
         // Authentication configuration
         authType: (serverData.authType as any) || 'NONE',
         authClientId: serverData.authClientId as string | null,
@@ -169,7 +142,7 @@ export class McpService {
         authApiKey: serverData.authApiKey as string | null,
         authHeaderName: serverData.authHeaderName as string | null,
         authToken: serverData.authToken as string | null,
-        
+
         // Server configuration
         configAutoConnect: (serverData.configAutoConnect as boolean) ?? false,
         configConnectionTimeout: (serverData.configConnectionTimeout as number) ?? 10000,
@@ -177,7 +150,7 @@ export class McpService {
         configRetryDelay: (serverData.configRetryDelay as number) ?? 2000,
         configValidateCertificates: (serverData.configValidateCertificates as boolean) ?? true,
         configDebug: (serverData.configDebug as boolean) ?? false,
-        
+
         // Capabilities
         capabilities: serverData.capabilities || {
           tools: [],
@@ -209,12 +182,12 @@ export class McpService {
 
     // Build update object with only provided fields
     const updateObj: MCPServerUpdateData = {}
-    
+
     if (updateData.name !== undefined) updateObj.name = updateData.name as string
     if (updateData.version !== undefined) updateObj.version = updateData.version as string
     if (updateData.description !== undefined) updateObj.description = updateData.description as string | null
     if (updateData.isEnabled !== undefined) updateObj.isEnabled = updateData.isEnabled as boolean
-    
+
     if (updateData.transportType !== undefined) updateObj.transportType = updateData.transportType as string
     if (updateData.transportCommand !== undefined) updateObj.transportCommand = updateData.transportCommand as string | null
     if (updateData.transportArgs !== undefined) updateObj.transportArgs = updateData.transportArgs
@@ -223,7 +196,7 @@ export class McpService {
     if (updateData.transportTimeout !== undefined) updateObj.transportTimeout = updateData.transportTimeout as number | null
     if (updateData.transportRetryAttempts !== undefined) updateObj.transportRetryAttempts = updateData.transportRetryAttempts as number | null
     if (updateData.transportSessionId !== undefined) updateObj.transportSessionId = updateData.transportSessionId as string | null
-    
+
     if (updateData.authType !== undefined) updateObj.authType = updateData.authType as string
     if (updateData.authClientId !== undefined) updateObj.authClientId = updateData.authClientId as string | null
     if (updateData.authClientSecret !== undefined) updateObj.authClientSecret = updateData.authClientSecret as string | null
@@ -233,14 +206,14 @@ export class McpService {
     if (updateData.authApiKey !== undefined) updateObj.authApiKey = updateData.authApiKey as string | null
     if (updateData.authHeaderName !== undefined) updateObj.authHeaderName = updateData.authHeaderName as string | null
     if (updateData.authToken !== undefined) updateObj.authToken = updateData.authToken as string | null
-    
+
     if (updateData.configAutoConnect !== undefined) updateObj.configAutoConnect = updateData.configAutoConnect as boolean
     if (updateData.configConnectionTimeout !== undefined) updateObj.configConnectionTimeout = updateData.configConnectionTimeout as number
     if (updateData.configMaxRetries !== undefined) updateObj.configMaxRetries = updateData.configMaxRetries as number
     if (updateData.configRetryDelay !== undefined) updateObj.configRetryDelay = updateData.configRetryDelay as number
     if (updateData.configValidateCertificates !== undefined) updateObj.configValidateCertificates = updateData.configValidateCertificates as boolean
     if (updateData.configDebug !== undefined) updateObj.configDebug = updateData.configDebug as boolean
-    
+
     if (updateData.capabilities !== undefined) updateObj.capabilities = updateData.capabilities
 
     const updatedServer = await this.prisma.mCPServer.update({
@@ -275,7 +248,7 @@ export class McpService {
     }
 
     const updateData: { status: MCPServerStatus; lastConnected?: Date } = { status }
-    
+
     if (lastConnected) {
       updateData.lastConnected = lastConnected
     } else if (status === 'CONNECTED') {
@@ -337,17 +310,17 @@ export class McpService {
       // For STDIO servers, use the existing connection manager approach
       else {
         const isConnected = this.connectionManager.isConnected(id)
-        
+
         if (isConnected) {
           // Server is connected, perform a ping test
           const healthResults = await this.connectionManager.healthCheck(userId)
           const serverHealth = healthResults.find(h => h.serverId === id)
-          
+
           if (serverHealth) {
             result = {
               success: serverHealth.healthy,
-              message: serverHealth.healthy 
-                ? 'Connection test successful (ping)' 
+              message: serverHealth.healthy
+                ? 'Connection test successful (ping)'
                 : `Connection test failed: ${serverHealth.error || 'Ping failed'}`
             }
           } else {
@@ -356,18 +329,18 @@ export class McpService {
         } else {
           // Server is not connected, attempt a quick connection test
           const success = await this.connectionManager.connectToServer(server)
-          
+
           if (success) {
             // Optionally disconnect after successful test to avoid keeping unnecessary connections
             // await this.connectionManager.disconnectFromServer(id)
-            result = { 
-              success: true, 
-              message: 'Connection test successful (connected)' 
+            result = {
+              success: true,
+              message: 'Connection test successful (connected)'
             }
           } else {
-            result = { 
-              success: false, 
-              message: 'Failed to establish connection' 
+            result = {
+              success: false,
+              message: 'Failed to establish connection'
             }
           }
         }
@@ -437,11 +410,11 @@ export class McpService {
     const demoUser = await this.prisma.user.findUnique({
       where: { email: 'demo@example.com' }
     })
-    
+
     if (!demoUser) {
       throw new Error('Demo user not found')
     }
-    
+
     return await this.getAvailableToolsForUser(demoUser.id)
   }
 
@@ -460,11 +433,11 @@ export class McpService {
     const demoUser = await this.prisma.user.findUnique({
       where: { email: 'demo@example.com' }
     })
-    
+
     if (!demoUser) {
       throw new Error('Demo user not found')
     }
-    
+
     return await this.getAvailableResourcesForUser(demoUser.id)
   }
 
@@ -473,11 +446,11 @@ export class McpService {
    */
   async executeMCPToolForUser(userId: number, toolName: string, arguments_: unknown): Promise<CallToolResult> {
     await this.ensureUserInitialized(userId)
-    
+
     // Parse server and tool name from format "serverName__toolName"
     let serverName: string;
     let originalToolName: string;
-    
+
     if (toolName.includes('__')) {
       const parts = toolName.split('__');
       if (parts.length !== 2 || !parts[0] || !parts[1]) {
@@ -488,9 +461,9 @@ export class McpService {
     } else {
       // Legacy format - find which server has this tool
       console.log(`🔍 Legacy tool call detected: ${toolName}, searching for server...`);
-      
+
       const servers = await this.prisma.mCPServer.findMany({
-        where: { 
+        where: {
           isEnabled: true,
           userId: userId
         }
@@ -519,7 +492,7 @@ export class McpService {
 
     // Find the server by name
     const server = await this.prisma.mCPServer.findFirst({
-      where: { 
+      where: {
         name: serverName,
         isEnabled: true,
         userId: userId
@@ -541,11 +514,11 @@ export class McpService {
     const demoUser = await this.prisma.user.findUnique({
       where: { email: 'demo@example.com' }
     })
-    
+
     if (!demoUser) {
       throw new Error('Demo user not found')
     }
-    
+
     return await this.executeMCPToolForUser(demoUser.id, toolName, arguments_)
   }
 
@@ -564,11 +537,11 @@ export class McpService {
     const demoUser = await this.prisma.user.findUnique({
       where: { email: 'demo@example.com' }
     })
-    
+
     if (!demoUser) {
       throw new Error('Demo user not found')
     }
-    
+
     return await this.readMCPResourceForUser(demoUser.id, serverId, uri)
   }
 
@@ -645,7 +618,7 @@ export class McpService {
       isEnabled: server.isEnabled,
       status: server.status, // Keep status in uppercase to match schema
       lastConnected: server.lastConnected,
-      
+
       transport: {
         type: server.transportType, // Keep transport type in uppercase to match schema
         config: {
@@ -658,7 +631,7 @@ export class McpService {
           sessionId: server.transportSessionId
         }
       },
-      
+
       authentication: {
         type: server.authType, // Keep auth type in uppercase to match schema
         config: {
@@ -672,7 +645,7 @@ export class McpService {
           token: server.authToken
         }
       },
-      
+
       config: {
         autoConnect: server.configAutoConnect,
         connectionTimeout: server.configConnectionTimeout,
@@ -681,7 +654,7 @@ export class McpService {
         validateCertificates: server.configValidateCertificates,
         debug: server.configDebug
       },
-      
+
       capabilities: server.capabilities || {
         tools: [],
         resources: [],

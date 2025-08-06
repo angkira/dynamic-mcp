@@ -6,8 +6,8 @@ import type { Settings, UpdateSettingsRequest } from '@/types'
 export const useSettingsStore = defineStore('settings', () => {
   // State
   const settings = ref<Settings>({
-    defaultProvider: 'openai',
-    defaultModel: 'o3-mini',
+    defaultProvider: 'google',
+    defaultModel: 'gemini-2.5-flash',
     thinkingBudget: 2048,
     responseBudget: 8192,
     mcpEnableDebugLogging: false,
@@ -36,7 +36,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fetchPromise = (async () => {
       isLoading.value = true
       error.value = null
-      
+
       try {
         const response = await ChatAPIService.settings.getSettings()
         settings.value = response
@@ -56,7 +56,7 @@ export const useSettingsStore = defineStore('settings', () => {
   async function updateSettings(updates: UpdateSettingsRequest) {
     isLoading.value = true
     error.value = null
-    
+
     try {
       const response = await ChatAPIService.settings.updateSettings(updates)
       settings.value = response
@@ -93,10 +93,10 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     isLoading,
     error,
-    
+
     // Computed
     defaultProviderModel,
-    
+
     // Actions
     fetchSettings,
     updateSettings,

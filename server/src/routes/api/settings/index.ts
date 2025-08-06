@@ -21,22 +21,13 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Then get or create settings for this user
-      let settings = await fastify.prisma.settings.findUnique({
+      // Get settings for this user (created via database initialization script)
+      const settings = await fastify.prisma.settings.findUnique({
         where: { userId: user.id }
       });
 
-      // If no settings exist, create default ones
       if (!settings) {
-        settings = await fastify.prisma.settings.create({
-          data: {
-            userId: user.id,
-            defaultProvider: 'google',
-            defaultModel: 'gemini-2.5-flash',
-            thinkingBudget: 2048,
-            responseBudget: 8192
-          }
-        });
+        throw new Error('User settings not found. Please ensure database is properly initialized.');
       }
 
       return {
@@ -97,9 +88,9 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const settings = await fastify.prisma.settings.upsert({
+      const settings = await fastify.prisma.settings.update({
         where: { userId: user.id },
-        update: {
+        data: {
           ...(defaultProvider && { defaultProvider }),
           ...(defaultModel && { defaultModel }),
           ...(thinkingBudget !== undefined && { thinkingBudget }),
@@ -109,18 +100,6 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
           ...(mcpDefaultTimeout !== undefined && { mcpDefaultTimeout }),
           ...(mcpMaxConcurrentConnections !== undefined && { mcpMaxConcurrentConnections }),
           ...(mcpAutoDiscovery !== undefined && { mcpAutoDiscovery })
-        },
-        create: {
-          userId: user.id,
-          defaultProvider: defaultProvider || 'openai',
-          defaultModel: defaultModel || 'o3-mini',
-          thinkingBudget: thinkingBudget ?? 2048,
-          responseBudget: responseBudget ?? 8192,
-          // MCP Global Settings defaults
-          mcpEnableDebugLogging: mcpEnableDebugLogging ?? false,
-          mcpDefaultTimeout: mcpDefaultTimeout ?? 10000,
-          mcpMaxConcurrentConnections: mcpMaxConcurrentConnections ?? 5,
-          mcpAutoDiscovery: mcpAutoDiscovery ?? true
         }
       });
 

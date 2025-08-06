@@ -3,9 +3,9 @@ import { FastifyInstance } from 'fastify';
 export default async function configRoutes(fastify: FastifyInstance) {
   // GET /api/config/default - Get default provider and model configuration
   fastify.get('/default', async () => {
-    const defaultProvider = process.env.LLM_PROVIDER || 'openai';
-    const defaultModel = process.env.DEFAULT_MODEL || 'o3-mini';
-    
+    const defaultProvider = process.env.LLM_PROVIDER || 'google';
+    const defaultModel = process.env.DEFAULT_MODEL || 'gemini-2.5-flash';
+
     return {
       provider: defaultProvider,
       model: defaultModel

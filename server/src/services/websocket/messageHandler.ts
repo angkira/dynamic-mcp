@@ -34,16 +34,12 @@ export class WebSocketMessageHandlerService {
       userSettings = await this.fastify.prisma.settings.findUnique({
         where: { userId: settingsUserId }
       });
-      
-      // If no settings found, create default settings
+
+      // If no settings found, return error (settings should be created via database initialization)
       if (!userSettings) {
-        console.log(`Creating default settings for user ${settingsUserId}`);
-        userSettings = await this.fastify.prisma.settings.create({
-          data: {
-            userId: settingsUserId,
-            // All other fields will use their default values from the schema
-          }
-        });
+        this.fastify.log.error(`No settings found for user ${settingsUserId}. Database may not be properly initialized.`);
+        socket.emit(ServerWebSocketEvent.Error, { error: 'User settings not found. Please ensure database is properly initialized.' });
+        return;
       }
     } catch (error) {
       this.fastify.log.error('Failed to fetch/create user settings:', error);
@@ -87,8 +83,8 @@ export class WebSocketMessageHandlerService {
     streamCallback(ServerWebSocketEvent.ChatId, { chatId });
 
     const chat = await this.fastify.prisma.chat.findUnique({
-        where: { id: chatId },
-        include: { messages: { orderBy: { createdAt: 'asc' } } }
+      where: { id: chatId },
+      include: { messages: { orderBy: { createdAt: 'asc' } } }
     });
     // Convert Prisma messages to ConversationMessage format
     const conversationHistory: ConversationMessage[] = (chat?.messages || []).map(msg => {
@@ -104,7 +100,7 @@ export class WebSocketMessageHandlerService {
           })) || []
         };
       }
-      
+
       return {
         id: msg.id,
         content: cleanContent,
@@ -117,11 +113,11 @@ export class WebSocketMessageHandlerService {
     });
 
     try {
-        await messagingService.sendMessage(enhancedContent, chatId, conversationHistory, streamCallback, selectedProvider, model, isThinking);
+      await messagingService.sendMessage(enhancedContent, chatId, conversationHistory, streamCallback, selectedProvider, model, isThinking);
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during streaming.';
-        this.fastify.log.error('Error in messaging service:', error);
-        streamCallback(ServerWebSocketEvent.Error, { error: errorMessage });
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during streaming.';
+      this.fastify.log.error('Error in messaging service:', error);
+      streamCallback(ServerWebSocketEvent.Error, { error: errorMessage });
     }
   }
 }
