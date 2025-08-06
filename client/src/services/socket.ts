@@ -15,7 +15,7 @@ class SocketService {
 
     // Get authentication token first
     const token = authService.getToken()
-    
+
     // Don't connect if no token is available
     if (!token) {
       console.log('Socket connection skipped: No authentication token available')
@@ -23,16 +23,20 @@ class SocketService {
       return
     }
 
-    // Use dedicated socket URL or fallback to current origin
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 
-                     window.location.origin
-    
+    // Use dedicated socket URL if it is a full URL, otherwise fallback to current origin
+    const envSocketUrl = import.meta.env.VITE_SOCKET_URL
+    const socketUrl = envSocketUrl && /^(http|https):\/\//.test(envSocketUrl)
+      ? envSocketUrl
+      : window.location.origin
+
     // Configure socket with authentication
     const socketOptions: any = {
+      path: '/socket.io/',
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      transports: ['websocket', 'polling'],
       auth: {
         token: token
       },
@@ -55,7 +59,7 @@ class SocketService {
       console.log('Socket disconnected:', reason)
       this.state.isConnected = false
       this.state.isAuthenticated = false
-      
+
       // If disconnected due to auth issues, clear token
       if (reason === 'io server disconnect' || reason === 'io client disconnect') {
         this.state.error = 'Connection lost'
@@ -73,7 +77,7 @@ class SocketService {
       console.error('Socket authentication failed:', error)
       this.state.isAuthenticated = false
       this.state.error = 'Authentication failed'
-      
+
       // Don't clear the token here since API client has retry logic
       // authService.clearToken()
     })
@@ -137,7 +141,7 @@ class SocketService {
       console.warn('Socket not connected, cannot emit event:', event)
       return
     }
-    
+
     this.socket.emit(event, ...args)
   }
 
@@ -146,7 +150,7 @@ class SocketService {
       console.warn('Socket not connected, cannot listen to event:', event)
       return
     }
-    
+
     this.socket.on(event, callback)
   }
 
@@ -195,7 +199,7 @@ class SocketService {
 
       // Check periodically
       const interval = setInterval(checkConnection, 100)
-      
+
       // Clean up interval when done
       Promise.resolve().then(() => {
         clearInterval(interval)

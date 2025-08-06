@@ -35,5 +35,17 @@ export const API_CONFIG = {
 export const buildApiUrl = (endpoint: string): string => {
   const baseUrl = API_CONFIG.BASE_URL.replace(/\/$/, '') // Remove trailing slash
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  return `${baseUrl}${cleanEndpoint}`
+  const result = `${baseUrl}${cleanEndpoint}`
+  
+  // Debug logging to track down the double /api issue
+  console.log('buildApiUrl debug:', {
+    endpoint,
+    baseUrl,
+    cleanEndpoint,
+    result,
+    'import.meta.env.VITE_API_URL': import.meta.env.VITE_API_URL,
+    'import.meta.env.DEV': import.meta.env.DEV
+  })
+  
+  return result
 }
