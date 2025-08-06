@@ -5,13 +5,13 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
   fastify.get('/', async () => {
     // For now, use a default user ID (1) - in a real app, this would come from auth
     const userId = 1;
-    
+
     try {
       // First, ensure the default user exists
       let user = await fastify.prisma.user.findUnique({
         where: { id: userId }
       });
-      
+
       if (!user) {
         user = await fastify.prisma.user.create({
           data: {
@@ -20,19 +20,19 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
           }
         });
       }
-      
+
       // Then get or create settings for this user
       let settings = await fastify.prisma.settings.findUnique({
         where: { userId: user.id }
       });
-      
+
       // If no settings exist, create default ones
       if (!settings) {
         settings = await fastify.prisma.settings.create({
           data: {
             userId: user.id,
-            defaultProvider: 'openai',
-            defaultModel: 'o3-mini',
+            defaultProvider: 'google',
+            defaultModel: 'gemini-2.5-flash',
             thinkingBudget: 2048,
             responseBudget: 8192
           }
@@ -59,21 +59,21 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
   // PUT /api/settings - Update user settings
   fastify.put('/', async (request) => {
     const userId = 1; // For now, use a default user ID
-    
-    const { 
-      defaultProvider, 
-      defaultModel, 
-      thinkingBudget, 
+
+    const {
+      defaultProvider,
+      defaultModel,
+      thinkingBudget,
       responseBudget,
       // MCP Global Settings
       mcpEnableDebugLogging,
       mcpDefaultTimeout,
       mcpMaxConcurrentConnections,
       mcpAutoDiscovery
-    } = request.body as { 
-      defaultProvider?: string; 
-      defaultModel?: string; 
-      thinkingBudget?: number; 
+    } = request.body as {
+      defaultProvider?: string;
+      defaultModel?: string;
+      thinkingBudget?: number;
       responseBudget?: number;
       // MCP Global Settings
       mcpEnableDebugLogging?: boolean;
@@ -87,7 +87,7 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
       let user = await fastify.prisma.user.findUnique({
         where: { id: userId }
       });
-      
+
       if (!user) {
         user = await fastify.prisma.user.create({
           data: {

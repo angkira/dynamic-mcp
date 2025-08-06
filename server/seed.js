@@ -27,8 +27,8 @@ async function main() {
     update: {},
     create: {
       userId: user.id,
-      defaultProvider: 'openai',
-      defaultModel: 'o3-mini',
+      defaultProvider: 'google',
+      defaultModel: 'gemini-2.5-flash',
       thinkingBudget: 2048,
       responseBudget: 8192,
       mcpEnableDebugLogging: false,
