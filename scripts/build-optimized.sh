@@ -6,6 +6,7 @@ set -e
 # Parse arguments
 CLEAN_MODE="selective"  # default to selective cleaning
 TAG_IMAGES=false
+PLATFORM="prod"  # default to production
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -21,9 +22,13 @@ while [[ $# -gt 0 ]]; do
       TAG_IMAGES=true
       shift
       ;;
+    --cloudflare)
+      PLATFORM="cloudflare"
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--clean-all|--no-clean] [--tag]"
+      echo "Usage: $0 [--clean-all|--no-clean] [--tag] [--cloudflare]"
       exit 1
       ;;
   esac
@@ -51,23 +56,38 @@ else
   echo "⚡ Skipping cleanup - using existing cache..."
 fi
 
+# Choose configuration based on platform
+if [ "$PLATFORM" = "cloudflare" ]; then
+  COMPOSE_FILE="docker-compose.cloudflare.yml"
+  SERVER_DOCKERFILE="server/Dockerfile.cloudflare"
+  CLIENT_DOCKERFILE="client/Dockerfile.cloudflare"
+  TAG_SUFFIX="cloudflare"
+  echo "🌐 Building for Cloudflare deployment..."
+else
+  COMPOSE_FILE="docker-compose.prod.yml"
+  SERVER_DOCKERFILE="server/Dockerfile.prod"
+  CLIENT_DOCKERFILE="client/Dockerfile.prod"
+  TAG_SUFFIX="latest"
+  echo "🏭 Building for production deployment..."
+fi
+
 # Pre-build base images for better caching
 echo "📦 Pre-building base dependencies..."
 docker build \
   --target deps \
-  --tag dynamic-mcp-deps:latest \
-  --file server/Dockerfile.prod \
+  --tag dynamic-mcp-deps:${TAG_SUFFIX} \
+  --file ${SERVER_DOCKERFILE} \
   .
 
 docker build \
   --target deps \
-  --tag dynamic-mcp-client-deps:latest \
-  --file client/Dockerfile.prod \
+  --tag dynamic-mcp-client-deps:${TAG_SUFFIX} \
+  --file ${CLIENT_DOCKERFILE} \
   .
 
 # Build with parallel processing and cache
-echo "🔨 Building production images with cache..."
-docker compose -f docker-compose.prod.yml build \
+echo "🔨 Building ${PLATFORM} images with cache..."
+docker compose -f ${COMPOSE_FILE} build \
   --parallel \
   --build-arg BUILDKIT_INLINE_CACHE=1
 
@@ -85,7 +105,9 @@ docker images | grep dynamic-mcp
 
 echo ""
 echo "💡 Usage tips:"
-echo "   ./scripts/build-optimized.sh              # Selective cleanup (recommended)"
-echo "   ./scripts/build-optimized.sh --no-clean   # Keep all cache"
-echo "   ./scripts/build-optimized.sh --clean-all  # Full cleanup"
-echo "   ./scripts/build-optimized.sh --tag        # Also tag for registry"
+echo "   ./scripts/build-optimized.sh                    # Production build (recommended)"
+echo "   ./scripts/build-optimized.sh --cloudflare       # Cloudflare-optimized build"
+echo "   ./scripts/build-optimized.sh --no-clean         # Keep all cache"
+echo "   ./scripts/build-optimized.sh --clean-all        # Full cleanup"
+echo "   ./scripts/build-optimized.sh --tag              # Also tag for registry"
+echo "   ./scripts/build-optimized.sh --cloudflare --tag # Cloudflare build + registry tags"
