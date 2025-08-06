@@ -1,12 +1,9 @@
 <template>
-  <div
-    class="message-item"
-    :class="{
-      'user-message': message.role === MessageRole.USER,
-      'ai-message': message.role === MessageRole.AI,
-      streaming: isStreaming,
-    }"
-  >
+  <div class="message-item" :class="{
+    'user-message': message.role === MessageRole.USER,
+    'ai-message': message.role === MessageRole.AI,
+    streaming: isStreaming,
+  }">
     <div class="message-avatar">
       <div v-if="message.role === MessageRole.USER" class="user-avatar">
         {{ user.userInitials }}
@@ -21,10 +18,7 @@
         <span class="message-sender">
           {{ message.role === MessageRole.USER ? user.userName : 'AI Assistant' }}
         </span>
-        <span
-          v-if="message.role === MessageRole.AI && message.content.metadata"
-          class="message-model"
-        >
+        <span v-if="message.role === MessageRole.AI && message.content.metadata" class="message-model">
           {{ message.content.metadata.provider }}/{{ message.content.metadata.model }}
         </span>
         <span class="message-time">
@@ -34,19 +28,13 @@
 
       <div class="message-body">
         <!-- Chain of thoughts display -->
-        <div
-          v-if="showThoughts"
-          class="thoughts-content"
-          :class="{ collapsed: isThoughtsCollapsed, streaming: isStreaming }"
-        >
+        <div v-if="showThoughts" class="thoughts-content"
+          :class="{ collapsed: isThoughtsCollapsed, streaming: isStreaming }">
           <div class="thinking-header" @click="toggleThoughts">
             <FontAwesomeIcon icon="brain" class="thinking-icon" />
             <span v-if="isStreaming && streamingMessage?.isThinking">Model is thinking...</span>
             <span v-else>View reasoning process</span>
-            <FontAwesomeIcon
-              :icon="isThoughtsCollapsed ? 'chevron-right' : 'chevron-down'"
-              class="collapse-icon"
-            />
+            <FontAwesomeIcon :icon="isThoughtsCollapsed ? 'chevron-right' : 'chevron-down'" class="collapse-icon" />
           </div>
           <div class="thinking-text" v-show="!isThoughtsCollapsed">
             <!-- Streaming thoughts -->
@@ -57,14 +45,11 @@
               </div>
               <span v-if="streamingMessage?.thoughtBuffer" class="current-thinking">{{
                 streamingMessage.thoughtBuffer
-              }}</span>
+                }}</span>
             </template>
             <!-- Completed message thoughts -->
             <template v-else>
-              <div
-                v-if="message.content.metadata?.thoughtHtml"
-                v-html="message.content.metadata.thoughtHtml"
-              ></div>
+              <div v-if="message.content.metadata?.thoughtHtml" v-html="message.content.metadata.thoughtHtml"></div>
               <div v-else-if="message.content.metadata?.thoughtContent">
                 {{ message.content.metadata.thoughtContent }}
               </div>
@@ -73,14 +58,11 @@
         </div>
 
         <!-- Tool execution block -->
-        <div
-          v-if="
-            message.role === MessageRole.AI &&
-            ((streamingMessage?.toolCalls && streamingMessage.toolCalls.length > 0) ||
-              (message.content.toolCalls && message.content.toolCalls.length > 0))
-          "
-          class="tool-block"
-        >
+        <div v-if="
+          message.role === MessageRole.AI &&
+          ((streamingMessage?.toolCalls && streamingMessage.toolCalls.length > 0) ||
+            (message.content.toolCalls && message.content.toolCalls.length > 0))
+        " class="tool-block">
           <div class="tool-header">
             <div class="tool-icon">🔧</div>
             <span class="tool-title">Tool Execution</span>
@@ -89,23 +71,16 @@
 
           <div class="tool-logs">
             <!-- Show tool calls and results -->
-            <div
-              v-for="(tool, index) in streamingMessage?.toolCalls ||
+            <div v-for="(tool, index) in streamingMessage?.toolCalls ||
               message.content.toolCalls ||
-              []"
-              :key="index"
-              class="tool-entry"
-            >
+              []" :key="index" class="tool-entry">
               <div class="tool-call">
                 <span class="tool-status executing">Executing tool {{ tool.name }}...</span>
               </div>
               <div v-if="tool.result" class="tool-result">
-                <span v-if="tool.error" class="tool-status error"
-                  >Error in executing: {{ tool.error }}</span
-                >
-                <span v-else class="tool-status success"
-                  >✅ Tool {{ tool.name }} executed successfully</span
-                >
+                <span v-if="tool.result.success" class="tool-status success">✅ Tool {{ tool.name }} executed
+                  successfully</span>
+                <span v-else class="tool-status error">Error in executing: {{ tool.result.error }}</span>
                 <!-- <pre v-if="tool.result" class="tool-output">{{
                   JSON.stringify(tool.result, null, 2)
                 }}</pre> -->
@@ -126,13 +101,8 @@
           </div>
 
           <!-- Static markdown content for completed messages -->
-          <VueMarkdown
-            v-else-if="message.content.text"
-            :markdown="message.content.text"
-            :remark-plugins="[remarkGfm]"
-            :sanitize="true"
-            class="markdown-content"
-          />
+          <VueMarkdown v-else-if="message.content.text" :markdown="message.content.text" :remark-plugins="[remarkGfm]"
+            :sanitize="true" class="markdown-content" />
         </div>
       </div>
 
@@ -228,7 +198,7 @@ function regenerateResponse() {
 
 <style lang="scss">
 .message-body {
-  li > p {
+  li>p {
     display: inline;
     margin: 0;
     padding: 0;
@@ -352,6 +322,7 @@ function regenerateResponse() {
 
 /* Markdown content styling */
 .markdown-content {
+
   :deep(ul),
   :deep(ol) {
     margin: 0.5em 0;
@@ -363,23 +334,23 @@ function regenerateResponse() {
     line-height: 1.6;
 
     /* Fix for <li><p> issue: make single paragraph inline */
-    > p:only-child {
+    >p:only-child {
       display: inline;
       margin: 0;
       padding: 0;
     }
 
     /* For multiple paragraphs, reduce spacing */
-    > p:first-child {
+    >p:first-child {
       margin-top: 0;
     }
 
-    > p:last-child {
+    >p:last-child {
       margin-bottom: 0;
     }
 
     /* Ensure proper spacing for paragraphs in lists */
-    > p + p {
+    >p+p {
       margin-top: 0.5em;
     }
   }
@@ -563,9 +534,11 @@ function regenerateResponse() {
   0% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
+
   100% {
     opacity: 1;
   }
@@ -665,6 +638,7 @@ function regenerateResponse() {
 
 /* Animations */
 @keyframes pulse-border {
+
   0%,
   100% {
     border-color: var(--color-border);
@@ -732,6 +706,7 @@ function regenerateResponse() {
 }
 
 @keyframes toolPulse {
+
   0%,
   100% {
     opacity: 0.4;
