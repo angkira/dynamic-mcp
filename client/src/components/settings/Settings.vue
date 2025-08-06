@@ -1,16 +1,8 @@
 <template>
   <div class="chat-settings">
     <!-- Settings Modal/Drawer -->
-    <n-modal
-      v-model:show="isVisible"
-      preset="card"
-      :style="{ width: '800px', maxWidth: '90vw' }"
-      title="Chat Settings"
-      :bordered="false"
-      size="huge"
-      role="dialog"
-      aria-label="Chat Settings"
-    >
+    <n-modal v-model:show="isVisible" preset="card" :style="{ width: '800px', maxWidth: '90vw' }" title="Chat Settings"
+      :bordered="false" size="huge" role="dialog" aria-label="Chat Settings">
       <!-- Tabs Container -->
       <n-tabs v-model:value="activeTab" type="line" animated justify-content="start">
         <!-- General Settings Tab -->
@@ -21,17 +13,10 @@
         <!-- MCP Settings Tab -->
         <n-tab-pane name="mcp" tab="MCP Servers">
           <div class="settings-section">
-            <MCPList
-              :servers="mcpStore.servers"
-              :global-config="mcpStore.globalConfig"
-              @add-server="showMCPModal = true"
-              @edit-server="editMCPServer"
-              @delete-server="deleteMCPServer"
-              @toggle-server="toggleMCPServer"
-              @connect-server="connectMCPServer"
-              @disconnect-server="disconnectMCPServer"
-              @update-global-config="mcpStore.updateGlobalConfig"
-            />
+            <MCPList :servers="mcpStore.servers" :global-config="mcpStore.globalConfig"
+              @add-server="showMCPModal = true" @edit-server="editMCPServer" @delete-server="deleteMCPServer"
+              @toggle-server="toggleMCPServer" @connect-server="connectMCPServer"
+              @disconnect-server="disconnectMCPServer" @update-global-config="mcpStore.updateGlobalConfig" />
           </div>
         </n-tab-pane>
 
@@ -62,23 +47,10 @@
     </n-modal>
 
     <!-- MCP Server Settings Modal -->
-    <n-modal
-      v-model:show="showMCPModal"
-      preset="card"
-      :style="{ width: '900px', maxWidth: '95vw' }"
-      :title="mcpModalTitle"
-      :bordered="false"
-      size="huge"
-      role="dialog"
-      :aria-label="mcpModalTitle"
-    >
-      <MCPSettings
-        ref="mcpSettingsRef"
-        :server="currentMCPServer"
-        :mode="mcpModalMode"
-        @save="saveMCPServer"
-        @cancel="closeMCPModal"
-      />
+    <n-modal v-model:show="showMCPModal" preset="card" :style="{ width: '900px', maxWidth: '95vw' }"
+      :title="mcpModalTitle" :bordered="false" size="huge" role="dialog" :aria-label="mcpModalTitle">
+      <MCPSettings ref="mcpSettingsRef" :server="currentMCPServer" :mode="mcpModalMode" @save="saveMCPServer"
+        @cancel="closeMCPModal" />
 
       <template #action>
         <n-space>
@@ -137,18 +109,20 @@ const modelStore = useModelStore()
 const mcpStore = useMcpStore()
 const message = useMessage()
 
-// Local state
-const activeTab = ref('general')
-const localSettings = ref<Settings>({
-  defaultProvider: 'openai',
-  defaultModel: 'o3-mini',
+const defaultSettings = {
+  defaultProvider: 'google',
+  defaultModel: 'gemini-2.5-flash',
   thinkingBudget: 2048,
   responseBudget: 8192,
   mcpEnableDebugLogging: false,
   mcpDefaultTimeout: 30000,
   mcpMaxConcurrentConnections: 10,
   mcpAutoDiscovery: true,
-})
+}
+
+// Local state
+const activeTab = ref('general')
+const localSettings = ref<Settings>(defaultSettings)
 
 // MCP-related state
 const showMCPModal = ref(false)
@@ -286,16 +260,7 @@ const saveSettings = async () => {
 }
 
 const resetSettings = () => {
-  localSettings.value = {
-    defaultProvider: 'openai',
-    defaultModel: 'o3-mini',
-    thinkingBudget: 2048,
-    responseBudget: 8192,
-    mcpEnableDebugLogging: false,
-    mcpDefaultTimeout: 30000,
-    mcpMaxConcurrentConnections: 10,
-    mcpAutoDiscovery: true,
-  }
+  localSettings.value = { ...defaultSettings }
 }
 
 const closeSettings = () => {
@@ -306,7 +271,7 @@ const closeSettings = () => {
 watch(
   () => settingsStore.settings,
   (newSettings) => {
-    localSettings.value = { ...newSettings }
+    localSettings.value = { ...defaultSettings, ...newSettings }
   },
   { deep: true },
 )
