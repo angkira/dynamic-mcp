@@ -5,6 +5,7 @@ import { McpService } from '../mcp/mcpService';
 import { MessageRole as PrismaMessageRole } from '@prisma/client';
 import { StreamingPipeline, StreamingResults } from './StreamingPipeline';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import * as path from 'path';
 
 export class MessagingService {
   private llmService: LlmService;
@@ -28,15 +29,16 @@ export class MessagingService {
   ): Promise<void> {
     try {
       // Setup debug logging
-      const debugDir = '/home/angkira/Work/dynamic-mcp/server/debug';
+      // Choose debug directory via ENV or default to ./debug inside current working dir
+      const debugDir = process.env.DEBUG_DIR || path.resolve(process.cwd(), 'debug');
       if (!existsSync(debugDir)) {
         mkdirSync(debugDir, { recursive: true });
       }
-      
+
       const timestamp = Date.now();
       const rawLogFile = `${debugDir}/raw-chunks-${chatId}-${timestamp}.log`;
       const streamLogFile = `${debugDir}/stream-events-${chatId}-${timestamp}.log`;
-      
+
       appendFileSync(rawLogFile, `=== RAW LLM CHUNKS - Chat ${chatId} ===\n`);
       appendFileSync(streamLogFile, `=== STREAM EVENTS - Chat ${chatId} ===\n`);
 
@@ -54,7 +56,7 @@ export class MessagingService {
           updatedAt: new Date(),
         });
       }
-      
+
       const availableTools = await this.mcpService.getAvailableToolsForLLM();
       console.log(`🔧 Providing ${availableTools.length} tools to LLM:`, availableTools.map(t => t.name));
       // Pass an empty message because the user's message is now the last item in the history array.
@@ -65,11 +67,11 @@ export class MessagingService {
         (type: ServerWebSocketEvent, data: any) => {
           appendFileSync(streamLogFile, `${new Date().toISOString()} - ${type}: ${JSON.stringify(data)}\n`);
           stream(type, data);
-        }, 
-        chatId, 
+        },
+        chatId,
         isThinking
       );
-      
+
       // Track tool calls for final message
       const executedToolCalls: Array<{
         name: string;
@@ -85,10 +87,10 @@ export class MessagingService {
           pipeline.processTextChunk(chunk.content);
         } else if (chunk.type === 'toolCall') {
           appendFileSync(rawLogFile, `${new Date().toISOString()} - TOOL_CALL: ${JSON.stringify(chunk.call)}\n`);
-          
+
           // Flush any pending content before tool execution
           pipeline.flush();
-          
+
           const toolCall = chunk.call;
           stream(ServerWebSocketEvent.ToolCall, { toolCall, chatId });
 
@@ -97,7 +99,7 @@ export class MessagingService {
             name: toolCall.name,
             arguments: toolCall.arguments
           };
-          
+
           history.push({
             id: 0,
             role: MessageRole.AI,
@@ -123,15 +125,15 @@ export class MessagingService {
 
           try {
             console.log(`🔧 Executing MCP tool: ${toolCall.name} with args:`, toolCall.arguments);
-            
+
             // Add timeout to prevent hanging
             const executionTimeout = 30000; // 30 seconds
             const timeoutPromise = new Promise((_, reject) => {
               setTimeout(() => reject(new Error(`Tool execution timeout after ${executionTimeout}ms`)), executionTimeout);
             });
-            
+
             const executionPromise = this.mcpService.executeMCPTool(toolCall.name, toolCall.arguments);
-            
+
             console.log(`⏱️ Starting tool execution with ${executionTimeout}ms timeout...`);
             const result = await Promise.race([executionPromise, timeoutPromise]);
             console.log(`✅ Tool execution completed:`, result);
@@ -170,7 +172,7 @@ export class MessagingService {
                 followUpChunkCount++;
                 console.log(`📦 Follow-up chunk ${followUpChunkCount} type: ${followUpChunk.type}`);
                 appendFileSync(rawLogFile, `${new Date().toISOString()} - FOLLOW_UP_CHUNK: type=${followUpChunk.type}, content="${followUpChunk.type === 'text' ? followUpChunk.content : JSON.stringify(followUpChunk)}"\n`);
-                
+
                 if (followUpChunk.type === 'text') {
                   followUpTextCount++;
                   console.log(`📝 Follow-up text chunk ${followUpTextCount}: "${followUpChunk.content}"`);
@@ -198,7 +200,7 @@ export class MessagingService {
               name: error.name,
               type: typeof error
             });
-            
+
             // Update tracked tool call with error
             trackedToolCall.error = error.message || 'Tool execution failed';
             trackedToolCall.status = 'error';
@@ -227,7 +229,7 @@ export class MessagingService {
           where: { id: chatId },
           select: { title: true }
         });
-        
+
         if (chat && !chat.title) {
           await this.fastify.prisma.chat.update({
             where: { id: chatId },
@@ -250,11 +252,11 @@ export class MessagingService {
   }
 
   private async saveMessage(
-    chatId: number, 
-    content: string, 
-    role: PrismaMessageRole, 
-    provider: LlmProvider, 
-    model: string = 'default', 
+    chatId: number,
+    content: string,
+    role: PrismaMessageRole,
+    provider: LlmProvider,
+    model: string = 'default',
     thoughts?: string[],
     toolCalls?: Array<{
       name: string;
@@ -277,8 +279,8 @@ export class MessagingService {
     }
 
     const messageData = {
-      content: { 
-        text: content, 
+      content: {
+        text: content,
         metadata,
         ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {})
       },
