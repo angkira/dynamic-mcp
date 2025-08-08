@@ -314,6 +314,7 @@ function regenerateResponse() {
   max-width: 80%;
   border-radius: var(--radius-lg);
   color: var(--color-text);
+  background-color: var(--color-surface);
   white-space: pre-wrap;
   word-break: word-break;
   line-height: 1.5;
@@ -442,7 +443,7 @@ function regenerateResponse() {
 }
 
 .streaming .message-text {
-  background-color: var(--color-background);
+  background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   animation: pulse-border 2s infinite;
 }
@@ -665,6 +666,15 @@ function regenerateResponse() {
   .message-text {
     padding: var(--spacing-sm);
     font-size: 0.875rem;
+  }
+}
+
+/* Dark mode overrides for message bubbles */
+:global(.dark) {
+  .user-message {
+    .message-text {
+      background-color: var(--color-surface);
+    }
   }
 }
 

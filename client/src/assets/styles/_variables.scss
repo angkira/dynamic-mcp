@@ -22,6 +22,27 @@
   --color-border: #e5e7eb;
   --color-border-light: #f3f4f6;
 
+  // RGB equivalents for rgba() usage
+  --color-primary-rgb: 82, 181, 151;
+  --color-secondary-rgb: 107, 114, 128;
+  --color-success-rgb: 16, 185, 129;
+  --color-warning-rgb: 245, 158, 11;
+  --color-error-rgb: 239, 68, 68;
+  --color-text-rgb: 17, 24, 39;
+  --color-text-muted-rgb: 156, 163, 175;
+  --color-background-rgb: 255, 255, 255;
+  --color-surface-rgb: 249, 250, 251;
+  --color-border-rgb: 229, 231, 235;
+
+  // Common aliases
+  --color-text-primary: var(--color-text);
+  --color-accent: var(--color-primary);
+
+  // Border radius aliases (compat)
+  --border-radius-sm: var(--radius-sm);
+  --border-radius-md: var(--radius-md);
+  --border-radius-lg: var(--radius-lg);
+
   // Dark mode colors
   --color-dark-text: #f9fafb;
   --color-dark-text-secondary: #d1d5db;
@@ -79,6 +100,16 @@
   --color-surface: var(--color-dark-surface);
   --color-border: var(--color-dark-border);
   --color-border-light: var(--color-dark-border-light);
+
+  // Dark mode RGB equivalents
+  --color-text-rgb: 249, 250, 251;
+  --color-text-muted-rgb: 156, 163, 175;
+  --color-background-rgb: 17, 24, 39;
+  --color-surface-rgb: 31, 41, 55;
+  --color-border-rgb: 55, 65, 81;
+
+  // Aliases
+  --color-text-primary: var(--color-dark-text);
 }
 
 // Responsive breakpoints
