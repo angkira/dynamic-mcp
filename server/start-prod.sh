@@ -9,8 +9,8 @@ echo "🔄 Applying database migrations..."
 npx prisma migrate deploy --schema=./prisma/schema.prisma
 
 # Now that migrations are applied, seed the database
-echo "🌱 Seeding database..."
-node dist/seed.js
+echo "🌱 Seeding database with initial data..."
+npm run db:seed
 
 echo "🚀 Starting application..."
 exec node dist/app.js
