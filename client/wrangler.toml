@@ -1,4 +1,4 @@
-name = "dynamic-mcp-client"
+name = 'mcp-test-ui'
 main = "src/worker.ts"
 compatibility_date = "2025-05-26"
 workers_dev = true
