@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@shared-prisma';
 
 export interface JWTPayload {
   userId: number;
@@ -81,6 +81,41 @@ export class JWTService {
       name: user.name ?? undefined
     });
 
+    return { user, token };
+  }
+
+  /**
+   * Sign up a new user with email and password
+   */
+  async signup(email: string, password: string, name?: string): Promise<{ user: any; token: string }> {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing && existing.password) {
+      throw new Error('User with this email already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = existing
+      ? await this.prisma.user.update({ where: { email }, data: { name, password: passwordHash } })
+      : await this.prisma.user.create({ data: { email, name, password: passwordHash } });
+
+    const token = this.generateToken({ id: user.id, email: user.email, name: user.name ?? undefined });
+    return { user, token };
+  }
+
+  /**
+   * Find existing user by email or create one (for OAuth flows)
+   */
+  async findOrCreateByEmail(email: string, name?: string): Promise<{ user: any; token: string }> {
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await this.prisma.user.create({ data: { email, name } });
+    } else if (name && !user.name) {
+      // Backfill name if missing
+      user = await this.prisma.user.update({ where: { id: user.id }, data: { name } });
+    }
+
+    const token = this.generateToken({ id: user.id, email: user.email, name: user.name ?? undefined });
     return { user, token };
   }
 

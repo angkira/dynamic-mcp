@@ -6,6 +6,10 @@ export interface LoginCredentials {
   password: string
 }
 
+export interface SignupPayload extends LoginCredentials {
+  name?: string
+}
+
 export interface AuthResponse {
   token: string
   user: User
@@ -174,6 +178,26 @@ class AuthService {
   }
 
   /**
+   * Sign up with email and password
+   */
+  async signup(payload: SignupPayload): Promise<AuthResponse> {
+    try {
+      const data = await httpService.post<AuthResponse>(
+        '/auth/signup',
+        payload
+      )
+
+      this.setToken(data.token)
+      this.setStoredUser(data.user)
+      return data
+    } catch (error) {
+      if (error instanceof AuthError) throw error
+      console.error('Signup request failed:', error)
+      throw new AuthError('Network error during signup', 500)
+    }
+  }
+
+  /**
    * Get demo authentication token
    */
   async getDemoToken(): Promise<AuthResponse> {
@@ -254,6 +278,14 @@ class AuthService {
    */
   logout(): void {
     this.clearToken()
+  }
+
+  /**
+   * Begin OAuth by fetching provider authorization URL from server
+   */
+  async getOAuthUrl(provider: 'google' | 'github'): Promise<string> {
+    const { url } = await httpService.get<{ url: string }>(`/auth/oauth/${provider}`)
+    return url
   }
 }
 

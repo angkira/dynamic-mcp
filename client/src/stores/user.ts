@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { authService, type LoginCredentials, AuthError } from '@/services/auth'
+import { authService, type LoginCredentials, AuthError, type SignupPayload } from '@/services/auth'
 
 export interface User {
   id: number
@@ -23,7 +23,7 @@ export const useUserStore = defineStore('user', () => {
   const userInitials = computed(() => {
     const name = userName.value
     if (name === 'Anonymous') return 'AN'
-    
+
     const parts = name.split(' ')
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase()
@@ -78,7 +78,7 @@ export const useUserStore = defineStore('user', () => {
   async function login(credentials: LoginCredentials): Promise<void> {
     isLoading.value = true
     error.value = null
-    
+
     try {
       const authResponse = await authService.login(credentials)
       setUser(authResponse.user)
@@ -96,12 +96,35 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * Sign up with email/password
+   */
+  async function signup(payload: SignupPayload): Promise<void> {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const authResponse = await authService.signup(payload)
+      setUser(authResponse.user)
+    } catch (err) {
+      if (err instanceof AuthError) {
+        error.value = err.message
+      } else {
+        error.value = 'Signup failed. Please try again.'
+        console.error('Unexpected signup error:', err)
+      }
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Login with demo credentials
    */
   async function loginDemo(): Promise<void> {
     isLoading.value = true
     error.value = null
-    
+
     try {
       const authResponse = await authService.getDemoToken()
       setUser(authResponse.user)
@@ -120,6 +143,35 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * Begin OAuth login flow
+   */
+  async function loginWithOAuth(provider: 'google' | 'github'): Promise<void> {
+    try {
+      const url = await authService.getOAuthUrl(provider)
+      window.location.href = url
+    } catch (err) {
+      console.error('Failed to start OAuth flow:', err)
+      error.value = 'Failed to start OAuth flow'
+      throw err
+    }
+  }
+
+  /**
+   * Handle token passed via URL (OAuth callback redirect)
+   */
+  async function applyTokenFromUrl(token: string) {
+    try {
+      authService.setToken(token)
+      // Immediately verify and populate user info
+      const userData = await authService.verifyToken()
+      setUser(userData)
+    } catch (err) {
+      console.error('Failed to apply token from URL:', err)
+      throw err
+    }
+  }
+
+  /**
    * Verify and refresh user data from server
    */
   async function verifyAndRefreshUser(): Promise<void> {
@@ -130,7 +182,7 @@ export const useUserStore = defineStore('user', () => {
 
     isLoading.value = true
     error.value = null
-    
+
     try {
       const userData = await authService.verifyToken()
       setUser(userData)
@@ -159,17 +211,17 @@ export const useUserStore = defineStore('user', () => {
     if (!user.value) {
       throw new Error('No user is currently logged in')
     }
-    
+
     isLoading.value = true
     error.value = null
-    
+
     try {
       // Make authenticated request to update profile
       const updatedUser = await authService.authenticatedRequest<User>('/api/user/profile', {
         method: 'PATCH',
         body: JSON.stringify(updates),
       })
-      
+
       setUser(updatedUser)
     } catch (err) {
       if (err instanceof AuthError) {
@@ -200,17 +252,20 @@ export const useUserStore = defineStore('user', () => {
     isAuthenticated,
     isLoading,
     error,
-    
+
     // Computed
     userId,
     userName,
     userInitials,
-    
+
     // Actions
     setUser,
     logout,
     login,
     loginDemo,
+    signup,
+    loginWithOAuth,
+    applyTokenFromUrl,
     initializeFromStorage,
     verifyAndRefreshUser,
     updateProfile,

@@ -1,8 +1,39 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from '@sinclair/typebox';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 export default async function authRoute(fastify: FastifyInstance) {
-  
+  // Sign up endpoint
+  fastify.post('/signup', {
+    schema: {
+      body: Type.Object({
+        email: Type.String({ format: 'email' }),
+        password: Type.String({ minLength: 6 }),
+        name: Type.Optional(Type.String())
+      }),
+      response: {
+        200: Type.Object({
+          token: Type.String(),
+          user: Type.Object({
+            id: Type.Number(),
+            email: Type.String(),
+            name: Type.Optional(Type.String())
+          })
+        }),
+        400: Type.Object({ message: Type.String() })
+      }
+    }
+  }, async (request, reply) => {
+    const { email, password, name } = request.body as { email: string; password: string; name?: string };
+    try {
+      const result = await fastify.authService.signup(email, password, name);
+      return result;
+    } catch (error: any) {
+      fastify.log.warn('Signup error:', error?.message || error);
+      return reply.status(400).send({ message: error?.message || 'Failed to sign up' });
+    }
+  });
+
   // Get demo token endpoint
   fastify.get('/demo-token', {
     schema: {
@@ -14,18 +45,19 @@ export default async function authRoute(fastify: FastifyInstance) {
             email: Type.String(),
             name: Type.Optional(Type.String())
           })
-        })
+        }),
+        500: Type.Object({ message: Type.String() })
       }
     }
   }, async (request, reply) => {
     try {
       // Generate token for demo user
       const { token, user } = await fastify.jwtService.ensureDemoUserWithToken();
-      
+
       return { token, user };
     } catch (error) {
       fastify.log.error('Error generating demo token:', error);
-      return reply.status(500).send({ error: 'Failed to generate demo token' });
+      return reply.status(500).send({ message: 'Failed to generate demo token' });
     }
   });
 
@@ -45,22 +77,19 @@ export default async function authRoute(fastify: FastifyInstance) {
             name: Type.Optional(Type.String())
           })
         }),
-        401: Type.Object({
-          error: Type.String()
-        })
+        401: Type.Object({ message: Type.String() })
       }
     }
   }, async (request, reply) => {
     const { email, password } = request.body as { email: string; password: string };
     try {
-      const result = await fastify.jwtService.login(email, password);
-      if (!result) {
-        return reply.status(401).send({ error: 'Invalid credentials' });
-      }
+      const result = await fastify.authService.login(email, password);
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || 'An error occurred during login'
+      const status = msg === 'Invalid credentials' ? 401 : 500
       fastify.log.error('Login error:', error);
-      return reply.status(500).send({ error: 'An error occurred during login' });
+      return reply.status(status).send({ message: msg });
     }
   });
 
@@ -84,5 +113,105 @@ export default async function authRoute(fastify: FastifyInstance) {
       valid: true,
       user: request.user!
     };
+  });
+
+  // OAuth: Start Google flow (redirect URL generation)
+  fastify.get('/oauth/google', {
+    schema: { response: { 200: Type.Object({ url: Type.String() }) } }
+  }, async (request, reply) => {
+    const state = randomUUID();
+    reply.setCookie('oauth_state', state, {
+      path: '/api/auth',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      signed: true,
+      maxAge: 60 * 10,
+    });
+    const url = fastify.authService.getGoogleAuthUrl(state);
+    reply.send({ url });
+  });
+
+  // OAuth: Google callback exchange
+  fastify.get('/oauth/google/callback', {
+    schema: {
+      querystring: Type.Object({ code: Type.Optional(Type.String()), state: Type.Optional(Type.String()) }),
+      response: { 400: Type.Object({ message: Type.String() }), 500: Type.Object({ message: Type.String() }) }
+    }
+  }, async (request, reply) => {
+    try {
+      const { code, state } = request.query as { code?: string; state?: string };
+      if (!code) return reply.status(400).send({ message: 'Missing code' });
+      if (!state) return reply.status(400).send({ message: 'Missing state' });
+
+      const stateCookieRaw = request.cookies?.['oauth_state'];
+      if (!stateCookieRaw) return reply.status(400).send({ message: 'Missing state cookie' });
+      const unsign = request.unsignCookie(stateCookieRaw);
+      if (!unsign.valid || !unsign.value) return reply.status(400).send({ message: 'Invalid state signature' });
+      const cookieBuf = Buffer.from(unsign.value);
+      const stateBuf = Buffer.from(state);
+      if (cookieBuf.length !== stateBuf.length || !timingSafeEqual(cookieBuf, stateBuf)) {
+        return reply.status(400).send({ message: 'State mismatch' });
+      }
+      reply.clearCookie('oauth_state', { path: '/api/auth' });
+
+      const { user, token } = await fastify.authService.handleGoogleCallback(code);
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+      const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
+      return reply.redirect(302, redirectTo);
+    } catch (error) {
+      fastify.log.error('Google OAuth callback error:', error);
+      return reply.status(500).send({ message: 'Google OAuth failed' });
+    }
+  });
+
+  // OAuth: Start GitHub flow
+  fastify.get('/oauth/github', {
+    schema: { response: { 200: Type.Object({ url: Type.String() }) } }
+  }, async (request, reply) => {
+    const state = randomUUID();
+    reply.setCookie('oauth_state', state, {
+      path: '/api/auth',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      signed: true,
+      maxAge: 60 * 10,
+    });
+    const url = fastify.authService.getGithubAuthUrl(state);
+    reply.send({ url });
+  });
+
+  // OAuth: GitHub callback exchange
+  fastify.get('/oauth/github/callback', {
+    schema: {
+      querystring: Type.Object({ code: Type.Optional(Type.String()), state: Type.Optional(Type.String()) }),
+      response: { 400: Type.Object({ message: Type.String() }), 500: Type.Object({ message: Type.String() }) }
+    }
+  }, async (request, reply) => {
+    try {
+      const { code, state } = request.query as { code?: string; state?: string };
+      if (!code) return reply.status(400).send({ message: 'Missing code' });
+      if (!state) return reply.status(400).send({ message: 'Missing state' });
+
+      const stateCookieRaw = request.cookies?.['oauth_state'];
+      if (!stateCookieRaw) return reply.status(400).send({ message: 'Missing state cookie' });
+      const unsign = request.unsignCookie(stateCookieRaw);
+      if (!unsign.valid || !unsign.value) return reply.status(400).send({ message: 'Invalid state signature' });
+      const cookieBuf = Buffer.from(unsign.value);
+      const stateBuf = Buffer.from(state);
+      if (cookieBuf.length !== stateBuf.length || !timingSafeEqual(cookieBuf, stateBuf)) {
+        return reply.status(400).send({ message: 'State mismatch' });
+      }
+      reply.clearCookie('oauth_state', { path: '/api/auth' });
+
+      const { user, token } = await fastify.authService.handleGithubCallback(code)
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+      const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
+      return reply.redirect(302, redirectTo);
+    } catch (error) {
+      fastify.log.error('GitHub OAuth callback error:', error);
+      return reply.status(500).send({ message: 'GitHub OAuth failed' });
+    }
   });
 }

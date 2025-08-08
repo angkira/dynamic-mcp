@@ -17,17 +17,12 @@
           </template>
         </n-alert>
 
-        <n-button
-          type="primary"
-          size="large"
-          block
-          :loading="userStore.isLoading && isDemoLogin"
-          :disabled="userStore.isLoading"
-          @click="handleDemoLogin"
-          class="demo-button"
-        >
+        <n-button type="primary" size="large" block :loading="userStore.isLoading && isDemoLogin"
+          :disabled="userStore.isLoading" @click="handleDemoLogin" class="demo-button">
           <template #icon>
-            <n-icon><FontAwesomeIcon icon="play" /></n-icon>
+            <n-icon>
+              <FontAwesomeIcon icon="play" />
+            </n-icon>
           </template>
           Try Demo
         </n-button>
@@ -38,84 +33,89 @@
       </n-divider>
 
       <!-- Login Form -->
-      <n-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        size="large"
-        :disabled="userStore.isLoading"
-        @submit.prevent="handleSubmit"
-      >
+      <n-form ref="formRef" :model="formData" :rules="formRules" size="large" :disabled="userStore.isLoading"
+        @submit.prevent="handleSubmit">
         <n-form-item path="email" label="Email">
-          <n-input
-            v-model:value="formData.email"
-            type="text"
-            placeholder="Enter your email"
-            :input-props="{ autocomplete: 'email' }"
-            @keyup.enter="handleSubmit"
-          >
+          <n-input v-model:value="formData.email" type="text" placeholder="Enter your email"
+            :input-props="{ autocomplete: 'email' }" @keyup.enter="handleSubmit">
             <template #prefix>
-              <n-icon><FontAwesomeIcon icon="envelope" /></n-icon>
+              <n-icon>
+                <FontAwesomeIcon icon="envelope" />
+              </n-icon>
             </template>
           </n-input>
         </n-form-item>
 
         <n-form-item path="password" label="Password">
-          <n-input
-            v-model:value="formData.password"
-            type="password"
-            show-password-on="click"
-            placeholder="Enter your password"
-            :input-props="{ autocomplete: 'current-password' }"
-            @keyup.enter="handleSubmit"
-          >
+          <n-input v-model:value="formData.password" type="password" show-password-on="click"
+            placeholder="Enter your password" :input-props="{ autocomplete: 'current-password' }"
+            @keyup.enter="handleSubmit">
             <template #prefix>
-              <n-icon><FontAwesomeIcon icon="lock" /></n-icon>
+              <n-icon>
+                <FontAwesomeIcon icon="lock" />
+              </n-icon>
             </template>
           </n-input>
         </n-form-item>
 
         <!-- Error Display -->
-        <n-alert
-          v-if="userStore.error && !isDemoLogin"
-          type="error"
-          :show-icon="true"
-          closable
-          class="error-alert"
-          @close="clearError"
-        >
+        <n-alert v-if="userStore.error && !isDemoLogin" type="error" :show-icon="true" closable class="error-alert"
+          @close="clearError">
           {{ userStore.error }}
         </n-alert>
 
         <!-- Demo Error Display -->
-        <n-alert
-          v-if="userStore.error && isDemoLogin"
-          type="error"
-          :show-icon="true"
-          closable
-          class="error-alert"
-          @close="clearError"
-        >
+        <n-alert v-if="userStore.error && isDemoLogin" type="error" :show-icon="true" closable class="error-alert"
+          @close="clearError">
           {{ userStore.error }}
         </n-alert>
 
         <n-form-item>
-          <n-button
-            type="primary"
-            size="large"
-            block
-            :loading="userStore.isLoading && !isDemoLogin"
-            :disabled="userStore.isLoading"
-            attr-type="submit"
-            @click="handleSubmit"
-          >
+          <n-button type="primary" size="large" block :loading="userStore.isLoading && !isDemoLogin"
+            :disabled="userStore.isLoading" attr-type="submit" @click="handleSubmit">
             <template #icon>
-              <n-icon><FontAwesomeIcon icon="sign-in-alt" /></n-icon>
+              <n-icon>
+                <FontAwesomeIcon icon="sign-in-alt" />
+              </n-icon>
             </template>
             Sign In
           </n-button>
         </n-form-item>
+
+        <n-form-item>
+          <n-button tertiary size="large" block :disabled="userStore.isLoading" @click="handleSignup">
+            <template #icon>
+              <n-icon>
+                <FontAwesomeIcon icon="plus" />
+              </n-icon>
+            </template>
+            Create Account
+          </n-button>
+        </n-form-item>
       </n-form>
+
+      <n-divider>
+        <span class="divider-text">or continue with</span>
+      </n-divider>
+
+      <n-space :wrap="false" :size="12">
+        <n-button type="default" block @click="oauth('google')">
+          <template #icon>
+            <n-icon>
+              <FontAwesomeIcon :icon="['fab', 'google']" />
+            </n-icon>
+          </template>
+          Google
+        </n-button>
+        <n-button type="default" block @click="oauth('github')">
+          <template #icon>
+            <n-icon>
+              <FontAwesomeIcon :icon="['fab', 'github']" />
+            </n-icon>
+          </template>
+          GitHub
+        </n-button>
+      </n-space>
 
       <!-- Demo Credentials Info -->
       <n-collapse class="demo-info">
@@ -247,12 +247,41 @@ const fillDemoCredentials = () => {
   formData.password = 'demo123'
 }
 
+// Signup action
+const handleSignup = async () => {
+  if (!formRef.value) return
+  try {
+    await formRef.value.validate()
+    await userStore.signup({ ...formData })
+    message.success('Account created!')
+    const redirect = router.currentRoute.value.query.redirect as string
+    await router.push(redirect || '/')
+  } catch (error) {
+    console.error('Signup failed:', error)
+  }
+}
+
+// OAuth start
+const oauth = async (provider: 'google' | 'github') => {
+  try {
+    await userStore.loginWithOAuth(provider)
+  } catch (e) { }
+}
+
 // Check if user is already authenticated on mount
 onMounted(() => {
   if (userStore.initializeFromStorage()) {
     // User is already authenticated, redirect
     const redirect = router.currentRoute.value.query.redirect as string
     router.push(redirect || '/')
+  }
+  // If redirected from OAuth with a token, apply it then redirect
+  const token = router.currentRoute.value.query.token as string
+  if (token) {
+    userStore.applyTokenFromUrl(token)
+    message.success('Logged in!')
+    const redirect = router.currentRoute.value.query.redirect as string
+    router.replace({ path: redirect || '/' })
   }
 })
 </script>
@@ -360,9 +389,7 @@ onMounted(() => {
   font-size: 0.875rem;
 }
 
-:deep(
-  .n-collapse .n-collapse-item .n-collapse-item__content-wrapper .n-collapse-item__content-inner
-) {
+:deep(.n-collapse .n-collapse-item .n-collapse-item__content-wrapper .n-collapse-item__content-inner) {
   padding: 0.75rem 0;
 }
 
