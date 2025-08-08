@@ -1,0 +1,21 @@
+name = "dynamic-mcp-client"
+main = "src/worker.ts"
+compatibility_date = "2025-05-26"
+workers_dev = true
+
+# Upload built Vite assets
+[assets]
+directory = "dist"
+binding = "ASSETS"
+
+[vars]
+# Set via GitHub secret in CI. Fallback here for local testing only.
+BACKEND_URL = "https://your-gcp-backend.example.com"
+
+[build]
+# Build just the client and its shared workspace before deploying
+command = "bash -lc 'cd .. && npm ci && cd shared && npm run build && cd ../client && npm run build'"
+cwd = "."
+watch_dir = ["../shared/src", "./src"]
+
+
