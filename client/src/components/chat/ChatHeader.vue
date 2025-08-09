@@ -9,7 +9,7 @@
       <h1 class="chat-title">{{ chats?.currentChat?.title || 'Chat' }}</h1>
 
       <!-- Model Selector -->
-      <div class="model-selector-container">
+      <div class="model-selector-container" v-if="models.availableModels.length > 0">
         <n-select :value="currentModelValue" :options="modelOptions as any" @update:value="handleModelSelect"
           placeholder="Select model" :render-label="renderModelLabel" :render-tag="renderSelectedTag"
           class="model-select">

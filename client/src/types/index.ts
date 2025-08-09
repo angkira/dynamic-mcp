@@ -168,17 +168,23 @@ export interface Settings {
   defaultModel: string
   thinkingBudget: number
   responseBudget: number
+  // Provider API keys stored per-user
+  openaiApiKey?: string | null
+  googleApiKey?: string | null
+  anthropicApiKey?: string | null
+  deepseekApiKey?: string | null
+  qwenApiKey?: string | null
   mcpEnableDebugLogging: boolean
   mcpDefaultTimeout: number
   mcpMaxConcurrentConnections: number
   mcpAutoDiscovery: boolean
 }
 
-export interface GetSettingsResponse extends Settings {}
+export interface GetSettingsResponse extends Settings { }
 
-export interface UpdateSettingsRequest extends Partial<Settings> {}
+export interface UpdateSettingsRequest extends Partial<Settings> { }
 
-export interface UpdateSettingsResponse extends Settings {}
+export interface UpdateSettingsResponse extends Settings { }
 
 // Client-specific MCP types
 export interface MCPSettings {

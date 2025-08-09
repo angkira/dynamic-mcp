@@ -14,11 +14,11 @@ export const useModelStore = defineStore('models', () => {
   const error = ref<string | null>(null)
 
   // Computed
-  const currentModelGroup = computed(() => 
+  const currentModelGroup = computed(() =>
     availableModels.value.find(group => group.provider === currentProvider.value)
   )
 
-  const currentModelsList = computed(() => 
+  const currentModelsList = computed(() =>
     currentModelGroup.value?.models || []
   )
 
@@ -31,14 +31,14 @@ export const useModelStore = defineStore('models', () => {
   async function fetchModels() {
     isLoading.value = true
     error.value = null
-    
+
     try {
       // Get settings store to use user preferences
       const settingsStore = useSettingsStore()
-      
+
       // Ensure settings are loaded (this will only fetch if not already loaded or in progress)
       await settingsStore.fetchSettings()
-      
+
       // Fetch available models
       const modelsResponse = await ChatAPIService.models.getModels()
 
@@ -50,25 +50,17 @@ export const useModelStore = defineStore('models', () => {
 
       availableModels.value = modelGroups
 
-      // Use user settings for default model selection
-      if (modelGroups.length > 0) {
-        // Check if the user's default provider exists in available models
+      // Use user settings for default model selection, else clear if none available
+      if (modelGroups.length === 0) {
+        currentProvider.value = ''
+        currentModel.value = ''
+      } else {
         const defaultProviderGroup = modelGroups.find(group => group.provider === settingsStore.settings.defaultProvider)
-
         if (defaultProviderGroup) {
-          // Use user's default provider
           currentProvider.value = settingsStore.settings.defaultProvider
-
-          // Check if the user's default model exists in the provider
           const defaultModelExists = defaultProviderGroup.models.some(model => model.id === settingsStore.settings.defaultModel)
-          if (defaultModelExists) {
-            currentModel.value = settingsStore.settings.defaultModel
-          } else {
-            // Fallback to first model of the default provider
-            currentModel.value = defaultProviderGroup.models[0]?.id || ''
-          }
+          currentModel.value = defaultModelExists ? settingsStore.settings.defaultModel : (defaultProviderGroup.models[0]?.id || '')
         } else {
-          // Fallback to first available provider and model
           currentProvider.value = modelGroups[0].provider
           currentModel.value = modelGroups[0].models[0]?.id || ''
         }
@@ -83,7 +75,7 @@ export const useModelStore = defineStore('models', () => {
 
   function setProvider(provider: string) {
     currentProvider.value = provider
-    
+
     // Reset to first model of the new provider
     const providerGroup = availableModels.value.find(group => group.provider === provider)
     if (providerGroup && providerGroup.models.length > 0) {
@@ -118,12 +110,12 @@ export const useModelStore = defineStore('models', () => {
     currentModel,
     isLoading,
     error,
-    
+
     // Computed
     currentModelGroup,
     currentModelsList,
     selectedModel,
-    
+
     // Actions
     fetchModels,
     setProvider,
