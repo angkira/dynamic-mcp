@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify'
-import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import {
   RememberRequestSchema,
   RecallRequestSchema,
@@ -16,8 +15,8 @@ import MemoryService from '../../../services/memory/memoryService'
 
 export default async function memoryRoutes(fastify: FastifyInstance, _opts: FastifyPluginOptions) {
   // Use TypeBox type provider for automatic validation and type inference
-  const server = fastify.withTypeProvider<TypeBoxTypeProvider>()
-  
+  const server = fastify
+
   // Initialize Memory service
   const memoryService = new MemoryService()
 
@@ -45,6 +44,7 @@ export default async function memoryRoutes(fastify: FastifyInstance, _opts: Fast
       console.error('❌ Remember endpoint error:', error)
       return reply.code(500).send({
         success: false,
+        data: {},
         error: error instanceof Error ? error.message : 'Internal server error'
       })
     }
@@ -74,6 +74,7 @@ export default async function memoryRoutes(fastify: FastifyInstance, _opts: Fast
       console.error('❌ Recall endpoint error:', error)
       return reply.code(500).send({
         success: false,
+        data: {},
         error: error instanceof Error ? error.message : 'Internal server error'
       })
     }
@@ -103,6 +104,7 @@ export default async function memoryRoutes(fastify: FastifyInstance, _opts: Fast
       console.error('❌ Reset endpoint error:', error)
       return reply.code(500).send({
         success: false,
+        data: {},
         error: error instanceof Error ? error.message : 'Internal server error'
       })
     }
@@ -129,6 +131,7 @@ export default async function memoryRoutes(fastify: FastifyInstance, _opts: Fast
       console.error('❌ Stats endpoint error:', error)
       return reply.code(500).send({
         success: false,
+        data: {},
         error: error instanceof Error ? error.message : 'Internal server error'
       })
     }

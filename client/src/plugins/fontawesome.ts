@@ -20,6 +20,7 @@ import {
   faComment,
   faMessage,
 
+  faUser,
   // Actions
   faCopy,
   faRedo,
@@ -31,9 +32,10 @@ import {
   faLightbulb,
   faMagic,
   faBrain,
-
+  faWrench,
   // States
   faSpinner,
+  faCheck,
   faCheckCircle,
   faTimesCircle,
 
@@ -82,6 +84,8 @@ library.add(
   faComment,
   faMessage,
 
+  faUser,
+
   // Actions
   faCopy,
   faRedo,
@@ -93,9 +97,11 @@ library.add(
   faLightbulb,
   faMagic,
   faBrain,
+  faWrench,
 
   // States
   faSpinner,
+  faCheck,
   faCheckCircle,
 
   // MCP & Development

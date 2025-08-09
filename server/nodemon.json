@@ -5,6 +5,7 @@
   "exec": "npm run build && fastify start -l info -P dist/app.js",
   "delay": "1000",
   "env": {
-    "NODE_ENV": "development"
+    "NODE_ENV": "development",
+    "ENV_FILE": ".env.dev"
   }
 }

@@ -13,6 +13,9 @@ CREATE TYPE "public"."MCPTransportType" AS ENUM ('STDIO', 'SSE', 'STREAMABLE_HTT
 -- CreateEnum
 CREATE TYPE "public"."MCPAuthType" AS ENUM ('NONE', 'OAUTH', 'APIKEY', 'BEARER');
 
+-- CreateEnum
+CREATE TYPE "public"."MCPServerScope" AS ENUM ('COMMON', 'LOCAL');
+
 -- CreateTable
 CREATE TABLE "public"."User" (
     "id" SERIAL NOT NULL,
@@ -54,10 +57,16 @@ CREATE TABLE "public"."Message" (
 CREATE TABLE "public"."Settings" (
     "id" SERIAL NOT NULL,
     "userId" INTEGER NOT NULL,
-    "defaultProvider" TEXT NOT NULL DEFAULT 'openai',
-    "defaultModel" TEXT NOT NULL DEFAULT 'o3-mini',
+    "defaultProvider" TEXT NOT NULL DEFAULT 'google',
+    "defaultModel" TEXT NOT NULL DEFAULT 'gemini-2.5-flash-lite',
     "thinkingBudget" INTEGER NOT NULL DEFAULT 2048,
     "responseBudget" INTEGER NOT NULL DEFAULT 8192,
+    "openaiApiKey" TEXT,
+    "googleApiKey" TEXT,
+    "anthropicApiKey" TEXT,
+    "deepseekApiKey" TEXT,
+    "qwenApiKey" TEXT,
+    "mcpEnabledServerIds" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "mcpAutoDiscovery" BOOLEAN NOT NULL DEFAULT true,
@@ -72,6 +81,7 @@ CREATE TABLE "public"."Settings" (
 CREATE TABLE "public"."MCPServer" (
     "id" SERIAL NOT NULL,
     "userId" INTEGER NOT NULL,
+    "createdBy" INTEGER,
     "name" TEXT NOT NULL,
     "version" TEXT NOT NULL,
     "description" TEXT,
@@ -102,6 +112,7 @@ CREATE TABLE "public"."MCPServer" (
     "configValidateCertificates" BOOLEAN NOT NULL DEFAULT true,
     "configDebug" BOOLEAN NOT NULL DEFAULT false,
     "capabilities" JSONB,
+    "scope" "public"."MCPServerScope" NOT NULL DEFAULT 'LOCAL',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -119,6 +130,18 @@ CREATE TABLE "public"."Memory" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Memory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."OAuthAccount" (
+    "id" SERIAL NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerUserId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OAuthAccount_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -139,6 +162,12 @@ CREATE INDEX "Memory_userId_idx" ON "public"."Memory"("userId");
 -- CreateIndex
 CREATE INDEX "Memory_userId_key_idx" ON "public"."Memory"("userId", "key");
 
+-- CreateIndex
+CREATE INDEX "OAuthAccount_userId_idx" ON "public"."OAuthAccount"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OAuthAccount_provider_providerUserId_key" ON "public"."OAuthAccount"("provider", "providerUserId");
+
 -- AddForeignKey
 ALTER TABLE "public"."Chat" ADD CONSTRAINT "Chat_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -156,4 +185,7 @@ ALTER TABLE "public"."MCPServer" ADD CONSTRAINT "MCPServer_userId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "public"."Memory" ADD CONSTRAINT "Memory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."OAuthAccount" ADD CONSTRAINT "OAuthAccount_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 

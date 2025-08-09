@@ -7,24 +7,24 @@
  * with the latest capabilities including memory tools.
  */
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@shared-prisma'
 import InternalMCPConfigLoader from './src/services/mcp/internalMCPConfigLoader'
 
 async function updateInternalMCPServer() {
   console.log('🔄 Updating internal MCP server capabilities...')
-  
+
   const prisma = new PrismaClient()
   const configLoader = InternalMCPConfigLoader.getInstance()
-  
+
   try {
     // Load the latest capabilities from JSON config
     const capabilities = await configLoader.getCapabilities()
     const serverInfo = await configLoader.getServerInfo()
-    
+
     console.log('📋 Latest capabilities:')
     console.log(`  - Tools: ${(capabilities as any).tools?.length || 0}`)
     console.log(`  - Resources: ${(capabilities as any).resources?.length || 0}`)
-    
+
     // Update the internal server record
     const result = await prisma.mCPServer.updateMany({
       where: {
@@ -39,11 +39,11 @@ async function updateInternalMCPServer() {
         lastConnected: new Date()
       }
     })
-    
+
     if (result.count === 0) {
       console.log('❌ No internal MCP server found to update')
       console.log('💡 Creating new internal MCP server record...')
-      
+
       // Create the internal server if it doesn't exist
       await prisma.mCPServer.create({
         data: {
@@ -61,17 +61,17 @@ async function updateInternalMCPServer() {
           lastConnected: new Date()
         }
       })
-      
+
       console.log('✅ Created new internal MCP server record')
     } else {
       console.log(`✅ Updated ${result.count} internal MCP server record(s)`)
     }
-    
+
     // Verify the update
     const updatedServer = await prisma.mCPServer.findFirst({
       where: { name: 'dynamic-mcp-api' }
     })
-    
+
     if (updatedServer) {
       const caps = updatedServer.capabilities as any
       console.log('🔍 Verification:')
@@ -80,7 +80,7 @@ async function updateInternalMCPServer() {
       console.log(`  - Status: ${updatedServer.status}`)
       console.log(`  - Tools in DB: ${caps?.tools?.length || 0}`)
       console.log(`  - Resources in DB: ${caps?.resources?.length || 0}`)
-      
+
       // List all tool names for verification
       if (caps?.tools) {
         console.log('🛠️ Available tools:')
@@ -89,9 +89,9 @@ async function updateInternalMCPServer() {
         })
       }
     }
-    
+
     console.log('\n🎉 Internal MCP server update completed!')
-    
+
   } catch (error) {
     console.error('❌ Failed to update internal MCP server:', error)
     process.exit(1)

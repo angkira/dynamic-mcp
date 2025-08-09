@@ -22,7 +22,7 @@ class HttpClient {
     this.timeout = API_CONFIG.TIMEOUT
   }
 
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -93,7 +93,7 @@ class HttpClient {
               });
             }
             const authResponse = await this.demoTokenRefreshPromise;
-            
+
             const freshHeaders = new Headers(headers)
             freshHeaders.set('Authorization', `Bearer ${authResponse.token}`)
             const retryConfig: RequestInit = {
@@ -108,11 +108,11 @@ class HttpClient {
             try {
               const retryResponse = await fetch(urlToFetch, retryConfig);
               clearTimeout(retryTimeoutId);
-              
+
               if (!retryResponse.ok) {
                 throw new AuthError('Demo token refresh failed - still unauthorized', 401);
               }
-              
+
               const contentType = retryResponse.headers.get('content-type');
               if (contentType && contentType.includes('application/json')) {
                 return await retryResponse.json();
@@ -163,15 +163,10 @@ class HttpClient {
     const options: RequestInit = {
       method: 'POST',
     }
-    
-    // Only set body and Content-Type if data is provided
-    if (data !== undefined) {
-      options.body = JSON.stringify(data)
-      options.headers = {
-        'Content-Type': 'application/json',
-      }
-    }
-    
+    // JSON only
+    options.headers = { 'Content-Type': 'application/json' }
+    options.body = data !== undefined ? JSON.stringify(data) : undefined
+
     return this.request<T>(endpoint, options)
   }
 
@@ -179,15 +174,10 @@ class HttpClient {
     const options: RequestInit = {
       method: 'PUT',
     }
-    
-    // Only set body and Content-Type if data is provided
-    if (data !== undefined) {
-      options.body = JSON.stringify(data)
-      options.headers = {
-        'Content-Type': 'application/json',
-      }
-    }
-    
+    // JSON only
+    options.headers = { 'Content-Type': 'application/json' }
+    options.body = data !== undefined ? JSON.stringify(data) : undefined
+
     return this.request<T>(endpoint, options)
   }
 
@@ -201,15 +191,10 @@ class HttpClient {
     const options: RequestInit = {
       method: 'PATCH',
     }
-    
-    // Only set body and Content-Type if data is provided
-    if (data !== undefined) {
-      options.body = JSON.stringify(data)
-      options.headers = {
-        'Content-Type': 'application/json',
-      }
-    }
-    
+    // JSON only
+    options.headers = { 'Content-Type': 'application/json' }
+    options.body = data !== undefined ? JSON.stringify(data) : undefined
+
     return this.request<T>(endpoint, options)
   }
 
@@ -219,7 +204,7 @@ class HttpClient {
   createEventSource(endpoint: string, data?: Record<string, string | number | boolean>): EventSource {
     const url = buildApiUrl(endpoint)
     const token = authService.getToken()
-    
+
     if (data) {
       const urlWithData = new URL(url)
       Object.entries(data).forEach(([key, value]) => {
@@ -227,21 +212,21 @@ class HttpClient {
           urlWithData.searchParams.append(key, String(value))
         }
       })
-      
+
       // Add token as query parameter for SSE since EventSource doesn't support headers
       if (token) {
         urlWithData.searchParams.append('token', token)
       }
-      
+
       return new EventSource(urlWithData.toString())
     }
-    
+
     // Add token as query parameter for SSE
     const urlWithAuth = new URL(url)
     if (token) {
       urlWithAuth.searchParams.append('token', token)
     }
-    
+
     return new EventSource(urlWithAuth.toString())
   }
 

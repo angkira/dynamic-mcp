@@ -120,6 +120,78 @@ export class JWTService {
   }
 
   /**
+   * Find or create user using OAuth provider identity, and ensure linkage record exists
+   */
+  async findOrCreateByOAuth(
+    provider: 'google' | 'github',
+    providerUserId: string,
+    email: string,
+    name?: string
+  ): Promise<{ user: any; token: string }> {
+    // First, try to find an existing OAuthAccount
+    const existingAccount = await (this.prisma as any).oAuthAccount.findUnique({
+      where: { provider_providerUserId: { provider, providerUserId } }
+    });
+
+    let user: any;
+    if (existingAccount) {
+      user = await this.prisma.user.findUnique({ where: { id: existingAccount.userId } });
+    } else {
+      // Fallback: try to find user by email to link accounts
+      user = await this.prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        user = await this.prisma.user.create({ data: { email, name } });
+      } else if (name && !user.name) {
+        user = await this.prisma.user.update({ where: { id: user.id }, data: { name } });
+      }
+
+      // Create the OAuth account linkage
+      await (this.prisma as any).oAuthAccount.create({
+        data: { userId: user.id, provider, providerUserId }
+      });
+    }
+
+    const token = this.generateToken({ id: user.id, email: user.email, name: user.name ?? undefined });
+    return { user, token };
+  }
+
+  /**
+   * Update user profile (name/email)
+   */
+  async updateUserProfile(userId: number, updates: { name?: string; email?: string }) {
+    const data: any = {};
+    if (updates.name !== undefined) data.name = updates.name;
+    if (updates.email !== undefined) data.email = updates.email;
+    const user = await this.prisma.user.update({ where: { id: userId }, data });
+    return user;
+  }
+
+  /**
+   * Change or set password. If user has a password, currentPassword is required.
+   */
+  async changeUserPassword(userId: number, newPassword: string, currentPassword?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+
+    if (user.password) {
+      if (!currentPassword) throw new Error('Current password required');
+      const ok = await bcrypt.compare(currentPassword, user.password);
+      if (!ok) throw new Error('Invalid current password');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    return await this.prisma.user.update({ where: { id: userId }, data: { password: passwordHash } });
+  }
+
+  /**
+   * Indicates if a user has a password set
+   */
+  async userHasPassword(userId: number): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { password: true } });
+    return !!user?.password;
+  }
+
+  /**
    * Get or create demo user and generate token
    */
   async ensureDemoUserWithToken(): Promise<{ user: any; token: string }> {

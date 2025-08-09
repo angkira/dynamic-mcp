@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@dynamic-mcp/shared', '@prisma/client']
+    exclude: ['@dynamic-mcp/shared', '@shared-prisma']
   },
   css: {
     preprocessorOptions: {

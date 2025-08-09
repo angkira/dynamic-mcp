@@ -240,6 +240,52 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * Fetch current user info (and whether they have a password)
+   */
+  async function fetchMe(): Promise<{ hasPassword: boolean }> {
+    try {
+      const data = await authService.authenticatedRequest<{ user: User; hasPassword: boolean }>(
+        '/auth/me',
+        { method: 'GET' }
+      )
+      setUser(data.user)
+      return { hasPassword: data.hasPassword }
+    } catch (err) {
+      if (err instanceof AuthError && err.status === 401) {
+        logout()
+      } else {
+        console.error('Failed to fetch current user:', err)
+      }
+      throw err
+    }
+  }
+
+  /**
+   * Change or set password. If a password exists, currentPassword is required.
+   */
+  async function changePassword(payload: { currentPassword?: string; newPassword: string }): Promise<void> {
+    isLoading.value = true
+    error.value = null
+    try {
+      await authService.authenticatedRequest<{ success: boolean }>('/user/password', {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      })
+    } catch (err) {
+      if (err instanceof AuthError) {
+        error.value = err.message
+        if (err.status === 401) logout()
+      } else {
+        error.value = 'Failed to update password. Please try again.'
+        console.error('Unexpected password change error:', err)
+      }
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Check if user should be redirected to login
    */
   function requiresAuthentication(): boolean {
@@ -269,6 +315,8 @@ export const useUserStore = defineStore('user', () => {
     initializeFromStorage,
     verifyAndRefreshUser,
     updateProfile,
+    fetchMe,
+    changePassword,
     requiresAuthentication
   }
 })

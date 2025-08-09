@@ -1,11 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { Socket } from 'socket.io';
-import { llmServices } from '../llm';
+import { getLlmService } from '../llm';
 import type { ConversationMessage } from '@dynamic-mcp/shared';
 import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@dynamic-mcp/shared';
 import { MessagingService } from '../messaging';
 import { McpService } from '../mcp/mcpService';
-import { Settings } from '@prisma/client';
+import type { Prisma } from '@shared-prisma';
 import { getMCPSystemInfo, isMCPAvailable } from '../../utils/mcpIntegration';
 
 export class WebSocketMessageHandlerService {
@@ -21,23 +21,39 @@ export class WebSocketMessageHandlerService {
     const { content, userId, provider, model, /* stream, */ isThinking } = payload;
     let { chatId } = payload;
 
-    const selectedProvider = (provider as LlmProvider) || (process.env.LLM_PROVIDER as LlmProvider);
-    const llmService = llmServices.get(selectedProvider);
+    const selectedProvider = (provider as LlmProvider) || LlmProvider.Google;
+    // Fetch user settings to get provider API key
+    const settingsUserId = userId || 1;
+    const userSettings = await this.fastify.prisma.settings.findUnique({ where: { userId: settingsUserId } });
+    const unmasket = (k?: string | null): string | undefined => (k && k !== '********' ? k : undefined);
+    const providerKeyMap: Record<string, string | undefined> = {
+      [LlmProvider.Google]: unmasket(userSettings?.googleApiKey),
+      [LlmProvider.OpenAI]: unmasket(userSettings?.openaiApiKey),
+      [LlmProvider.Anthropic]: unmasket(userSettings?.anthropicApiKey),
+      [LlmProvider.DeepSeek]: unmasket(userSettings?.deepseekApiKey),
+      [LlmProvider.Qwen]: unmasket(userSettings?.qwenApiKey),
+    };
+    const apiKey = providerKeyMap[selectedProvider];
+    if (!apiKey) {
+      socket.emit(ServerWebSocketEvent.Error, { error: `API key for provider ${selectedProvider} is missing. Update it in settings.` });
+      return;
+    }
+    const llmService = getLlmService(selectedProvider, apiKey);
     if (!llmService) {
       socket.emit(ServerWebSocketEvent.Error, { error: 'Invalid LLM provider specified.' });
       return;
     }
 
-    const settingsUserId = userId || 1;
-    let userSettings: Settings | null;
+    const settingsUserId2 = userId || 1;
+    let userSettings2: { responseBudget: number } | null;
     try {
-      userSettings = await this.fastify.prisma.settings.findUnique({
-        where: { userId: settingsUserId }
+      userSettings2 = await this.fastify.prisma.settings.findUnique({
+        where: { userId: settingsUserId2 }
       });
 
       // If no settings found, return error (settings should be created via database initialization)
-      if (!userSettings) {
-        this.fastify.log.error(`No settings found for user ${settingsUserId}. Database may not be properly initialized.`);
+      if (!userSettings2) {
+        this.fastify.log.error(`No settings found for user ${settingsUserId2}. Database may not be properly initialized.`);
         socket.emit(ServerWebSocketEvent.Error, { error: 'User settings not found. Please ensure database is properly initialized.' });
         return;
       }
@@ -50,7 +66,7 @@ export class WebSocketMessageHandlerService {
     if (model) {
       llmService.setModel(model);
     }
-    llmService.setBudgets(userSettings.responseBudget);
+    llmService.setBudgets(userSettings2.responseBudget);
 
     let enhancedContent = content;
     try {
@@ -87,7 +103,7 @@ export class WebSocketMessageHandlerService {
       include: { messages: { orderBy: { createdAt: 'asc' } } }
     });
     // Convert Prisma messages to ConversationMessage format
-    const conversationHistory: ConversationMessage[] = (chat?.messages || []).map(msg => {
+    const conversationHistory: ConversationMessage[] = (chat?.messages || []).map((msg: any) => {
       // Clean tool calls for LLM compatibility
       let cleanContent = msg.content;
       if (cleanContent && typeof cleanContent === 'object' && !Array.isArray(cleanContent) && 'toolCalls' in cleanContent) {
@@ -113,7 +129,7 @@ export class WebSocketMessageHandlerService {
     });
 
     try {
-      await messagingService.sendMessage(enhancedContent, chatId, conversationHistory, streamCallback, selectedProvider, model, isThinking);
+      await messagingService.sendMessage(enhancedContent, chatId!, conversationHistory, streamCallback, selectedProvider, model, isThinking, userId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during streaming.';
       this.fastify.log.error('Error in messaging service:', error);

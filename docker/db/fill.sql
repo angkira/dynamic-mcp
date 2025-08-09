@@ -174,3 +174,18 @@ DO $$ BEGIN
   RAISE NOTICE 'Demo user: demo@example.com';
   RAISE NOTICE 'MCP Servers: 2 working (memory-daemon, dynamic-mcp-api-daemon) + 2 demo (filesystem-manager, weather-api)';
 END $$;
+
+-- Mark core servers as COMMON scope if column exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'MCPServer'
+      AND column_name = 'scope'
+  ) THEN
+    UPDATE "public"."MCPServer"
+    SET "scope" = 'COMMON'
+    WHERE name IN ('dynamic-mcp-api-daemon', 'memory-daemon');
+  END IF;
+END $$;

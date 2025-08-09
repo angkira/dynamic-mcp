@@ -58,7 +58,8 @@ profile*
 *flamegraph*
 
 # environment variables
-.env
+.env*
+!.env.example
 
 shared/
 dist/

@@ -21,7 +21,7 @@ export const ChatAPIService = {
       if (request.chatId) {
         queryParams.set('chatId', request.chatId.toString());
       }
-      
+
       const url = `/message${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       return httpClient.post<SendMessageResponse>(url, request);
     },
@@ -50,6 +50,9 @@ export const ChatAPIService = {
   models: {
     async getModels(): Promise<GetModelsResponse> {
       return httpClient.get<GetModelsResponse>('/models');
+    },
+    async getProviders(): Promise<string[]> {
+      return httpClient.get<string[]>('/models/providers');
     },
   },
 

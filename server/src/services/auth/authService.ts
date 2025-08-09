@@ -25,8 +25,8 @@ export class AuthService {
   }
 
   async handleGoogleCallback(code: string) {
-    const { email, name } = await oauthService.exchangeGoogleCode(code)
-    return this.jwtService.findOrCreateByEmail(email, name)
+    const { email, name, providerUserId } = await oauthService.exchangeGoogleCode(code)
+    return this.jwtService.findOrCreateByOAuth('google', providerUserId, email, name)
   }
 
   getGithubAuthUrl(state: string) {
@@ -34,8 +34,8 @@ export class AuthService {
   }
 
   async handleGithubCallback(code: string) {
-    const { email, name } = await oauthService.exchangeGithubCode(code)
-    return this.jwtService.findOrCreateByEmail(email, name)
+    const { email, name, providerUserId } = await oauthService.exchangeGithubCode(code)
+    return this.jwtService.findOrCreateByOAuth('github', providerUserId, email, name)
   }
 }
 

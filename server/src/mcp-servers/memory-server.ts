@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+import './bootstrap'
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@shared-prisma';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import * as jwt from 'jsonwebtoken';
@@ -83,14 +83,14 @@ class MemoryMCPServer {
     return async (request: any, reply: any) => {
       const authHeader = request.headers.authorization;
       const user = this.verifyJWT(authHeader);
-      
+
       if (!user) {
-        return reply.status(401).send({ 
+        return reply.status(401).send({
           success: false,
-          error: 'Unauthorized: Invalid or missing JWT token' 
+          error: 'Unauthorized: Invalid or missing JWT token'
         });
       }
-      
+
       request.user = user;
     };
   }
@@ -174,7 +174,7 @@ class MemoryMCPServer {
       try {
         // For STDIO mode, use demo user ID (1)
         const userId = 1;
-        
+
         switch (name) {
           case "memory_remember":
             return await this.handleRemember(args as unknown as RememberArgs, userId);
@@ -300,7 +300,7 @@ class MemoryMCPServer {
   async run() {
     // Create HTTP server daemon
     const app = fastify({ logger: true });
-    
+
     // Register CORS
     await app.register(cors, {
       origin: true,
@@ -317,7 +317,7 @@ class MemoryMCPServer {
       try {
         const { name, arguments: args } = request.body as { name: string; arguments: any };
         const userId = request.user.userId;
-        
+
         let result;
         switch (name) {
           case 'memory_remember':
@@ -333,7 +333,7 @@ class MemoryMCPServer {
             reply.code(400);
             return { error: `Unknown tool: ${name}` };
         }
-        
+
         return result;
       } catch (error) {
         reply.code(500);
@@ -456,7 +456,7 @@ class MemoryMCPServer {
             name: "memory_reset",
             description: "🗑️ DELETE stored memories",
             inputSchema: {
-              type: "object", 
+              type: "object",
               properties: {
                 key: { type: "string", description: "Delete memories with specific key" },
                 userId: { type: "number", description: "User ID" }
@@ -468,7 +468,7 @@ class MemoryMCPServer {
     });
 
     const PORT = parseInt(process.env.MCP_MEMORY_PORT || '3001');
-    
+
     try {
       await app.listen({ port: PORT, host: '0.0.0.0' });
       console.log(`🚀 Memory MCP Server daemon running on http://0.0.0.0:${PORT}`);

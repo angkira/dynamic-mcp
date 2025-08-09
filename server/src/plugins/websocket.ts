@@ -45,89 +45,91 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
     .filter(origin => origin.length > 0);
 
   const allowedOrigins = [...defaultOrigins, ...additionalOrigins];
-  
+
   fastify.log.info('WebSocket CORS allowed origins:', allowedOrigins);
 
-  // Register fastify-socket.io plugin
-  await fastify.register(require('fastify-socket.io'), {
+  // Create Socket.IO server manually and attach to Fastify's underlying server
+  const io = new Server(fastify.server, {
     path: '/socket.io/',
     cors: {
       origin: allowedOrigins,
-      methods: ["GET", "POST"],
+      methods: ['GET', 'POST'],
       credentials: true
     },
-    transports: ['websocket', 'polling'],
-    allowEIO3: true
-  });
+    transports: ['websocket', 'polling']
+  })
 
-  fastify.ready((err) => {
-    if (err) throw err;
+  // Decorate instance
+  fastify.decorate('io', io)
 
-    fastify.io.on('connection', (socket: Socket) => {
-      fastify.log.info(`Socket connected: ${socket.id}`);
+  io.on('connection', (socket: Socket) => {
+    fastify.log.info(`Socket connected: ${socket.id}`);
 
-      // JWT Authentication middleware for WebSocket
-      const authenticateSocket = async (socket: Socket): Promise<{ userId: number; userEmail: string } | null> => {
-        try {
-          // Try to get token from auth handshake
-          const token = socket.handshake.auth?.token || 
-                       socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
-                       socket.handshake.query?.token;
+    // JWT Authentication middleware for WebSocket
+    const authenticateSocket = async (socket: Socket): Promise<{ userId: number; userEmail: string } | null> => {
+      try {
+        // Try to get token from auth handshake
+        const token = socket.handshake.auth?.token ||
+          socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
+          socket.handshake.query?.token;
 
-          if (!token) {
-            fastify.log.warn(`Socket ${socket.id} attempted connection without token`);
-            return null;
-          }
-
-          // Verify token using JWT service
-          const jwtService = fastify.jwtService;
-          const decoded = jwtService.verifyToken(token);
-          
-          if (!decoded) {
-            fastify.log.warn(`Socket ${socket.id} token verification failed`);
-            return null;
-          }
-          
-          fastify.log.info(`Socket ${socket.id} authenticated as user ${decoded.userId} (${decoded.email})`);
-          return {
-            userId: decoded.userId,
-            userEmail: decoded.email
-          };
-        } catch (error) {
-          fastify.log.error(`Socket ${socket.id} authentication failed:`, error);
+        if (!token) {
+          fastify.log.warn(`Socket ${socket.id} attempted connection without token`);
           return null;
         }
-      };
 
-      // Authenticate the socket connection
-      authenticateSocket(socket).then((authResult) => {
-        if (!authResult) {
-          // Authentication failed
-          socket.emit('unauthorized', { message: 'Authentication failed' });
-          socket.disconnect(true);
-          return;
+        // Verify token using JWT service
+        const jwtService = fastify.jwtService;
+        const decoded = jwtService.verifyToken(token);
+
+        if (!decoded) {
+          fastify.log.warn(`Socket ${socket.id} token verification failed`);
+          return null;
         }
 
-        // Store user info on socket
-        const authenticatedSocket = socket as AuthenticatedSocket;
-        authenticatedSocket.userId = authResult.userId;
-        authenticatedSocket.userEmail = authResult.userEmail;
+        fastify.log.info(`Socket ${socket.id} authenticated as user ${decoded.userId} (${decoded.email})`);
+        return {
+          userId: decoded.userId,
+          userEmail: decoded.email
+        };
+      } catch (error) {
+        fastify.log.error(`Socket ${socket.id} authentication failed:`, error);
+        return null;
+      }
+    };
 
-        // Emit successful authentication
-        socket.emit('authenticated', { 
-          userId: authResult.userId,
-          email: authResult.userEmail 
-        });
-
-        // Register authenticated event handlers
-        registerSocketHandlers(authenticatedSocket, messageHandler, fastify);
-      }).catch((error) => {
-        fastify.log.error(`Socket authentication error for ${socket.id}:`, error);
-        socket.emit('error', { message: 'Authentication error' });
+    // Authenticate the socket connection
+    authenticateSocket(socket).then((authResult) => {
+      if (!authResult) {
+        // Authentication failed
+        socket.emit('unauthorized', { message: 'Authentication failed' });
         socket.disconnect(true);
+        return;
+      }
+
+      // Store user info on socket
+      const authenticatedSocket = socket as AuthenticatedSocket;
+      authenticatedSocket.userId = authResult.userId;
+      authenticatedSocket.userEmail = authResult.userEmail;
+
+      // Emit successful authentication
+      socket.emit('authenticated', {
+        userId: authResult.userId,
+        email: authResult.userEmail
       });
+
+      // Register authenticated event handlers
+      registerSocketHandlers(authenticatedSocket, messageHandler, fastify);
+    }).catch((error) => {
+      fastify.log.error(`Socket authentication error for ${socket.id}:`, error);
+      socket.emit('error', { message: 'Authentication error' });
+      socket.disconnect(true);
     });
-  });
+  })
+
+  fastify.addHook('onClose', async () => {
+    await io.close()
+  })
 }
 
 function registerSocketHandlers(
@@ -135,7 +137,7 @@ function registerSocketHandlers(
   messageHandler: WebSocketMessageHandlerService,
   fastify: FastifyInstance
 ): void {
-  
+
   socket.on(ClientWebSocketEvent.SendMessage, (payload: SendMessagePayload) => {
     // Add userId from authenticated socket to payload
     const enrichedPayload = {

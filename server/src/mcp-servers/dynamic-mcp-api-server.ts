@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+import './bootstrap'
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@shared-prisma';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import * as jwt from 'jsonwebtoken';
@@ -263,8 +263,19 @@ class DynamicMCPAPIServer {
   }
 
   private async handleListServers(userId: number, args: MCPServerArgs = {}) {
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
+    const where: any = {
+      isEnabled: true,
+      OR: [
+        { scope: 'COMMON' },
+        { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+      ]
+    }
+    if (args.id) where.id = args.id
+    if (args.name) where.name = args.name
     const servers = await this.prisma.mCPServer.findMany({
-      where: { userId },
+      where,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -274,7 +285,7 @@ class DynamicMCPAPIServer {
           type: "text",
           text: JSON.stringify({
             success: true,
-            servers: servers.map(server => ({
+            servers: servers.map((server: any) => ({
               id: server.id,
               name: server.name,
               description: server.description,
@@ -295,6 +306,7 @@ class DynamicMCPAPIServer {
     const server = await this.prisma.mCPServer.create({
       data: {
         userId: userId,
+        createdBy: userId,
         name: args.name,
         version: args.version || '1.0.0',
         description: args.description || '',
@@ -315,6 +327,11 @@ class DynamicMCPAPIServer {
         capabilities: { tools: [], resources: [], prompts: [] },
       },
     });
+
+    // Add to this user's enabled list
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const ids = settings?.mcpEnabledServerIds || []
+    await this.prisma.settings.update({ where: { userId }, data: { mcpEnabledServerIds: { set: [...ids, server.id] } } })
 
     return {
       content: [
@@ -366,6 +383,16 @@ class DynamicMCPAPIServer {
       throw new Error('No update fields provided');
     }
 
+    // Ensure server is visible and owned appropriately
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
+    const target = await this.prisma.mCPServer.findUnique({ where: { id: serverId } })
+    if (!target || !target.isEnabled) throw new Error('Server not enabled for this user')
+    const isVisible = target.scope === 'COMMON' || (target.scope === 'LOCAL' && enabledIds.includes(serverId))
+    if (!isVisible) throw new Error('Server not enabled for this user')
+    const ownable = await this.prisma.mCPServer.findFirst({ where: { id: serverId, OR: [{ createdBy: userId }, { createdBy: null }] } })
+    if (!ownable) throw new Error('Server not enabled for this user')
+
     const server = await this.prisma.mCPServer.update({
       where: { id: serverId },
       data: updateData,
@@ -397,17 +424,35 @@ class DynamicMCPAPIServer {
 
     const whereClause = args.id ? { id: args.id } : { name: args.name };
     const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
+
     if (!server) {
       throw new Error('Server not found');
     }
 
     // Don't allow deletion of core servers
-    if (['dynamic-mcp-api', 'memory'].includes(server.name)) {
+    if (['dynamic-mcp-api', 'memory', 'dynamic-mcp-api-daemon', 'memory-daemon'].includes(server.name)) {
       throw new Error('Cannot delete core MCP servers');
     }
 
-    await this.prisma.mCPServer.delete({ where: { id: server.id } });
+    const isOwner = (server.createdBy && server.createdBy === userId) || server.userId === userId
+    if (isOwner) {
+      // Owner: delete globally and remove from all users enabled lists
+      const allSettings = await this.prisma.settings.findMany()
+      for (const s of allSettings) {
+        const ids = (s as any).mcpEnabledServerIds as number[] || []
+        if (ids.includes(server.id)) {
+          const newIds = ids.filter(v => v !== server.id)
+          await this.prisma.settings.update({ where: { userId: s.userId }, data: { mcpEnabledServerIds: { set: newIds } } })
+        }
+      }
+      await this.prisma.mCPServer.delete({ where: { id: server.id } });
+    } else {
+      // Non-owner: remove only from this user's enabled list
+      const settings = await this.prisma.settings.findUnique({ where: { userId } })
+      const ids = settings?.mcpEnabledServerIds || []
+      const newIds = ids.filter(v => v !== server.id)
+      await this.prisma.settings.update({ where: { userId }, data: { mcpEnabledServerIds: { set: newIds } } })
+    }
 
     return {
       content: [
@@ -442,6 +487,16 @@ class DynamicMCPAPIServer {
       serverId = existingServer.id;
     }
 
+    // Ensure server is enabled for this user
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
+    const target = await this.prisma.mCPServer.findUnique({ where: { id: serverId } })
+    if (!target || !target.isEnabled) throw new Error('Server not enabled for this user')
+    const isVisible = target.scope === 'COMMON' || (target.scope === 'LOCAL' && enabledIds.includes(serverId))
+    if (!isVisible) throw new Error('Server not enabled for this user')
+    const ownable = await this.prisma.mCPServer.findFirst({ where: { id: serverId, OR: [{ createdBy: userId }, { createdBy: null }] } })
+    if (!ownable) throw new Error('Server not enabled for this user')
+
     const server = await this.prisma.mCPServer.update({
       where: { id: serverId },
       data: { isEnabled: args.enabled },
@@ -466,8 +521,7 @@ class DynamicMCPAPIServer {
   }
 
   private async handleConnectServer(userId: number, args: MCPServerArgs) {
-    // This would trigger the connection manager to connect to the server
-    // For now, just return a placeholder response
+    // Placeholder: real connect handled by main server connection manager
     return {
       content: [
         {
@@ -482,8 +536,7 @@ class DynamicMCPAPIServer {
   }
 
   private async handleDisconnectServer(userId: number, args: MCPServerArgs) {
-    // This would trigger the connection manager to disconnect from the server
-    // For now, just return a placeholder response
+    // Placeholder: real disconnect handled by main server connection manager
     return {
       content: [
         {
@@ -501,7 +554,7 @@ class DynamicMCPAPIServer {
     // Handle different parameter formats that LLMs might use
     let serverId: number | undefined;
     let serverName: string | undefined;
-    
+
     // Try to extract server identifier from various possible parameter names
     if (args.id) {
       serverId = typeof args.id === 'string' ? parseInt(args.id) : args.id;
@@ -528,11 +581,17 @@ class DynamicMCPAPIServer {
       throw new Error('Either id or name must be provided to identify the server. Received: ' + JSON.stringify(args));
     }
 
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
     const whereClause = serverId ? { id: serverId } : { name: serverName };
     const server = await this.prisma.mCPServer.findFirst({ where: whereClause });
-    
+
     if (!server) {
       throw new Error(`Server not found with ${serverId ? `id: ${serverId}` : `name: ${serverName}`}`);
+    }
+
+    if (!enabledIds.includes(server.id)) {
+      throw new Error('Server not enabled for this user')
     }
 
     const capabilities = server.capabilities as any;
@@ -559,7 +618,7 @@ class DynamicMCPAPIServer {
   async run() {
     // Create HTTP server daemon
     const app = fastify({ logger: true });
-    
+
     // Register CORS
     await app.register(cors, {
       origin: true,
@@ -575,14 +634,14 @@ class DynamicMCPAPIServer {
 
       const authHeader = request.headers.authorization;
       const user = this.verifyJWT(authHeader);
-      
+
       if (!user) {
-        return reply.status(401).send({ 
+        return reply.status(401).send({
           success: false,
-          error: 'Unauthorized: Invalid or missing JWT token' 
+          error: 'Unauthorized: Invalid or missing JWT token'
         });
       }
-      
+
       (request as any).user = user;
     });
 
@@ -596,7 +655,7 @@ class DynamicMCPAPIServer {
       try {
         const { name, arguments: args } = request.body as { name: string; arguments: any };
         const userId = (request as any).user.userId;
-        
+
         let result;
         switch (name) {
           case 'mcp_list_servers':
@@ -627,7 +686,7 @@ class DynamicMCPAPIServer {
             reply.code(400);
             return { error: `Unknown tool: ${name}` };
         }
-        
+
         return result;
       } catch (error) {
         reply.code(500);
@@ -726,7 +785,7 @@ class DynamicMCPAPIServer {
     });
 
     const PORT = parseInt(process.env.MCP_API_PORT || '3002');
-    
+
     try {
       await app.listen({ port: PORT, host: '0.0.0.0' });
       console.log(`🚀 Dynamic MCP API Server daemon running on http://0.0.0.0:${PORT}`);

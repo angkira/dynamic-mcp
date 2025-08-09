@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-import type { MCPServer, MCPServerStatus } from '@prisma/client'
+import { PrismaClient, Prisma, type MCPServer, type MCPServerStatus, type MCPTransportType, type MCPAuthType } from '@shared-prisma'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
 import type {
@@ -86,11 +85,18 @@ export class McpService {
    * Get all MCP servers for a user
    */
   async getServers(userId: number = 1) {
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
     const servers = await this.prisma.mCPServer.findMany({
-      where: { userId },
+      where: {
+        isEnabled: true,
+        OR: [
+          { scope: 'COMMON' },
+          { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+        ]
+      },
       orderBy: { createdAt: 'desc' }
     })
-
     return servers.map(server => this.transformServerForResponse(server))
   }
 
@@ -98,14 +104,19 @@ export class McpService {
    * Get a specific MCP server
    */
   async getServer(id: number, userId: number = 1) {
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
     const server = await this.prisma.mCPServer.findFirst({
-      where: { id, userId }
+      where: {
+        id,
+        isEnabled: true,
+        OR: [
+          { scope: 'COMMON' },
+          { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+        ]
+      }
     })
-
-    if (!server) {
-      return null
-    }
-
+    if (!server) return { success: false, message: 'MCP server not found' }
     return this.transformServerForResponse(server)
   }
 
@@ -115,7 +126,8 @@ export class McpService {
   async createServer(serverData: Record<string, unknown>, userId: number = 1) {
     const server = await this.prisma.mCPServer.create({
       data: {
-        userId,
+        userId, // legacy owner field
+        createdBy: userId,
         name: serverData.name as string,
         version: (serverData.version as string) || '1.0.0',
         description: serverData.description as string | null,
@@ -123,7 +135,7 @@ export class McpService {
         status: 'DISCONNECTED',
 
         // Transport configuration
-        transportType: serverData.transportType as any,
+        transportType: serverData.transportType as MCPTransportType,
         transportCommand: serverData.transportCommand as string | null,
         transportArgs: (serverData.transportArgs as string[]) || [],
         transportEnv: (serverData.transportEnv as Record<string, string>) || {},
@@ -133,7 +145,7 @@ export class McpService {
         transportSessionId: serverData.transportSessionId as string | null,
 
         // Authentication configuration
-        authType: (serverData.authType as any) || 'NONE',
+        authType: (serverData.authType as MCPAuthType) || 'NONE',
         authClientId: serverData.authClientId as string | null,
         authClientSecret: serverData.authClientSecret as string | null,
         authAuthUrl: serverData.authAuthUrl as string | null,
@@ -152,10 +164,19 @@ export class McpService {
         configDebug: (serverData.configDebug as boolean) ?? false,
 
         // Capabilities
-        capabilities: serverData.capabilities || {
-          tools: [],
-          resources: [],
-          prompts: []
+        capabilities: (serverData.capabilities as Prisma.InputJsonValue) ?? ({} as Prisma.InputJsonValue)
+      }
+    })
+
+    // Add to this user's enabled list
+    await this.prisma.settings.update({
+      where: { userId },
+      data: {
+        mcpEnabledServerIds: {
+          set: [
+            ...((await this.prisma.settings.findUnique({ where: { userId } }))?.mcpEnabledServerIds || []),
+            server.id
+          ]
         }
       }
     })
@@ -172,13 +193,10 @@ export class McpService {
    * Update an MCP server
    */
   async updateServer(id: number, updateData: Record<string, unknown>, userId: number = 1) {
-    const existingServer = await this.prisma.mCPServer.findFirst({
-      where: { id, userId }
-    })
-
-    if (!existingServer) {
-      throw new Error('MCP server not found')
-    }
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
+    if (!enabledIds.includes(id)) throw new Error('MCP server not found')
+    const existingServer = await this.prisma.mCPServer.findFirst({ where: { id, OR: [{ createdBy: userId }, { createdBy: null }] } })
 
     // Build update object with only provided fields
     const updateObj: MCPServerUpdateData = {}
@@ -218,7 +236,7 @@ export class McpService {
 
     const updatedServer = await this.prisma.mCPServer.update({
       where: { id },
-      data: updateObj as any
+      data: updateObj as unknown as Prisma.MCPServerUpdateInput
     })
 
     // Handle enable/disable state changes
@@ -239,13 +257,9 @@ export class McpService {
    * Update server status
    */
   async updateServerStatus(id: number, status: MCPServerStatus, lastConnected?: Date, userId: number = 1) {
-    const existingServer = await this.prisma.mCPServer.findFirst({
-      where: { id, userId }
-    })
-
-    if (!existingServer) {
-      throw new Error('MCP server not found')
-    }
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
+    if (!enabledIds.includes(id)) throw new Error('MCP server not found')
 
     const updateData: { status: MCPServerStatus; lastConnected?: Date } = { status }
 
@@ -257,7 +271,7 @@ export class McpService {
 
     await this.prisma.mCPServer.update({
       where: { id },
-      data: updateData
+      data: updateData as unknown as Prisma.MCPServerUpdateInput
     })
   }
 
@@ -265,21 +279,31 @@ export class McpService {
    * Delete an MCP server
    */
   async deleteServer(id: number, userId: number = 1) {
-    const existingServer = await this.prisma.mCPServer.findFirst({
-      where: { id, userId }
-    })
+    const server = await this.prisma.mCPServer.findFirst({ where: { id, OR: [{ createdBy: userId }, { createdBy: null }] } })
+    if (!server) throw new Error('MCP server not found')
 
-    if (!existingServer) {
-      throw new Error('MCP server not found')
+    const isOwner = (server.createdBy && server.createdBy === userId) || server.userId === userId
+
+    if (isOwner) {
+      // Disconnect if connected
+      await this.connectionManager.disconnectFromServer(id)
+      // Remove id from all users' enabled lists
+      const allSettings = await this.prisma.settings.findMany()
+      for (const s of allSettings) {
+        if (Array.isArray(s.mcpEnabledServerIds) && s.mcpEnabledServerIds.includes(id)) {
+          const newIds = s.mcpEnabledServerIds.filter(v => v !== id)
+          await this.prisma.settings.update({ where: { userId: s.userId }, data: { mcpEnabledServerIds: { set: newIds } } })
+        }
+      }
+      // Delete server
+      await this.prisma.mCPServer.delete({ where: { id } })
+    } else {
+      // Non-owner: only remove from current user's enabled list
+      const settings = await this.prisma.settings.findUnique({ where: { userId } })
+      const ids = settings?.mcpEnabledServerIds || []
+      const newIds = ids.filter(v => v !== id)
+      await this.prisma.settings.update({ where: { userId }, data: { mcpEnabledServerIds: { set: newIds } } })
     }
-
-    // Disconnect if connected
-    await this.connectionManager.disconnectFromServer(id)
-
-    // Delete from database
-    await this.prisma.mCPServer.delete({
-      where: { id }
-    })
   }
 
   /**
@@ -288,23 +312,29 @@ export class McpService {
    * For STDIO/internal servers, uses the existing connection manager approach
    */
   async testConnection(id: number, userId: number = 1) {
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
     const server = await this.prisma.mCPServer.findFirst({
-      where: { id, userId }
+      where: {
+        id,
+        isEnabled: true,
+        OR: [
+          { scope: 'COMMON' },
+          { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+        ]
+      }
     })
-
-    if (!server) {
-      return { success: false, message: 'MCP server not found' }
-    }
+    if (!server) return { success: false, message: 'MCP server not found' }
 
     try {
       let result: { success: boolean; message: string }
 
       // Handle HTTP daemon services (check health endpoint directly)
-      if (server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
+      if (server && server.transportType === 'STREAMABLE_HTTP' && server.transportBaseUrl) {
         result = await this.testHttpDaemonHealth(server)
       }
       // Handle internal servers
-      else if (server.transportCommand === 'internal') {
+      else if (server && server.transportCommand === 'internal') {
         result = { success: true, message: 'Internal server is always available' }
       }
       // For STDIO servers, use the existing connection manager approach
@@ -328,7 +358,7 @@ export class McpService {
           }
         } else {
           // Server is not connected, attempt a quick connection test
-          const success = await this.connectionManager.connectToServer(server)
+          const success = await this.connectionManager.connectToServer(server as MCPServer)
 
           if (success) {
             // Optionally disconnect after successful test to avoid keeping unnecessary connections
@@ -462,16 +492,21 @@ export class McpService {
       // Legacy format - find which server has this tool
       console.log(`🔍 Legacy tool call detected: ${toolName}, searching for server...`);
 
+      const settings = await this.prisma.settings.findUnique({ where: { userId } })
+      const enabledIds = settings?.mcpEnabledServerIds || []
       const servers = await this.prisma.mCPServer.findMany({
         where: {
           isEnabled: true,
-          userId: userId
+          OR: [
+            { scope: 'COMMON' },
+            { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+          ]
         }
-      });
+      })
 
       let foundServer = null;
       for (const server of servers) {
-        const capabilities = server.capabilities as any;
+        const capabilities = server.capabilities as unknown as { tools?: Array<{ name: string }> };
         if (capabilities?.tools) {
           const hasTool = capabilities.tools.some((tool: any) => tool.name === toolName);
           if (hasTool) {
@@ -491,11 +526,16 @@ export class McpService {
     }
 
     // Find the server by name
+    const settings = await this.prisma.settings.findUnique({ where: { userId } })
+    const enabledIds = settings?.mcpEnabledServerIds || []
     const server = await this.prisma.mCPServer.findFirst({
       where: {
         name: serverName,
         isEnabled: true,
-        userId: userId
+        OR: [
+          { scope: 'COMMON' },
+          { scope: 'LOCAL', id: { in: enabledIds }, OR: [{ createdBy: userId }, { createdBy: null }] }
+        ]
       }
     })
 
@@ -632,17 +672,16 @@ export class McpService {
         }
       },
 
+      // Never expose secrets in API responses
       authentication: {
         type: server.authType, // Keep auth type in uppercase to match schema
         config: {
           clientId: server.authClientId,
-          clientSecret: server.authClientSecret,
+          // clientSecret/apiKey/token intentionally omitted
           authUrl: server.authAuthUrl,
           tokenUrl: server.authTokenUrl,
           scopes: (server.authScopes as string[]) || [],
-          apiKey: server.authApiKey,
-          headerName: server.authHeaderName,
-          token: server.authToken
+          headerName: server.authHeaderName
         }
       },
 

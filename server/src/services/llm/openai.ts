@@ -5,14 +5,29 @@ import { buildSystemPrompt } from '../../prompts';
 import { MCPToolForLLM } from '../../types/mcp.types';
 
 export class OpenAiService implements LlmService {
-  private openai: OpenAI;
-  private model = 'o3-mini';
+  private openai?: OpenAI;
+  private model: string = 'gpt-4o-mini';
   private responseBudget: number = 8192;
+  private apiKey?: string;
 
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey;
+  }
+
+  private getClient(): OpenAI {
+    if (!this.openai) {
+      const apiKey = this.apiKey;
+      if (!apiKey) {
+        throw new LlmAuthError('OPENAI_API_KEY is missing. Set it to use OpenAI provider.');
+      }
+      this.openai = new OpenAI({ apiKey });
+    }
+    return this.openai;
+  }
+
+  public setApiKey(apiKey: string | undefined): void {
+    this.apiKey = apiKey;
+    this.openai = undefined; // reset client so it re-initializes with new key
   }
 
   private handleError(error: unknown): never {
@@ -36,12 +51,12 @@ export class OpenAiService implements LlmService {
 
   async sendMessage(message: string): Promise<string> {
     try {
-      const completion = await this.openai.chat.completions.create({
+      const completion = await this.getClient().chat.completions.create({
         messages: [
           { role: 'system', content: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false }) },
           { role: 'user', content: message }
         ],
-        model: this.model,
+        model: this.model as any,
         max_tokens: this.responseBudget,
       });
 
@@ -117,7 +132,7 @@ export class OpenAiService implements LlmService {
 
       const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
         messages,
-        model: this.model,
+        model: this.model as any,
         max_tokens: this.responseBudget,
         stream: true,
       };
@@ -128,7 +143,7 @@ export class OpenAiService implements LlmService {
       // No specific LLM behavior change based on isThinking for now, just pass the flag.
       // Future implementation might modify messages or options based on this flag.
 
-      const stream = await this.openai.chat.completions.create(options);
+      const stream = await this.getClient().chat.completions.create(options);
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta;
@@ -148,7 +163,7 @@ export class OpenAiService implements LlmService {
 
   async getModels(): Promise<{ provider: string; model: string }[]> {
     try {
-      const models = await this.openai.models.list();
+      const models = await this.getClient().models.list();
       const filteredModels = models.data.filter((model) => {
         const modelId = model.id.toLowerCase();
         return modelId.includes('gpt') || modelId.startsWith('o');

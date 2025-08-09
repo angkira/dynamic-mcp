@@ -1,46 +1,33 @@
-import { FastifyInstance } from 'fastify';
+import { Settings } from '@shared-prisma';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { SettingsService } from '../../../services/settingsService'
 
 export default async function settingsRoutes(fastify: FastifyInstance) {
   // GET /api/settings - Get user settings
-  fastify.get('/', async () => {
-    // For now, use a default user ID (1) - in a real app, this would come from auth
-    const userId = 1;
+  fastify.get('/', async (request: FastifyRequest) => {
+    // Use authenticated user
+    const userId = request.user?.id as number | undefined;
+
+    if (!userId) {
+      throw new Error('Unauthorized')
+    }
 
     try {
-      // First, ensure the default user exists
-      let user = await fastify.prisma.user.findUnique({
-        where: { id: userId }
-      });
+      // Ensure a corresponding User row exists (fresh DB after reset may not have it yet)
+      const email = (request as any).user?.email as string | undefined
+      const name = (request as any).user?.name as string | undefined
+      await (fastify.prisma as any).user.upsert({
+        where: { id: userId },
+        update: {},
+        create: {
+          id: userId,
+          email: email || `user-${userId}@local.invalid`,
+          name: name || null
+        }
+      })
 
-      if (!user) {
-        user = await fastify.prisma.user.create({
-          data: {
-            email: 'user@example.com',
-            name: 'Default User'
-          }
-        });
-      }
-
-      // Get settings for this user (created via database initialization script)
-      const settings = await fastify.prisma.settings.findUnique({
-        where: { userId: user.id }
-      });
-
-      if (!settings) {
-        throw new Error('User settings not found. Please ensure database is properly initialized.');
-      }
-
-      return {
-        defaultProvider: settings.defaultProvider,
-        defaultModel: settings.defaultModel,
-        thinkingBudget: settings.thinkingBudget,
-        responseBudget: settings.responseBudget,
-        // MCP Global Settings
-        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
-        mcpDefaultTimeout: settings.mcpDefaultTimeout,
-        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
-        mcpAutoDiscovery: settings.mcpAutoDiscovery
-      };
+      const service = new SettingsService(fastify.prisma as any, (fastify as any).mcpService)
+      return await service.getUserSettings(userId)
     } catch (error) {
       fastify.log.error('Failed to get settings:', error);
       throw new Error('Failed to get settings');
@@ -48,87 +35,38 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
   });
 
   // PUT /api/settings - Update user settings
-  fastify.put('/', async (request) => {
-    const userId = 1; // For now, use a default user ID
+  fastify.put('/', async (request: FastifyRequest<{ Body: Settings }>) => {
+    const userId = request.user?.id as number | undefined;
 
-    const {
-      defaultProvider,
-      defaultModel,
-      thinkingBudget,
-      responseBudget,
-      // MCP Global Settings
-      mcpEnableDebugLogging,
-      mcpDefaultTimeout,
-      mcpMaxConcurrentConnections,
-      mcpAutoDiscovery
-    } = request.body as {
-      defaultProvider?: string;
-      defaultModel?: string;
-      thinkingBudget?: number;
-      responseBudget?: number;
-      // MCP Global Settings
-      mcpEnableDebugLogging?: boolean;
-      mcpDefaultTimeout?: number;
-      mcpMaxConcurrentConnections?: number;
-      mcpAutoDiscovery?: boolean;
-    };
+    if (!userId) {
+      throw new Error('Unauthorized')
+    }
+
+    const body = request.body as any
 
     try {
-      // First, ensure the default user exists
-      let user = await fastify.prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (!user) {
-        user = await fastify.prisma.user.create({
-          data: {
-            email: 'user@example.com',
-            name: 'Default User'
-          }
-        });
-      }
-
-      const settings = await fastify.prisma.settings.update({
-        where: { userId: user.id },
-        data: {
-          ...(defaultProvider && { defaultProvider }),
-          ...(defaultModel && { defaultModel }),
-          ...(thinkingBudget !== undefined && { thinkingBudget }),
-          ...(responseBudget !== undefined && { responseBudget }),
-          // MCP Global Settings
-          ...(mcpEnableDebugLogging !== undefined && { mcpEnableDebugLogging }),
-          ...(mcpDefaultTimeout !== undefined && { mcpDefaultTimeout }),
-          ...(mcpMaxConcurrentConnections !== undefined && { mcpMaxConcurrentConnections }),
-          ...(mcpAutoDiscovery !== undefined && { mcpAutoDiscovery })
+      // Ensure a corresponding User row exists
+      const email = (request as any).user?.email as string | undefined
+      const name = (request as any).user?.name as string | undefined
+      await (fastify.prisma as any).user.upsert({
+        where: { id: userId },
+        update: {},
+        create: {
+          id: userId,
+          email: email || `user-${userId}@local.invalid`,
+          name: name || null
         }
-      });
+      })
 
-      return {
-        defaultProvider: settings.defaultProvider,
-        defaultModel: settings.defaultModel,
-        thinkingBudget: settings.thinkingBudget,
-        responseBudget: settings.responseBudget,
-        // MCP Global Settings
-        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
-        mcpDefaultTimeout: settings.mcpDefaultTimeout,
-        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
-        mcpAutoDiscovery: settings.mcpAutoDiscovery
-      };
+      const service = new SettingsService(fastify.prisma as any, (fastify as any).mcpService)
+      return await service.updateUserSettings(userId, body)
 
       // Update MCP service with new settings if it exists
-      await fastify.mcpService?.updateGlobalSettings(userId);
-
-      return {
-        defaultProvider: settings.defaultProvider,
-        defaultModel: settings.defaultModel,
-        thinkingBudget: settings.thinkingBudget,
-        responseBudget: settings.responseBudget,
-        // MCP Global Settings
-        mcpEnableDebugLogging: settings.mcpEnableDebugLogging,
-        mcpDefaultTimeout: settings.mcpDefaultTimeout,
-        mcpMaxConcurrentConnections: settings.mcpMaxConcurrentConnections,
-        mcpAutoDiscovery: settings.mcpAutoDiscovery
-      };
+      // Update MCP service with new settings if available
+      // const mcpService: any = (fastify as any).mcpService
+      // if (mcpService && typeof userId === 'number') {
+      //   await mcpService.updateGlobalSettings(userId as number)
+      // }
     } catch (error) {
       fastify.log.error('Failed to update settings:', error);
       throw new Error('Failed to update settings');

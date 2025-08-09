@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client'
-import type { Memory } from '@prisma/client'
-import type { 
-  RememberRequestType, 
-  RecallRequestType, 
-  ResetRequestType, 
+import { PrismaClient } from '@shared-prisma'
+import type {
+  RememberRequestType,
+  RecallRequestType,
+  ResetRequestType,
   RecallResponseType,
-  ResetResponseType 
+  ResetResponseType
 } from '../../schemas/memory.schema'
 
 /**
@@ -24,7 +23,7 @@ export class MemoryService {
   /**
    * Store a new memory
    */
-  async remember(data: RememberRequestType): Promise<Memory | { error: string }> {
+  async remember(data: RememberRequestType): Promise<any | { error: string }> {
     const userId = data.userId || 1 // Default to user ID 1 for now
 
     console.log('🔍 MemoryService.remember called with data:', JSON.stringify(data, null, 2));
@@ -72,11 +71,11 @@ export class MemoryService {
     try {
       // Build where clause for filtering
       const where: any = { userId }
-      
+
       if (data.key) {
         where.key = data.key
       }
-      
+
       if (data.search) {
         where.content = {
           contains: data.search,
@@ -98,7 +97,7 @@ export class MemoryService {
       const hasMore = offset + limit < total
 
       console.log(`🧠 Recalled ${memories.length} memories (${total} total) for user ${userId}`)
-      
+
       return {
         memories,
         total,
@@ -119,20 +118,20 @@ export class MemoryService {
     try {
       // Build where clause for deletion
       const where: any = { userId }
-      
+
       if (data.key) {
         where.key = data.key
       }
 
       // Delete memories
       const result = await this.prisma.memory.deleteMany({ where })
-      
-      const message = data.key 
+
+      const message = data.key
         ? `Deleted ${result.count} memories with key '${data.key}' for user ${userId}`
         : `Deleted all ${result.count} memories for user ${userId}`
 
       console.log(`🗑️ ${message}`)
-      
+
       return {
         deletedCount: result.count,
         message
@@ -166,8 +165,8 @@ export class MemoryService {
 
       const uniqueKeys = [...new Set(
         memories
-          .map(m => m.key)
-          .filter((key): key is string => key !== null)
+          .map((m: { key: string | null }) => m.key)
+          .filter((key: string | null): key is string => key !== null)
       )]
 
       return {

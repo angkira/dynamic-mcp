@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import type { LlmService, ConversationMessage } from '@dynamic-mcp/shared';
 import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@dynamic-mcp/shared';
 import { McpService } from '../mcp/mcpService';
-import { MessageRole as PrismaMessageRole } from '@prisma/client';
+// Avoid importing enum type from Prisma; persist enum values directly
 import { StreamingPipeline, StreamingResults } from './StreamingPipeline';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
@@ -26,6 +26,7 @@ export class MessagingService {
     provider: LlmProvider,
     model?: string,
     isThinking?: boolean,
+    userId?: number,
   ): Promise<void> {
     try {
       // Setup debug logging
@@ -43,6 +44,16 @@ export class MessagingService {
       appendFileSync(streamLogFile, `=== STREAM EVENTS - Chat ${chatId} ===\n`);
 
       console.debug(` MessageService.sendMessage - isThinking: ${isThinking}`);
+
+      // Ensure chat exists (in case client and server got out of sync)
+      const existingChat = await this.fastify.prisma.chat.findUnique({ where: { id: chatId } })
+      if (!existingChat) {
+        if (!userId) {
+          throw new Error('Chat does not exist and userId not provided to recreate it')
+        }
+        const created = await this.fastify.prisma.chat.create({ data: { userId } })
+        chatId = created.id
+      }
 
       // Add the current user message to the history for this turn.
       // This ensures the history is consistent for the initial call and any follow-up tool calls.
@@ -221,8 +232,8 @@ export class MessagingService {
       this.fastify.log.info('Message processing complete, saving to database.');
 
       // Save messages to database
-      const userMessage = await this.saveMessage(chatId, content, PrismaMessageRole.USER, provider, model || 'default');
-      const aiMessage = await this.saveMessage(chatId, results.fullResponse, PrismaMessageRole.AI, provider, model || 'default', results.thoughts.length > 0 ? results.thoughts : undefined, executedToolCalls);
+      const userMessage = await this.saveMessage(chatId, content, 'USER', provider, model || 'default');
+      const aiMessage = await this.saveMessage(chatId, results.fullResponse, 'AI', provider, model || 'default', results.thoughts.length > 0 ? results.thoughts : undefined, executedToolCalls);
 
       // Update chat title if one was extracted and the chat doesn't already have a title
       if (results.title) {
@@ -255,7 +266,7 @@ export class MessagingService {
   private async saveMessage(
     chatId: number,
     content: string,
-    role: PrismaMessageRole,
+    role: 'USER' | 'AI',
     provider: LlmProvider,
     model: string = 'default',
     thoughts?: string[],

@@ -1,34 +1,7 @@
 <template>
   <div class="general-settings">
     <n-space vertical :size="24">
-      <!-- Provider API Keys Section -->
-      <div class="setting-group">
-        <h3 class="setting-title">Provider API Keys</h3>
-        <p class="setting-description">Add API keys for providers you want to use. Models are shown only for providers
-          with a key.</p>
-        <n-space vertical :size="12">
-          <n-form-item label="Google (Gemini) API Key" label-placement="left">
-            <n-input v-model:value="localSettings.googleApiKey" type="password" placeholder="Enter Google API key"
-              @change="onKeyChanged" />
-          </n-form-item>
-          <n-form-item label="OpenAI API Key" label-placement="left">
-            <n-input v-model:value="localSettings.openaiApiKey" type="password" placeholder="Enter OpenAI API key"
-              @change="onKeyChanged" />
-          </n-form-item>
-          <n-form-item label="Anthropic API Key" label-placement="left">
-            <n-input v-model:value="localSettings.anthropicApiKey" type="password" placeholder="Enter Anthropic API key"
-              @change="onKeyChanged" />
-          </n-form-item>
-          <n-form-item label="DeepSeek API Key" label-placement="left">
-            <n-input v-model:value="localSettings.deepseekApiKey" type="password" placeholder="Enter DeepSeek API key"
-              @change="onKeyChanged" />
-          </n-form-item>
-          <n-form-item label="Qwen API Key" label-placement="left">
-            <n-input v-model:value="localSettings.qwenApiKey" type="password" placeholder="Enter Qwen API key"
-              @change="onKeyChanged" />
-          </n-form-item>
-        </n-space>
-      </div>
+      <!-- Provider API Keys moved to User Settings -->
 
       <!-- Default Model Section -->
       <div class="setting-group">
@@ -110,6 +83,7 @@ import {
   NDivider
 } from 'naive-ui'
 import { useModelStore } from '@/stores/models'
+import { useSettingsStore } from '@/stores/settings'
 import type { Settings } from '@/types'
 
 // Props
@@ -126,6 +100,7 @@ const emit = defineEmits<{
 
 // Stores
 const modelStore = useModelStore()
+const settingsStore = useSettingsStore()
 
 // Computed
 const localSettings = computed({
@@ -169,10 +144,13 @@ const onProviderChange = (provider: string) => {
 async function onKeyChanged() {
   try {
     const { openaiApiKey, googleApiKey, anthropicApiKey, deepseekApiKey, qwenApiKey } = localSettings.value
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ openaiApiKey, googleApiKey, anthropicApiKey, deepseekApiKey, qwenApiKey })
+    // Use the settings store to persist updates so local state is preserved and not cleared
+    await settingsStore.updateSettings({
+      openaiApiKey: openaiApiKey ?? undefined,
+      googleApiKey: googleApiKey ?? undefined,
+      anthropicApiKey: anthropicApiKey ?? undefined,
+      deepseekApiKey: deepseekApiKey ?? undefined,
+      qwenApiKey: qwenApiKey ?? undefined,
     })
     await modelStore.fetchModels()
   } catch (e) {
@@ -181,7 +159,7 @@ async function onKeyChanged() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .general-settings {
   padding: 16px 0;
 }

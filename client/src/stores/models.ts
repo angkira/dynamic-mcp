@@ -39,7 +39,7 @@ export const useModelStore = defineStore('models', () => {
       // Ensure settings are loaded (this will only fetch if not already loaded or in progress)
       await settingsStore.fetchSettings()
 
-      // Fetch available models
+      // Fetch available models (backend filters by providers with keys)
       const modelsResponse = await ChatAPIService.models.getModels()
 
       // Convert providers to model groups format
@@ -50,19 +50,31 @@ export const useModelStore = defineStore('models', () => {
 
       availableModels.value = modelGroups
 
-      // Use user settings for default model selection, else clear if none available
+      // Decide default selection based on available providers and user settings
       if (modelGroups.length === 0) {
         currentProvider.value = ''
         currentModel.value = ''
       } else {
-        const defaultProviderGroup = modelGroups.find(group => group.provider === settingsStore.settings.defaultProvider)
-        if (defaultProviderGroup) {
-          currentProvider.value = settingsStore.settings.defaultProvider
-          const defaultModelExists = defaultProviderGroup.models.some(model => model.id === settingsStore.settings.defaultModel)
-          currentModel.value = defaultModelExists ? settingsStore.settings.defaultModel : (defaultProviderGroup.models[0]?.id || '')
+        const userSelectedProvider = settingsStore.settings.defaultProvider
+        const selectedGroup = modelGroups.find(g => g.provider === userSelectedProvider)
+        if (selectedGroup) {
+          currentProvider.value = userSelectedProvider
+          const defaultModelExists = selectedGroup.models.some(m => m.id === settingsStore.settings.defaultModel)
+          currentModel.value = defaultModelExists ? settingsStore.settings.defaultModel : (selectedGroup.models[0]?.id || '')
         } else {
-          currentProvider.value = modelGroups[0].provider
-          currentModel.value = modelGroups[0].models[0]?.id || ''
+          // Fallback to the first provider that has models
+          const firstGroup = modelGroups[0]
+          currentProvider.value = firstGroup.provider
+          currentModel.value = firstGroup.models[0]?.id || ''
+          // Persist this fallback as new defaults so UI remains consistent
+          try {
+            await ChatAPIService.settings.updateSettings({
+              defaultProvider: currentProvider.value,
+              defaultModel: currentModel.value,
+            })
+          } catch (e) {
+            // ignore persist error, selection still applied client-side
+          }
         }
       }
     } catch (err) {

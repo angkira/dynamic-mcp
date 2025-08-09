@@ -31,24 +31,13 @@
           </div>
           <div class="mcp-actions">
             <n-space>
-              <n-switch
-                :value="server.isEnabled"
-                @update:value="$emit('toggle', server.id)"
-                size="small"
-              />
-              <n-button
-                v-if="server.status === MCPServerStatus.DISCONNECTED && server.isEnabled"
-                size="small"
-                type="primary"
-                @click="$emit('connect', server.id)"
-              >
+              <n-switch :value="server.isEnabled" @update:value="$emit('toggle', server.id)" size="small" />
+              <n-button v-if="server.status === MCPServerStatus.DISCONNECTED && server.isEnabled" size="small"
+                type="primary" @click="$emit('connect', server.id)">
                 Connect
               </n-button>
-              <n-button
-                v-else-if="server.status === MCPServerStatus.CONNECTED"
-                size="small"
-                @click="$emit('disconnect', server.id)"
-              >
+              <n-button v-else-if="server.status === MCPServerStatus.CONNECTED" size="small"
+                @click="$emit('disconnect', server.id)">
                 Disconnect
               </n-button>
               <n-dropdown :options="menuOptions" @select="handleMenuSelect">
@@ -58,6 +47,15 @@
                   </template>
                 </n-button>
               </n-dropdown>
+              <n-popconfirm type="error" positive-text="Delete" negative-text="Cancel"
+                @positive-click="$emit('delete', server.id)">
+                <template #trigger>
+                  <n-button size="small" quaternary circle type="error">
+                    <n-icon><font-awesome-icon icon="trash" /></n-icon>
+                  </n-button>
+                </template>
+                Are you sure you want to delete "{{ server.name }}"?
+              </n-popconfirm>
             </n-space>
           </div>
         </div>
@@ -116,15 +114,9 @@
             <div v-if="showTools" class="capability-details">
               <h5>Available Tools</h5>
               <n-space vertical :size="8">
-                <div
-                  v-for="tool in server.capabilities.tools || []"
-                  :key="tool.name"
-                  class="capability-item"
-                >
+                <div v-for="tool in server.capabilities.tools || []" :key="tool.name" class="capability-item">
                   <strong>{{ tool.name }}</strong>
-                  <span v-if="tool.description" class="item-description"
-                    >: {{ tool.description }}</span
-                  >
+                  <span v-if="tool.description" class="item-description">: {{ tool.description }}</span>
                   <n-tag v-if="tool.category" size="tiny" class="item-tag">{{
                     tool.category
                   }}</n-tag>
@@ -137,15 +129,10 @@
             <div v-if="showResources" class="capability-details">
               <h5>Available Resources</h5>
               <n-space vertical :size="8">
-                <div
-                  v-for="resource in server.capabilities.resources || []"
-                  :key="resource.uri"
-                  class="capability-item"
-                >
+                <div v-for="resource in server.capabilities.resources || []" :key="resource.uri"
+                  class="capability-item">
                   <strong>{{ resource.name }}</strong>
-                  <span v-if="resource.description" class="item-description"
-                    >: {{ resource.description }}</span
-                  >
+                  <span v-if="resource.description" class="item-description">: {{ resource.description }}</span>
                   <code class="resource-uri">{{ resource.uri }}</code>
                 </div>
               </n-space>
@@ -156,15 +143,9 @@
             <div v-if="showPrompts" class="capability-details">
               <h5>Available Prompts</h5>
               <n-space vertical :size="8">
-                <div
-                  v-for="prompt in server.capabilities.prompts || []"
-                  :key="prompt.name"
-                  class="capability-item"
-                >
+                <div v-for="prompt in server.capabilities.prompts || []" :key="prompt.name" class="capability-item">
                   <strong>{{ prompt.name }}</strong>
-                  <span v-if="prompt.description" class="item-description"
-                    >: {{ prompt.description }}</span
-                  >
+                  <span v-if="prompt.description" class="item-description">: {{ prompt.description }}</span>
                   <span v-if="prompt.arguments?.length" class="prompt-args">
                     ({{ prompt.arguments.length }} args)
                   </span>
@@ -200,6 +181,7 @@ import {
   NDropdown,
   NTooltip,
   NCollapseTransition,
+  NPopconfirm,
 } from 'naive-ui'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useMcpStore } from '@/stores/mcp'
@@ -286,15 +268,6 @@ const menuOptions = computed(() => [
     icon: () => h(FontAwesomeIcon, { icon: testing.value ? 'spinner' : 'plug' }),
     disabled: testing.value,
   },
-  {
-    type: 'divider',
-    key: 'divider',
-  },
-  {
-    label: 'Delete',
-    key: 'delete',
-    icon: () => h(FontAwesomeIcon, { icon: 'trash' }),
-  },
 ])
 
 // Methods
@@ -337,9 +310,6 @@ const handleMenuSelect = (key: string) => {
       break
     case 'test':
       testConnection()
-      break
-    case 'delete':
-      emit('delete', props.server.id)
       break
   }
 }

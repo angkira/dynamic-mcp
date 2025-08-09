@@ -41,7 +41,7 @@ Run the test cases.
    ```bash
    # Create .env file with:
    LLM_PROVIDER=openai
-   DEFAULT_MODEL=o3-mini
+   DEFAULT_MODEL=o4-mini
    OPENAI_API_KEY=your_key_here
    GEMINI_API_KEY=your_key_here
    ```

@@ -4,6 +4,7 @@ import { OAuthApp } from '@octokit/oauth-app'
 export interface OAuthUser {
   email: string
   name?: string
+  providerUserId: string
 }
 
 export class OAuthService {
@@ -48,10 +49,12 @@ export class OAuthService {
     const { tokens } = await this.googleClient.getToken(code)
     if (!tokens.id_token) throw new Error('Missing Google id_token')
     const ticket = await this.googleClient.verifyIdToken({ idToken: tokens.id_token })
-    const payload = (ticket.getPayload() || {}) as { email?: string; name?: string }
+    const payload = (ticket.getPayload() || {}) as { email?: string; name?: string; sub?: string }
     const email = payload.email
     if (!email) throw new Error('Google token missing email')
-    return { email, name: payload.name || undefined }
+    const providerUserId = payload.sub || ''
+    if (!providerUserId) throw new Error('Google token missing subject id')
+    return { email, name: payload.name || undefined, providerUserId }
   }
 
   getGithubAuthUrl(state: string) {
@@ -78,8 +81,10 @@ export class OAuthService {
     const profileResp = await fetch('https://api.github.com/user', {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/vnd.github+json' },
     } as any)
-    const profile = (await profileResp.json()) as { name?: string; login?: string }
-    return { email: primary.email, name: profile.name || profile.login || undefined }
+    const profile = (await profileResp.json()) as { id?: number; name?: string; login?: string }
+    const providerUserId = (profile.id ?? profile.login ?? '').toString()
+    if (!providerUserId) throw new Error('GitHub profile missing id')
+    return { email: primary.email, name: profile.name || profile.login || undefined, providerUserId }
   }
 }
 

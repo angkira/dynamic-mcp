@@ -10,6 +10,7 @@ import {
   type GlobalTheme,
 } from 'naive-ui'
 import { useUserStore } from '@/stores/user'
+import NotificationBridge from '@/components/NotificationBridge.vue'
 
 // Theme configuration
 const theme: GlobalTheme | null = null // Use light theme by default
@@ -32,6 +33,8 @@ onMounted(() => {
         <NDialogProvider>
           <NNotificationProvider>
             <NMessageProvider>
+              <!-- Bridge queued notifications from store to provider -->
+              <NotificationBridge />
               <RouterView />
             </NMessageProvider>
           </NNotificationProvider>

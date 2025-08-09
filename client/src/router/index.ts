@@ -14,6 +14,15 @@ const router = createRouter({
       }
     },
     {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('@/components/auth/Signup.vue'),
+      meta: {
+        requiresAuth: false,
+        redirectIfAuthenticated: true
+      }
+    },
+    {
       path: '/',
       name: 'chat',
       component: () => import('@/components/chat/ChatLayout.vue'),
@@ -41,12 +50,12 @@ const router = createRouter({
 // Navigation guards
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
-  
+
   // Initialize user from storage if not already done
   if (!userStore.isAuthenticated) {
     userStore.initializeFromStorage()
   }
-  
+
   // Check if route requires authentication
   if (to.meta.requiresAuth && userStore.requiresAuthentication()) {
     // Save the intended destination for redirect after login
@@ -54,14 +63,14 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'login', query: redirectQuery })
     return
   }
-  
+
   // Redirect to main app if already authenticated and trying to access login
   if (to.meta.redirectIfAuthenticated && userStore.isAuthenticated) {
     const redirectPath = (to.query.redirect as string) || '/'
     next(redirectPath)
     return
   }
-  
+
   next()
 })
 

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@shared-prisma'
 import { promises as fs } from 'fs'
 import * as path from 'path'
 
@@ -29,17 +29,17 @@ export class DatabaseInitializer {
   async initializeDatabase(): Promise<void> {
     try {
       console.log('🔧 Database not initialized, running init.sql...')
-      
+
       // Read the init.sql file
       const initSqlPath = path.join(__dirname, '../../../../docker/db/init.sql')
       const initSql = await fs.readFile(initSqlPath, 'utf-8')
-      
+
       // Split the SQL into individual statements and execute them
       const statements = initSql
         .split(';')
         .map((stmt: string) => stmt.trim())
         .filter((stmt: string) => stmt.length > 0 && !stmt.startsWith('--'))
-      
+
       for (const statement of statements) {
         if (statement.trim()) {
           try {
@@ -50,7 +50,7 @@ export class DatabaseInitializer {
           }
         }
       }
-      
+
       console.log('✅ Database initialized successfully')
     } catch (error) {
       console.error('❌ Failed to initialize database:', error)
@@ -63,7 +63,7 @@ export class DatabaseInitializer {
    */
   async ensureInitialized(): Promise<void> {
     const isInitialized = await this.isDatabaseInitialized()
-    
+
     if (!isInitialized) {
       await this.initializeDatabase()
     } else {

@@ -12,6 +12,12 @@ Dynamic MCP is an innovative system that allows you to **register and manage MCP
 
 - **Performance comparison** capabilities between transport types
 
+### 🧩 **MCP Architecture**
+
+- **Global MCP Registry + Per-User Enablement**: MCP servers are defined globally and referenced per user via `Settings.mcpEnabledServerIds`. Ownership is tracked with `MCPServer.createdBy`.
+- **Ownership Semantics**: If a user owns a server (`createdBy === userId`), delete removes it globally; non-owners only remove it from their enabled list.
+- **User-Aware Connections**: Connection manager connects only to servers enabled for the current user and honors per-user limits and auto-connect.
+
 ### 🛠️ **Built-in MCP Servers**
 
 - **Memory System**: Persistent memory across conversations with categorization
@@ -22,6 +28,7 @@ Dynamic MCP is an innovative system that allows you to **register and manage MCP
 
 - **WebSocket-based health checking** for real-time status updates
 - **Database-driven configuration** with PostgreSQL persistence
+- **Provider-driven models**: Providers and models are dynamically listed based on saved API keys.
 - **Docker containerization** for scalable deployment
 - **Hot-reload capabilities** for development
 
@@ -123,6 +130,46 @@ const response = await authService.getDemoToken();
 - **MCP Integration**: JWT authentication extends to all MCP server communications
 - **CORS Security**: Proper CORS configuration for cross-origin requests
 
+### 🔗 OAuth (Google & GitHub)
+
+Dynamic MCP supports OAuth login with Google and GitHub. The flow is fully server-initiated and redirects back to the client with a one-time JWT.
+
+Server endpoints:
+
+- Start flow
+  - `GET /api/auth/oauth/google` → returns `{ url }` (Google consent URL)
+  - `GET /api/auth/oauth/github` → returns `{ url }` (GitHub consent URL)
+- Callback (server exchanges code → creates/links user → issues JWT)
+  - `GET /api/auth/oauth/google/callback?code=...&state=...`
+  - `GET /api/auth/oauth/github/callback?code=...&state=...`
+- On success, server redirects to client: `/login?token=<JWT>`
+
+Client handling:
+
+- `useUserStore.loginWithOAuth(provider)` fetches the provider URL and navigates the browser to it
+- On client `/login`, we read the `token` query param and call `applyTokenFromUrl(token)` to store JWT and load the user
+
+Environment variables:
+
+- Google
+  - `GOOGLE_OAUTH_CLIENT_ID`
+  - `GOOGLE_OAUTH_CLIENT_SECRET`
+  - `GOOGLE_OAUTH_REDIRECT_URI` (e.g., `http://localhost:3000/api/auth/oauth/google/callback`)
+- GitHub
+  - `GITHUB_OAUTH_CLIENT_ID`
+  - `GITHUB_OAUTH_CLIENT_SECRET`
+
+User linking rules:
+
+- On first OAuth login, we create a user with the provider email. Subsequent logins link via provider user id (stored internally).
+- If a user later sets a password, email/password login is also available.
+
+Profile & password endpoints (JWT required):
+
+- `GET /api/auth/me` → `{ user, hasPassword }`
+- `PATCH /api/user/profile` → update `name`, `email`
+- `PATCH /api/user/password` → set/change password (requires current password if one exists)
+
 ### 🔑 Authentication Flow
 
 ```typescript
@@ -184,7 +231,7 @@ CREATE TABLE "MCPServer" (
 - JWT-aware MCP server implementations
 - User context extraction from JWT tokens
 - Protected MCP tool execution
-- Database queries scoped to authenticated user
+- Global MCP servers with per-user enablement (no per-row user scoping)
 
 ## 🎯 How to Register MCP Servers via Chat
 
@@ -260,15 +307,15 @@ AI: "I've disabled the weather server and testing the memory daemon... ✅ Memor
    - **Auth Middleware**: Route protection with Bearer token validation
    - **Demo User System**: Automatic demo user creation and management
    - WebSocket server for real-time communication
-   - MCP connection management and health checking
+   - MCP connection management and health checking (per-user enablement)
    - Database integration with Prisma ORM
 
 3. **Database (PostgreSQL)**
    - **User Management**: JWT-authenticated user accounts
-   - **Token Persistence**: Session and refresh token storage
-   - MCP server configurations and metadata with user isolation
-   - User settings and chat history
-   - Memory storage for persistent AI memory
+   - **Settings**: Per-user preferences and secrets (provider API keys). New fields:
+     - `mcpEnabledServerIds Int[]`: list of enabled MCP server IDs for this user
+   - **MCP Servers**: Globally defined; ownership tracked via `createdBy` (nullable for system/core servers)
+   - Chat history and persistent memory storage
 
 4. **MCP Daemon Services**
    - **Memory Daemon**: HTTP-based memory management with JWT protection
@@ -357,6 +404,7 @@ npm run build:server
 | `MCP_MEMORY_PORT` | Memory daemon port                 | `3001`                  |
 | `MCP_API_PORT`    | API daemon port                    | `3002`                  |
 | `VITE_API_URL`    | Client API base URL                | `http://localhost:3000` |
+| `VITE_SOCKET_URL` | Socket URL (falls back to API URL) | `http://localhost:3000` |
 
 ## 🚀 Production Deployment
 
@@ -419,6 +467,22 @@ docker-compose exec db psql -U postgres -d agentdb
 
 # View MCP servers
 SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
+## 🧭 Provider & Models
+
+- Providers are discovered from server configuration (`/api/models/providers`).
+- Provider API keys are saved in `Settings` per user and masked in responses.
+- `GET /api/models` lists models only for providers with valid API keys.
+- After saving API keys, the client refreshes models and ensures the default provider points to one with available models.
+
+## 🔗 MCP Ownership & Enablement
+
+- MCP servers are global. Users enable/disable by ID via `Settings.mcpEnabledServerIds`.
+- Create: `createdBy` is set to the current user; server ID is appended to their enabled list.
+- Delete:
+  - If `createdBy === userId`: disconnect, delete globally, and remove from all users’ enabled lists.
+  - Else: only remove the ID from the caller’s enabled list.
+- Connection manager connects only to enabled servers for the active user and auto-reconnects per user.
+
 ```
 
 ## 🤝 Contributing

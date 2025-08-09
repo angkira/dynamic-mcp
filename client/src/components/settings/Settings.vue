@@ -10,6 +10,11 @@
           <GeneralSettings v-model="localSettings" />
         </n-tab-pane>
 
+        <!-- User Settings Tab -->
+        <n-tab-pane name="user" tab="User Settings">
+          <UserSettings />
+        </n-tab-pane>
+
         <!-- MCP Settings Tab -->
         <n-tab-pane name="mcp" tab="MCP Servers">
           <div class="settings-section">
@@ -84,6 +89,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useModelStore } from '@/stores/models'
 import { useMcpStore } from '@/stores/mcp'
 import GeneralSettings from './GeneralSettings.vue'
+import UserSettings from './UserSettings.vue'
 import MCPList from './mcp/MCPList.vue'
 import MCPSettings from './mcp/MCPSettings.vue'
 import { MCPServerStatus } from '@/types'

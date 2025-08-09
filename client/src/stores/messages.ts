@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useNotifyStore } from './notify'
 import { defineStore } from 'pinia'
 import { useChatsStore } from './chats'
 import { useModelStore } from './models'
@@ -8,6 +9,7 @@ import { StreamingChunkType, MessageRole, ServerWebSocketEvent, ClientWebSocketE
 import { socketService } from '@/services/socket';
 
 export const useMessagesStore = defineStore('messages', () => {
+  const notify = useNotifyStore()
   // State
   const messages = ref<Message[]>([])
   // Multi-chat streaming support: Map<chatId, StreamingMessage>
@@ -168,7 +170,7 @@ export const useMessagesStore = defineStore('messages', () => {
     if (!streamingMessage) return
 
     streamingMessage.chatTitle = title
-    
+
     // Store pending title if chat doesn't exist yet
     pendingChatTitles.set(chatId, title)
   }
@@ -194,7 +196,7 @@ export const useMessagesStore = defineStore('messages', () => {
       toolCall.result = result
       toolCall.status = isError ? 'error' : 'completed'
     }
-    
+
     streamingMessage.isToolExecuting = false
   }
 
@@ -428,7 +430,7 @@ export const useMessagesStore = defineStore('messages', () => {
           initializeStreamingMessage(data.chatId);
         }
         setStreamingTitle(data.title, data.chatId);
-        
+
         // Also update the chat store
         const targetChat = chatsStore.chats.find(chat => chat.id === data.chatId);
         if (targetChat && !targetChat.title) {
@@ -519,11 +521,14 @@ export const useMessagesStore = defineStore('messages', () => {
         socketService.off(ServerWebSocketEvent.Error, errorHandler);
       };
 
-      const errorHandler = (data: { error: string; chatId?: number }) => {
+      const errorHandler = (data: { error?: string; message?: string; chatId?: number }) => {
         // Show errors for current chat or if no chatId specified
         if (!data.chatId || data.chatId === chatsStore.currentChatId) {
-          error.value = data.error;
-          console.error('WebSocket error:', data.error);
+          const errorText = data.error || data.message || 'Unknown error'
+          error.value = errorText
+          console.error('WebSocket error:', errorText);
+          // Show popup notification for user-friendly feedback
+          notify.error('Message Error', errorText)
           // Finalize streaming for the specific chat if error is associated with a chat
           if (data.chatId && streamingMessages.value.has(data.chatId)) {
             finalizeStreamingMessage(data.chatId);
@@ -572,6 +577,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
       error.value = (err instanceof Error ? err.message : 'Unknown error') as string
       console.error('Failed to send message:', err)
+      notify.error('Failed to send message', error.value)
 
       // Clear streaming state on error for the specific chat
       if (actualChatId && streamingMessages.value.has(actualChatId)) {

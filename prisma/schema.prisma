@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../shared/prisma-client"
 }
 
 datasource db {
@@ -8,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id         Int         @id @default(autoincrement())
-  email      String      @unique
-  name       String?
-  password   String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  chats      Chat[]
-  mcpServers MCPServer[]
-  memories   Memory[]
-  settings   Settings?
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  name          String?
+  password      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  chats         Chat[]
+  mcpServers    MCPServer[]
+  memories      Memory[]
+  settings      Settings?
+  oauthAccounts OAuthAccount[]
 }
 
 model Chat {
@@ -47,10 +49,18 @@ model Message {
 model Settings {
   id                          Int      @id @default(autoincrement())
   userId                      Int      @unique
-  defaultProvider             String   @default("openai")
-  defaultModel                String   @default("o3-mini")
+  defaultProvider             String   @default("google")
+  defaultModel                String   @default("gemini-2.5-flash-lite")
   thinkingBudget              Int      @default(2048)
   responseBudget              Int      @default(8192)
+  // Per-provider API keys (stored per-user)
+  openaiApiKey                String?
+  googleApiKey                String?
+  anthropicApiKey             String?
+  deepseekApiKey              String?
+  qwenApiKey                  String?
+  // Per-user enabled MCP servers (list of MCPServer IDs)
+  mcpEnabledServerIds         Int[]    @default([])
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
   mcpAutoDiscovery            Boolean  @default(true)
@@ -63,6 +73,7 @@ model Settings {
 model MCPServer {
   id                         Int              @id @default(autoincrement())
   userId                     Int
+  createdBy                  Int?
   name                       String
   version                    String
   description                String?
@@ -93,6 +104,7 @@ model MCPServer {
   configValidateCertificates Boolean          @default(true)
   configDebug                Boolean          @default(false)
   capabilities               Json?
+  scope                      MCPServerScope   @default(LOCAL)
   createdAt                  DateTime         @default(now())
   updatedAt                  DateTime         @updatedAt
   user                       User             @relation(fields: [userId], references: [id])
@@ -112,6 +124,19 @@ model Memory {
 
   @@index([userId])
   @@index([userId, key])
+}
+
+model OAuthAccount {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  provider       String
+  providerUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 enum MessageRole {
@@ -138,4 +163,9 @@ enum MCPAuthType {
   OAUTH
   APIKEY
   BEARER
+}
+
+enum MCPServerScope {
+  COMMON
+  LOCAL
 }

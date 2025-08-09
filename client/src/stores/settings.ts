@@ -22,6 +22,7 @@ export const useSettingsStore = defineStore('settings', () => {
   })
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const providers = ref<string[]>([])
   let fetchPromise: Promise<void> | null = null
 
   // Computed
@@ -44,7 +45,22 @@ export const useSettingsStore = defineStore('settings', () => {
 
       try {
         const response = await ChatAPIService.settings.getSettings()
-        settings.value = response
+        // Merge response but never store masked keys ("********") in client state
+        const merged = { ...settings.value, ...response } as Settings
+        const keyFields = [
+          'openaiApiKey',
+          'googleApiKey',
+          'anthropicApiKey',
+          'deepseekApiKey',
+          'qwenApiKey'
+        ] as const
+        for (const key of keyFields) {
+          const val = (response as any)[key]
+          if (val === '********' || val == null) {
+            ; (merged as any)[key] = (settings.value as any)[key]
+          }
+        }
+        settings.value = merged
       } catch (err) {
         error.value = err instanceof Error ? err.message : 'Failed to fetch settings'
         console.error('Failed to fetch settings:', err)
@@ -58,13 +74,49 @@ export const useSettingsStore = defineStore('settings', () => {
     return fetchPromise
   }
 
+  async function fetchProviders() {
+    try {
+      providers.value = await ChatAPIService.models.getProviders()
+    } catch (err) {
+      console.error('Failed to fetch providers:', err)
+      providers.value = []
+    }
+  }
+
   async function updateSettings(updates: UpdateSettingsRequest) {
     isLoading.value = true
     error.value = null
 
     try {
-      const response = await ChatAPIService.settings.updateSettings(updates)
-      settings.value = response
+      // Sanitize outgoing updates: never send masked strings; convert empty strings to null
+      const cleanedUpdates: UpdateSettingsRequest = { ...updates }
+      const keyFields: Array<keyof UpdateSettingsRequest> = [
+        'openaiApiKey', 'googleApiKey', 'anthropicApiKey', 'deepseekApiKey', 'qwenApiKey'
+      ]
+      for (const key of keyFields) {
+        const val = (cleanedUpdates as any)[key]
+        if (val === '********') {
+          delete (cleanedUpdates as any)[key]
+        } else if (val === '') {
+          ; (cleanedUpdates as any)[key] = null
+        }
+      }
+
+      const response = await ChatAPIService.settings.updateSettings(cleanedUpdates)
+      // Merge response while ensuring API key fields don't get cleared.
+      const merged = { ...settings.value, ...response } as Settings
+      const respKeyFields: Array<keyof Settings> = ['openaiApiKey', 'googleApiKey', 'anthropicApiKey', 'deepseekApiKey', 'qwenApiKey']
+      for (const key of respKeyFields) {
+        const reqVal = (cleanedUpdates as any)[key]
+        const respVal = (response as any)[key]
+        if (typeof reqVal === 'string' && reqVal !== '********') {
+          ; (merged as any)[key] = reqVal
+        } else if (respVal === '********' || respVal == null) {
+          ; (merged as any)[key] = (settings.value as any)[key]
+        }
+      }
+
+      settings.value = merged
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to update settings'
       console.error('Failed to update settings:', err)
@@ -98,6 +150,7 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     isLoading,
     error,
+    providers,
 
     // Computed
     defaultProviderModel,
@@ -107,6 +160,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updateSettings,
     updateDefaultModel,
     updateThinkingBudget,
-    updateResponseBudget
+    updateResponseBudget,
+    fetchProviders
   }
 })

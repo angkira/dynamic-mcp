@@ -6,13 +6,23 @@ import { MCPToolForLLM } from '../../types/mcp.types';
 
 
 export class GeminiService implements LlmService {
-  private genAI: GoogleGenerativeAI;
-  private model = 'gemini-2.5-flash-lite'; // Changed to a model that supports tools
-
+  private genAI?: GoogleGenerativeAI;
+  private model = 'gemini-2.5-flash-lite';
   private responseBudget: number = 8192;
+  private apiKey?: string;
 
-  constructor() {
-    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey;
+  }
+
+  private getClient(): GoogleGenerativeAI {
+    if (!this.genAI) {
+      if (!this.apiKey) {
+        throw new LlmAuthError('GEMINI API key is missing. Set it to use Google provider.');
+      }
+      this.genAI = new GoogleGenerativeAI(this.apiKey);
+    }
+    return this.genAI;
   }
 
   private handleError(error: unknown): never {
@@ -38,7 +48,7 @@ export class GeminiService implements LlmService {
 
   async sendMessage(message: string): Promise<string> {
     try {
-      const model = this.genAI.getGenerativeModel({
+      const model = this.getClient().getGenerativeModel({
         model: this.model,
         systemInstruction: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false })
       });
@@ -53,7 +63,7 @@ export class GeminiService implements LlmService {
 
   async *sendMessageStream(message: string): AsyncIterable<string> {
     try {
-      const model = this.genAI.getGenerativeModel({
+      const model = this.getClient().getGenerativeModel({
         model: this.model,
         systemInstruction: buildSystemPrompt({ isFirstMessage: true, enableReasoning: false }),
         generationConfig: {
@@ -166,7 +176,7 @@ export class GeminiService implements LlmService {
 
       const systemPrompt = buildSystemPrompt(promptOptions);
 
-      const model = this.genAI.getGenerativeModel({
+      const model = this.getClient().getGenerativeModel({
         model: this.model,
         systemInstruction: systemPrompt,
         ...(formattedTools.length > 0 ? { tools: [{ functionDeclarations: formattedTools }] } : {}),
@@ -223,6 +233,11 @@ export class GeminiService implements LlmService {
 
   setBudgets(responseBudget: number): void {
     this.responseBudget = responseBudget;
+  }
+
+  public setApiKey(apiKey: string | undefined): void {
+    this.apiKey = apiKey;
+    this.genAI = undefined; // reset to re-init with new key
   }
 
   formatTools(tools: MCPToolForLLM[]): FunctionDeclaration[] {

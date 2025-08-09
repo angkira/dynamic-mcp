@@ -54,8 +54,8 @@ CREATE TABLE "public"."Message" (
 CREATE TABLE "public"."Settings" (
     "id" SERIAL NOT NULL,
     "userId" INTEGER NOT NULL,
-    "defaultProvider" TEXT NOT NULL DEFAULT 'openai',
-    "defaultModel" TEXT NOT NULL DEFAULT 'o3-mini',
+    "defaultProvider" TEXT NOT NULL DEFAULT 'google',
+    "defaultModel" TEXT NOT NULL DEFAULT 'gemini-2.5-flash-lite',
     "thinkingBudget" INTEGER NOT NULL DEFAULT 2048,
     "responseBudget" INTEGER NOT NULL DEFAULT 8192,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

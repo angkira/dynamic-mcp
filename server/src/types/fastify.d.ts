@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@shared-prisma';
 import type McpService from '../services/mcp/mcpService';
 
 declare module 'fastify' {

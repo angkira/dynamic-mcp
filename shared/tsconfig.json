@@ -4,7 +4,12 @@
     "outDir": "dist",
     "rootDir": ".",
     "module": "CommonJS",
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@shared-prisma": ["./prisma-client"],
+      "@shared-prisma/*": ["./prisma-client/*"]
+    }
   },
   "include": ["types/**/*", "constants/**/*", "esm/**/*", "index.ts"],
   "exclude": ["node_modules", "dist"]

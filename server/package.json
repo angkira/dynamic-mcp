@@ -25,20 +25,22 @@
   "license": "ISC",
   "dependencies": {
     "@dynamic-mcp/shared": "file:../shared",
-    "@fastify/autoload": "^5.9.0",
-    "@fastify/cors": "^9.0.0",
-    "@fastify/sensible": "^5.6.0",
+    "@fastify/autoload": "^6.3.1",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.1.0",
+    "@fastify/sensible": "^6.0.3",
     "@fastify/type-provider-typebox": "^5.2.0",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.17.1",
-    "@prisma/client": "^5.17.0",
+    "@octokit/oauth-app": "^8.0.1",
+    "@prisma/client": "^6.13.0",
     "@sinclair/typebox": "^0.34.38",
     "bcrypt": "^5.1.1",
     "dotenv": "^17.2.1",
-    "fastify": "^4.28.1",
-    "fastify-cli": "^6.2.1",
-    "fastify-plugin": "^4.5.1",
-    "fastify-socket.io": "^5.1.0",
+    "fastify": "^5.4.0",
+    "fastify-cli": "^7.4.0",
+    "fastify-plugin": "^5.0.1",
+    "google-auth-library": "^10.2.1",
     "json-schema-to-ts": "^3.1.1",
     "jsonwebtoken": "^9.0.2",
     "module-alias": "^2.2.3",
@@ -61,6 +63,7 @@
     "typescript": "^5.5.4"
   },
   "_moduleAliases": {
-    "@shared": "../shared/dist"
+    "@shared": "../shared/dist",
+    "@shared-prisma": "../shared/prisma-client"
   }
 }

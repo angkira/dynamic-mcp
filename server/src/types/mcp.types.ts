@@ -1,4 +1,4 @@
-import type { MCPServerStatus, Prisma } from '@prisma/client';
+import type { MCPServerStatus } from '@shared-prisma';
 
 export interface MCPToolForLLM {
   name: string;
@@ -66,8 +66,8 @@ export interface MCPServerUpdateData {
   isEnabled?: boolean;
   transportType?: string;
   transportCommand?: string | null;
-  transportArgs?: Prisma.JsonValue;
-  transportEnv?: Prisma.JsonValue;
+  transportArgs?: unknown;
+  transportEnv?: unknown;
   transportBaseUrl?: string | null;
   transportTimeout?: number | null;
   transportRetryAttempts?: number | null;
@@ -77,7 +77,7 @@ export interface MCPServerUpdateData {
   authClientSecret?: string | null;
   authAuthUrl?: string | null;
   authTokenUrl?: string | null;
-  authScopes?: Prisma.JsonValue;
+  authScopes?: unknown;
   authApiKey?: string | null;
   authHeaderName?: string | null;
   authToken?: string | null;
@@ -87,7 +87,7 @@ export interface MCPServerUpdateData {
   configRetryDelay?: number;
   configValidateCertificates?: boolean;
   configDebug?: boolean;
-  capabilities?: Prisma.JsonValue;
+  capabilities?: unknown;
 }
 
 export interface MCPServerStatusUpdateData {
