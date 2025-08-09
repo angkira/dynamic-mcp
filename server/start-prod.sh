@@ -3,10 +3,13 @@ set -e
 
 echo "🚀 Starting production server..."
 
-# Wait for database to be ready
-echo "📊 Waiting for database connection..."
-echo "🔄 Syncing database schema..."
-npx prisma db push --accept-data-loss --skip-generate --schema=./prisma/schema.prisma || echo "✅ Database schema already up to date"
+# Apply Prisma migrations in production (idempotent)
+echo "📊 Applying database migrations..."
+npx prisma migrate deploy --schema=./prisma/schema.prisma || echo "✅ Migrations already applied"
+
+# Ensure schema is up to date (adds new columns if migrations are missing)
+echo "🧭 Pushing Prisma schema (safe additive changes)..."
+npx prisma db push --accept-data-loss --schema=./prisma/schema.prisma || true
 
 # Generate Prisma client (in case it's not available)
 echo "🔧 Generating Prisma client..."

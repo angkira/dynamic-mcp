@@ -1,0 +1,66 @@
+# GCP-optimized Dockerfile for Cloud Build/Run (no BuildKit mounts)
+FROM node:22-alpine AS base
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+WORKDIR /app
+
+# Dependencies stage (compatible with Cloud Build)
+FROM base AS deps
+COPY package*.json ./
+COPY server/package.json ./server/
+COPY shared/package.json ./shared/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
+COPY prisma/ ./prisma/
+
+RUN npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
+# Generate Prisma client once here for build to use
+ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
+RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Build stage
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package*.json ./
+COPY server/ ./server/
+COPY shared/ ./shared/
+COPY packages/ ./packages/
+COPY prisma/ ./prisma/
+
+RUN cd shared && npm run build && cd ../server && npm run build:all
+
+# Production deps only
+FROM base AS prod-deps
+COPY package*.json ./
+COPY server/package.json ./server/
+COPY shared/package.json ./shared/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
+COPY prisma/ ./prisma/
+
+RUN npm ci --only=production --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
+RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Runtime image
+FROM base AS runner
+ENV NODE_ENV=production
+
+# Tini as PID 1 for better signal handling
+RUN apk add --no-cache tini
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Copy prod deps and built code
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/package*.json ./
+COPY --from=builder /app/server/dist ./dist
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/prisma ./prisma
+COPY server/start-prod.sh ./start-prod.sh
+
+# Drop privileges and set perms
+RUN chmod +x ./start-prod.sh && chown -R nextjs:nodejs /app
+USER nextjs
+
+EXPOSE 3000
+CMD ["./start-prod.sh"]
+
+

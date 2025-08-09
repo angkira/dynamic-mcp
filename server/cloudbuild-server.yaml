@@ -1,0 +1,9 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', '$_IMAGE', '-f', 'server/Dockerfile.gcp', '.']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', '$_IMAGE']
+images:
+  - '$_IMAGE'
+
+
