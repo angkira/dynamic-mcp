@@ -23,11 +23,26 @@ class SocketService {
       return
     }
 
-    // Use dedicated socket URL if it is a full URL, otherwise fallback to current origin
-    const envSocketUrl = import.meta.env.VITE_SOCKET_URL
-    const socketUrl = envSocketUrl && /^(http|https):\/\//.test(envSocketUrl)
+    // Use dedicated socket URL if provided; default to API base URL host if available
+    const envSocketUrl = import.meta.env.VITE_SOCKET_URL as string | undefined
+    let socketUrl = envSocketUrl && /^(http|https):\/\//.test(envSocketUrl)
       ? envSocketUrl
-      : window.location.origin
+      : undefined
+
+    if (!socketUrl) {
+      // Derive from API base URL to avoid connecting to the vite dev server
+      // Static import to avoid async/await in non-async method
+      try {
+        // Note: this import path is static at build time
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const apiConfig = require('@/config/api') as typeof import('@/config/api')
+        const apiBase = apiConfig.API_CONFIG.BASE_URL // e.g., http://localhost:3000/api
+        const origin = apiBase.replace(/\/?api\/?$/, '') // strip trailing /api
+        socketUrl = origin
+      } catch {
+        socketUrl = window.location.origin
+      }
+    }
 
     // Configure socket with authentication
     const socketOptions: any = {

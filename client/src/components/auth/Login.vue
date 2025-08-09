@@ -83,7 +83,7 @@
         </n-form-item>
 
         <n-form-item>
-          <n-button tertiary size="large" block :disabled="userStore.isLoading" @click="handleSignup">
+          <n-button tertiary size="large" block :disabled="userStore.isLoading" @click="goToSignup">
             <template #icon>
               <n-icon>
                 <FontAwesomeIcon icon="plus" />
@@ -247,18 +247,9 @@ const fillDemoCredentials = () => {
   formData.password = 'demo123'
 }
 
-// Signup action
-const handleSignup = async () => {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-    await userStore.signup({ ...formData })
-    message.success('Account created!')
-    const redirect = router.currentRoute.value.query.redirect as string
-    await router.push(redirect || '/')
-  } catch (error) {
-    console.error('Signup failed:', error)
-  }
+// Go to signup page
+const goToSignup = () => {
+  router.push({ name: 'signup', query: router.currentRoute.value.query })
 }
 
 // OAuth start
@@ -286,7 +277,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .login-container {
   min-height: 100vh;
   display: flex;

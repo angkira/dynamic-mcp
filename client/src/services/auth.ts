@@ -1,5 +1,5 @@
 import type { User } from '@/stores/user'
-import { httpService } from './http'
+import { httpClient } from './api'
 
 export interface LoginCredentials {
   email: string
@@ -157,7 +157,7 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const data = await httpService.post<AuthResponse>(
+      const data = await httpClient.post<AuthResponse>(
         '/auth/login',
         credentials
       )
@@ -182,7 +182,7 @@ class AuthService {
    */
   async signup(payload: SignupPayload): Promise<AuthResponse> {
     try {
-      const data = await httpService.post<AuthResponse>(
+      const data = await httpClient.post<AuthResponse>(
         '/auth/signup',
         payload
       )
@@ -202,7 +202,7 @@ class AuthService {
    */
   async getDemoToken(): Promise<AuthResponse> {
     try {
-      const data = await httpService.get<AuthResponse>('/auth/demo-token')
+      const data = await httpClient.get<AuthResponse>('/auth/demo-token')
 
       // Store token and user data
       this.setToken(data.token)
@@ -243,7 +243,7 @@ class AuthService {
     }
 
     try {
-      const data = await httpService.get<{ user: User }>('/auth/verify')
+      const data = await httpClient.get<{ user: User }>('/auth/verify')
       this.setStoredUser(data.user)
       return data.user
     } catch (error) {
@@ -264,10 +264,22 @@ class AuthService {
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> {
-    return httpService.request<T>(endpoint, {
+    // Force JSON-only behavior: set JSON content type and stringify objects
+    const headers = new Headers(options.headers)
+    if (options.body != null && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
+    }
+
+    let body = options.body as any
+    if (body != null && typeof body === 'object' && !(typeof body === 'string')) {
+      body = JSON.stringify(body)
+    }
+
+    return httpClient.request<T>(endpoint, {
       ...options,
+      body,
       headers: {
-        ...options.headers,
+        ...Object.fromEntries(headers.entries()),
         Authorization: `Bearer ${this.getToken()}`,
       },
     })
@@ -284,7 +296,7 @@ class AuthService {
    * Begin OAuth by fetching provider authorization URL from server
    */
   async getOAuthUrl(provider: 'google' | 'github'): Promise<string> {
-    const { url } = await httpService.get<{ url: string }>(`/auth/oauth/${provider}`)
+    const { url } = await httpClient.get<{ url: string }>(`/auth/oauth/${provider}`)
     return url
   }
 }

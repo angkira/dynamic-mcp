@@ -4,9 +4,7 @@
     'collapsed': isCollapsed,
     'is-loading': isLoading
   }" @click="!isLoading && $emit('select', chat.id)" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
-    <div v-if="isLoading" class="loading-overlay">
-      <div class="spinner"></div>
-    </div>
+    <Loader :show="isLoading" />
 
     <div class="chat-icon">
       <FontAwesomeIcon icon="comment" class="chat-icon-svg" />
@@ -37,6 +35,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import Loader from '@/components/common/Loader.vue'
 import type { Chat } from '@/types'
 
 interface Props {
@@ -221,36 +220,5 @@ function formatTime(timestamp: string): string {
   }
 }
 
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-  border-radius: inherit;
-}
-
-.spinner {
-  border: 3px solid var(--color-border);
-  border-top: 3px solid var(--color-primary);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
+/* Loader styles moved to shared component */
 </style>

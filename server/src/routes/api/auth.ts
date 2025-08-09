@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+// Ensure cookie types are augmented for request/reply
+// Import cookie module so Fastify types include cookie helpers on request/reply
+import '@fastify/cookie'
 import { Type } from '@sinclair/typebox';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
@@ -115,6 +118,27 @@ export default async function authRoute(fastify: FastifyInstance) {
     };
   });
 
+  // Current user endpoint (/me)
+  fastify.get('/me', {
+    preHandler: [fastify.jwtMiddleware.authenticate.bind(fastify.jwtMiddleware)],
+    schema: {
+      response: {
+        200: Type.Object({
+          user: Type.Object({
+            id: Type.Number(),
+            email: Type.String(),
+            name: Type.Optional(Type.String())
+          }),
+          hasPassword: Type.Boolean()
+        })
+      }
+    }
+  }, async (request, reply) => {
+    const user = request.user!
+    const hasPassword = await fastify.jwtService.userHasPassword(user.id)
+    return { user, hasPassword }
+  })
+
   // OAuth: Start Google flow (redirect URL generation)
   fastify.get('/oauth/google', {
     schema: { response: { 200: Type.Object({ url: Type.String() }) } }
@@ -158,7 +182,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       const { user, token } = await fastify.authService.handleGoogleCallback(code);
       const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
       const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
-      return reply.redirect(302, redirectTo);
+      return reply.redirect(redirectTo, 302);
     } catch (error) {
       fastify.log.error('Google OAuth callback error:', error);
       return reply.status(500).send({ message: 'Google OAuth failed' });
@@ -208,7 +232,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       const { user, token } = await fastify.authService.handleGithubCallback(code)
       const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
       const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
-      return reply.redirect(302, redirectTo);
+      return reply.redirect(redirectTo, 302);
     } catch (error) {
       fastify.log.error('GitHub OAuth callback error:', error);
       return reply.status(500).send({ message: 'GitHub OAuth failed' });

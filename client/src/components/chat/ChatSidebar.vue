@@ -23,15 +23,8 @@
 
       <!-- User Profile Section -->
       <div class="user-section">
-        <div class="user-info">
-          <div class="user-avatar">
-            {{ user.userInitials }}
-          </div>
-          <div v-if="ui.sidebarState === 'open'" class="user-details">
-            <div class="user-name">{{ user.userName }}</div>
-            <div class="user-email">{{ user.user?.email }}</div>
-          </div>
-        </div>
+        <UserInfo :name="user.user?.name" :email="user.user?.email || ''" :initials="user.userInitials"
+          :expanded="ui.sidebarState === 'open'" />
         <button v-if="ui.sidebarState === 'open'" @click="handleLogout" class="logout-btn" title="Logout">
           <FontAwesomeIcon icon="arrow-right-from-bracket" />
         </button>
@@ -50,6 +43,7 @@ import { useChatsStore } from '@/stores/chats'
 import ChatList from './ChatList.vue'
 import ChatSettings from '../settings/Settings.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import UserInfo from '@/components/user/UserInfo.vue'
 
 const ui = useUIStore()
 const user = useUserStore()
@@ -150,47 +144,7 @@ function handleLogout() {
   justify-content: space-between;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  min-width: 0;
-}
-
-.user-avatar {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-full);
-  background-color: var(--color-primary);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.user-details {
-  min-width: 0;
-}
-
-.user-name {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.user-email {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* user styles moved to UserInfo component */
 
 .logout-btn {
   @include button-secondary;

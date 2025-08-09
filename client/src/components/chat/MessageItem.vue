@@ -64,7 +64,7 @@
             (message.content.toolCalls && message.content.toolCalls.length > 0))
         " class="tool-block">
           <div class="tool-header">
-            <div class="tool-icon">🔧</div>
+            <FontAwesomeIcon icon="wrench" class="tool-icon" />
             <span class="tool-title">Tool Execution</span>
             <div v-if="streamingMessage?.isToolExecuting" class="tool-pulse"></div>
           </div>
@@ -78,8 +78,10 @@
                 <span class="tool-status executing">Executing tool {{ tool.name }}...</span>
               </div>
               <div v-if="tool.result" class="tool-result">
-                <span v-if="tool.result.success" class="tool-status success">✅ Tool {{ tool.name }} executed
-                  successfully</span>
+                <span v-if="tool.result.success" class="tool-status success">
+                  <FontAwesomeIcon icon="check" class="status-icon" />
+                  Tool {{ tool.name }} executed successfully
+                </span>
                 <span v-else class="tool-status error">Error in executing: {{ tool.result.error }}</span>
                 <!-- <pre v-if="tool.result" class="tool-output">{{
                   JSON.stringify(tool.result, null, 2)
