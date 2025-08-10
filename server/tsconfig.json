@@ -5,6 +5,7 @@
     "rootDir": "src",
     "module": "CommonJS",
     "moduleResolution": "node",
+    "noImplicitAny": false,
     "declaration": false,
     "declarationMap": false,
     "composite": false,

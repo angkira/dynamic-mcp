@@ -7,9 +7,8 @@ echo "🚀 Starting production server..."
 echo "📊 Applying database migrations..."
 npx prisma migrate deploy --schema=./prisma/schema.prisma || echo "✅ Migrations already applied"
 
-# Ensure schema is up to date (adds new columns if migrations are missing)
-echo "🧭 Pushing Prisma schema (safe additive changes)..."
-npx prisma db push --accept-data-loss --schema=./prisma/schema.prisma || true
+# Avoid schema push in production to prevent unintended destructive changes
+# Use migrate deploy only; if migrations missing, roll a proper migration first.
 
 # Generate Prisma client (in case it's not available)
 echo "🔧 Generating Prisma client..."

@@ -1,1 +1,0 @@
-{"version":3,"file":"websocketEvents.d.ts","sourceRoot":"","sources":["../../constants/websocketEvents.ts"],"names":[],"mappings":"AAAA,oBAAY,oBAAoB;IAC9B,WAAW,gBAAgB;CAC5B;AAED,oBAAY,oBAAoB;IAC9B,MAAM,WAAW;IACjB,WAAW,gBAAgB;IAC3B,SAAS,cAAc;IACvB,IAAI,SAAS;IACb,YAAY,iBAAiB;IAC7B,QAAQ,aAAa;IACrB,UAAU,eAAe;IACzB,KAAK,UAAU;IACf,eAAe,oBAAoB;IACnC,KAAK,UAAU;CAChB"}

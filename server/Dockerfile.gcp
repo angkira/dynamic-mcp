@@ -6,13 +6,18 @@ WORKDIR /app
 
 # Dependencies stage (compatible with Cloud Build)
 FROM base AS deps
+# Install repo-level deps (workspace-aware)
 COPY package*.json ./
+RUN npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
+
+# Ensure server workspace deps are present (including fastify types)
 COPY server/package.json ./server/
+RUN cd server && npm install --package-lock-only && npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force || true
+
+# Bring in other workspace manifests so node_modules hoisting is correct
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY prisma/ ./prisma/
-
-RUN npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
 # Generate Prisma client once here for build to use
 ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 RUN npx prisma generate --schema=./prisma/schema.prisma
@@ -26,17 +31,18 @@ COPY shared/ ./shared/
 COPY packages/ ./packages/
 COPY prisma/ ./prisma/
 
-RUN cd shared && npm run build && cd ../server && npm run build:all
+# Install server-only dev deps needed for build (types), then build
+RUN cd server && npm install --no-audit --no-fund --include=dev && cd .. \
+  && cd shared && npm run build && cd ../server && npm run build:all
 
 # Production deps only
 FROM base AS prod-deps
 COPY package*.json ./
+RUN npm ci --only=production --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY prisma/ ./prisma/
-
-RUN npm ci --only=production --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
 RUN npx prisma generate --schema=./prisma/schema.prisma
 
 # Runtime image
