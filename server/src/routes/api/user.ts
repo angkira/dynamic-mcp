@@ -16,9 +16,17 @@ export default async function userRoute(fastify: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const user = request.user!
-    const hasPassword = await fastify.jwtService.userHasPassword(user.id)
-    return { user, hasPassword }
+    const authUser = request.user!
+    const dbUser = await fastify.jwtService.getUserById(authUser.id)
+    const hasPassword = await fastify.jwtService.userHasPassword(authUser.id)
+    return {
+      user: {
+        id: dbUser!.id,
+        email: dbUser!.email,
+        name: dbUser!.name ?? undefined,
+      },
+      hasPassword
+    }
   })
 
   // Update profile

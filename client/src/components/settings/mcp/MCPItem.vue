@@ -5,7 +5,10 @@
         <div class="mcp-header">
           <div class="mcp-info">
             <div class="mcp-title-row">
-              <h4 class="mcp-name">{{ server.name }}</h4>
+              <h4 class="mcp-name">
+                {{ server.name }}
+                <n-tag v-if="isCommon" size="small" type="info">Common</n-tag>
+              </h4>
               <n-tag :type="statusTagType" size="small">
                 <template #icon>
                   <font-awesome-icon :icon="statusIcon" />
@@ -47,10 +50,10 @@
                   </template>
                 </n-button>
               </n-dropdown>
-              <n-popconfirm type="error" positive-text="Delete" negative-text="Cancel"
+              <n-popconfirm type="error" positive-text="Delete" negative-text="Cancel" :disabled="isCommon"
                 @positive-click="$emit('delete', server.id)">
                 <template #trigger>
-                  <n-button size="small" quaternary circle type="error">
+                  <n-button size="small" quaternary circle type="error" :disabled="isCommon">
                     <n-icon><font-awesome-icon icon="trash" /></n-icon>
                   </n-button>
                 </template>
@@ -119,7 +122,7 @@
                   <span v-if="tool.description" class="item-description">: {{ tool.description }}</span>
                   <n-tag v-if="tool.category" size="tiny" class="item-tag">{{
                     tool.category
-                  }}</n-tag>
+                    }}</n-tag>
                 </div>
               </n-space>
             </div>
@@ -254,6 +257,11 @@ const hasCapabilities = computed(() => {
     (capabilities.resources?.length || 0) > 0 ||
     (capabilities.prompts?.length || 0) > 0
   )
+})
+
+const isCommon = computed(() => {
+  const name = props.server.name?.toLowerCase()
+  return name === 'dynamic-mcp-api-daemon' || name === 'memory-daemon'
 })
 
 const menuOptions = computed(() => [

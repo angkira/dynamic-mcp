@@ -677,11 +677,13 @@ export class McpService {
         type: server.authType, // Keep auth type in uppercase to match schema
         config: {
           clientId: server.authClientId,
-          // clientSecret/apiKey/token intentionally omitted
+          clientSecret: null,
           authUrl: server.authAuthUrl,
           tokenUrl: server.authTokenUrl,
           scopes: (server.authScopes as string[]) || [],
-          headerName: server.authHeaderName
+          apiKey: null,
+          headerName: server.authHeaderName,
+          token: null
         }
       },
 

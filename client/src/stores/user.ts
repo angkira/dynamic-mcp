@@ -36,6 +36,12 @@ export const useUserStore = defineStore('user', () => {
     user.value = userData
     isAuthenticated.value = true
     error.value = null
+    // Persist latest user to session storage so views (like UserSettings) see fresh name
+    try {
+      authService.setStoredUser(userData)
+    } catch {
+      // non-fatal
+    }
   }
 
   function logout() {

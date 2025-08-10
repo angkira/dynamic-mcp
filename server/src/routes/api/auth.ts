@@ -112,10 +112,17 @@ export default async function authRoute(fastify: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
+    const authUser = request.user!
+    // Return fresh user from DB to ensure latest profile info (e.g., name)
+    const dbUser = await fastify.jwtService.getUserById(authUser.id)
     return {
       valid: true,
-      user: request.user!
-    };
+      user: {
+        id: dbUser!.id,
+        email: dbUser!.email,
+        name: dbUser!.name ?? undefined,
+      }
+    }
   });
 
   // Current user endpoint (/me)
@@ -134,9 +141,18 @@ export default async function authRoute(fastify: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const user = request.user!
-    const hasPassword = await fastify.jwtService.userHasPassword(user.id)
-    return { user, hasPassword }
+    const authUser = request.user!
+    // Fetch latest user info from DB (not from JWT payload)
+    const dbUser = await fastify.jwtService.getUserById(authUser.id)
+    const hasPassword = await fastify.jwtService.userHasPassword(authUser.id)
+    return {
+      user: {
+        id: dbUser!.id,
+        email: dbUser!.email,
+        name: dbUser!.name ?? undefined,
+      },
+      hasPassword
+    }
   })
 
   // OAuth: Start Google flow (redirect URL generation)
