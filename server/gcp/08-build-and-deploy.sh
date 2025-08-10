@@ -23,7 +23,11 @@ if [[ -f "$SCRIPT_DIR/.out.env" ]]; then
 fi
 DB_CONN_NAME="${DB_CONN_NAME:-}"
 
-SECRET_BINDINGS="JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,CHATGPT_API_KEY=CHATGPT_API_KEY:latest,MCP_API_KEY=MCP_API_KEY:latest"
+# Database-related envs for app startup (used to construct DATABASE_URL if not provided)
+DB_USER="${DB_USER:-appuser}"
+DB_NAME="${DB_NAME:-appdb}"
+
+SECRET_BINDINGS="JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,CHATGPT_API_KEY=CHATGPT_API_KEY:latest,MCP_API_KEY=MCP_API_KEY:latest,APP_DB_PASSWORD=APP_DB_PASSWORD:latest"
 # Include OAuth secrets if present
 SECRET_BINDINGS+="$(gcloud secrets describe GOOGLE_OAUTH_CLIENT_ID >/dev/null 2>&1 && echo ",GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest" || true)"
 SECRET_BINDINGS+="$(gcloud secrets describe GOOGLE_OAUTH_CLIENT_SECRET >/dev/null 2>&1 && echo ",GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest" || true)"
@@ -42,13 +46,29 @@ RUN_ARGS=(
   --set-secrets "$SECRET_BINDINGS"
 )
 
+if [[ -z "$DB_CONN_NAME" && -n "${DB_INSTANCE_NAME:-}" ]]; then
+  # Resolve connectionName from instance if not provided in .out.env
+  DB_CONN_NAME=$(gcloud sql instances describe "$DB_INSTANCE_NAME" --format='value(connectionName)' || true)
+fi
+
+SET_ENV_VARS=""
 if [[ -n "$DB_CONN_NAME" ]]; then
   RUN_ARGS+=(--add-cloudsql-instances="$DB_CONN_NAME")
+  SET_ENV_VARS+="DB_CONN_NAME=$DB_CONN_NAME"
 fi
 
 if [[ -n "${CONNECTOR_NAME:-}" ]]; then
   RUN_ARGS+=(--vpc-connector "$CONNECTOR_NAME" --vpc-egress=private-ranges-only)
 fi
+
+# Provide DB_USER/DB_NAME defaults so start script can construct DATABASE_URL when not supplied
+if [[ -n "$SET_ENV_VARS" ]]; then
+  SET_ENV_VARS+="," 
+fi
+SET_ENV_VARS+="DB_USER=$DB_USER,DB_NAME=$DB_NAME"
+
+# Apply all non-secret env vars in a single flag to satisfy gcloud constraints
+RUN_ARGS+=(--set-env-vars "$SET_ENV_VARS")
 
 gcloud run deploy "$SERVICE_NAME" "${RUN_ARGS[@]}"
 

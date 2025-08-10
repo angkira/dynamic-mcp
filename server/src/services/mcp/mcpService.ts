@@ -1,6 +1,8 @@
 import { PrismaClient, Prisma, type MCPServer, type MCPServerStatus, type MCPTransportType, type MCPAuthType } from '@shared-prisma'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
+import { EventPublisher } from '../events/eventPublisher'
+import { MCPDomainEventType, NotificationLevel, NotificationScope } from '../../constants/notifications'
 import type {
   MCPServerUpdateData,
   MCPToolForLLM,
@@ -21,11 +23,13 @@ export class McpService {
   private prisma: PrismaClient
   private fastify: FastifyInstance
   private connectionManager: McpConnectionManager
+  private events: EventPublisher
 
   constructor(fastify: FastifyInstance) {
     this.fastify = fastify
     this.prisma = new PrismaClient()
     this.connectionManager = new McpConnectionManager(fastify)
+    this.events = new EventPublisher(fastify)
   }
 
   /**
@@ -186,6 +190,16 @@ export class McpService {
       await this.connectionManager.connectToServer(server)
     }
 
+    // Emit domain event and user notification
+    this.events.publishMcpEvent(userId, MCPDomainEventType.ServerCreated, this.transformServerForResponse(server))
+    this.events.publishNotification(userId, {
+      scope: NotificationScope.MCP,
+      level: NotificationLevel.Success,
+      title: 'MCP Server created',
+      message: `${server.name} has been created`,
+      meta: { serverId: server.id }
+    })
+
     return this.transformServerForResponse(server)
   }
 
@@ -250,6 +264,16 @@ export class McpService {
       }
     }
 
+    // Emit domain event and user notification
+    this.events.publishMcpEvent(userId, MCPDomainEventType.ServerUpdated, this.transformServerForResponse(updatedServer))
+    this.events.publishNotification(userId, {
+      scope: NotificationScope.MCP,
+      level: NotificationLevel.Info,
+      title: 'MCP Server updated',
+      message: `${updatedServer.name} has been updated`,
+      meta: { serverId: updatedServer.id }
+    })
+
     return this.transformServerForResponse(updatedServer)
   }
 
@@ -272,6 +296,16 @@ export class McpService {
     await this.prisma.mCPServer.update({
       where: { id },
       data: updateData as unknown as Prisma.MCPServerUpdateInput
+    })
+
+    // Emit domain event and user notification
+    this.events.publishMcpEvent(userId, MCPDomainEventType.ServerStatusChanged, { id, status, lastConnected: updateData.lastConnected })
+    this.events.publishNotification(userId, {
+      scope: NotificationScope.MCP,
+      level: status === 'CONNECTED' ? NotificationLevel.Success : status === 'ERROR' ? NotificationLevel.Error : NotificationLevel.Info,
+      title: 'MCP Server status changed',
+      message: `Server #${id} is now ${status.toLowerCase()}`,
+      meta: { serverId: id, status }
     })
   }
 
@@ -297,12 +331,30 @@ export class McpService {
       }
       // Delete server
       await this.prisma.mCPServer.delete({ where: { id } })
+      // Emit domain event and user notification for owner deletion
+      this.events.publishMcpEvent(userId, MCPDomainEventType.ServerDeleted, { id })
+      this.events.publishNotification(userId, {
+        scope: NotificationScope.MCP,
+        level: NotificationLevel.Warning,
+        title: 'MCP Server deleted',
+        message: `${server.name} has been deleted`,
+        meta: { serverId: id }
+      })
     } else {
       // Non-owner: only remove from current user's enabled list
       const settings = await this.prisma.settings.findUnique({ where: { userId } })
       const ids = settings?.mcpEnabledServerIds || []
       const newIds = ids.filter(v => v !== id)
       await this.prisma.settings.update({ where: { userId }, data: { mcpEnabledServerIds: { set: newIds } } })
+      // Emit event for unlinking from user's enabled list
+      this.events.publishMcpEvent(userId, MCPDomainEventType.ServerUpdated, { id, unlinked: true })
+      this.events.publishNotification(userId, {
+        scope: NotificationScope.MCP,
+        level: NotificationLevel.Info,
+        title: 'MCP Server removed from your list',
+        message: `${server.name} was removed from your enabled servers`,
+        meta: { serverId: id }
+      })
     }
   }
 

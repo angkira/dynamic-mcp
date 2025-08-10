@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { 
+import {
   create,
   NMessageProvider,
   NLoadingBarProvider,
@@ -14,6 +14,7 @@ import router from './router'
 import FontAwesomeIcon from './plugins/fontawesome'
 import { socketService } from './services/socket'
 import { useUserStore } from './stores/user'
+import { useMcpStore } from './stores/mcp'
 
 // Create Naive UI instance with only the components we need
 const naive = create({
@@ -39,17 +40,20 @@ app.component('FontAwesomeIcon', FontAwesomeIcon)
 // Initialize authentication before mounting
 async function initializeApp() {
   const userStore = useUserStore()
-  
+
   // Try to initialize user from stored session
   const wasInitialized = userStore.initializeFromStorage()
-  
+
   // If user was found in storage, verify token with server
   if (wasInitialized && userStore.isAuthenticated) {
     try {
       await userStore.verifyAndRefreshUser()
-      
+
       // Connect socket only after successful authentication
       socketService.connectIfAuthenticated()
+      // Initialize MCP store (will subscribe to WS domain events)
+      const mcpStore = useMcpStore()
+      await mcpStore.initialize()
     } catch (error) {
       console.warn('Token verification failed during app initialization:', error)
       // User will be redirected to login by router guards

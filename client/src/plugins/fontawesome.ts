@@ -50,6 +50,12 @@ import {
   faSignInAlt,
   faPlay,
   faArrowRightFromBracket,
+  faBell,
+  faTriangleExclamation,
+  faCircleExclamation,
+  faCircleCheck,
+  faCircleInfo,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons'
 
 import {
@@ -115,6 +121,12 @@ library.add(
   faSignInAlt,
   faPlay,
   faArrowRightFromBracket,
+  faBell,
+  faTriangleExclamation,
+  faCircleExclamation,
+  faCircleCheck,
+  faCircleInfo,
+  faXmark,
   faGithub,
   faGoogle,
 

@@ -7,6 +7,7 @@
 export { LlmProvider, MessageRole } from './llm';
 export { StreamingChunkType } from './message';
 export { MCPServerStatus, MCPTransportType, MCPAuthType } from './enums';
+export { DomainEventScope, MCPDomainEventType, NotificationScope, NotificationLevel } from '../constants/websocketEvents';
 
 // Type exports (import type)
 export * from './mcp'
@@ -47,3 +48,4 @@ export type {
 
 // Re-export constants
 export { ClientWebSocketEvent, ServerWebSocketEvent } from '../constants/websocketEvents';
+export type { NotificationEventPayload, MCPDomainEventPayload, DomainEventPayload } from '../constants/websocketEvents';

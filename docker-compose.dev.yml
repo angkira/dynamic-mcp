@@ -34,19 +34,14 @@ services:
       - "3000:3000"
     working_dir: /app/server
     volumes:
-      # Mount entire workspace for development
+      # Mount entire workspace read-write; dist and node_modules are tmpfs to isolate writes
       - .:/app
-      # Preserve node_modules to avoid overwriting
       - /app/node_modules
       - /app/server/node_modules
-      - /app/client/node_modules
-      - /app/shared/node_modules
-      # Keep build artifacts inside container to prevent root-owned files on host
       - /app/server/dist
-      - /app/shared/dist
-    # Run as the host user to avoid root-owned files on bind mounts
-    user: "${UID:-1000}:${GID:-1000}"
-    command: sh -c "npx prisma generate --schema=../prisma/schema.prisma && (npm ci || npm i); npm run dev"
+    # Run as root to ensure tmpfs mounts are writable
+    user: "0:0"
+    command: sh -c "apk add --no-cache python3 make g++ >/dev/null 2>&1 || true; npx prisma generate --schema=../prisma/schema.prisma; [ -d node_modules ] || npm ci; npm run dev"
 
   # Separate MCP servers as independent services
   mcp-memory:
@@ -69,12 +64,9 @@ services:
       - .:/app
       - /app/node_modules
       - /app/server/node_modules
-      # Keep build artifacts inside container to prevent root-owned files on host
       - /app/server/dist
-      - /app/shared/dist
-    # Run as the host user to avoid root-owned files on bind mounts
-    user: "${UID:-1000}:${GID:-1000}"
-    command: sh -c "apk add --no-cache --virtual .deps openssl ca-certificates >/dev/null 2>&1 || true; npx prisma generate --schema=../prisma/schema.prisma && (npm ci || npm i) && npm run build && node dist/mcp-servers/entry.js"
+    user: "0:0"
+    command: sh -c "apk add --no-cache --virtual .deps openssl ca-certificates >/dev/null 2>&1 || true; apk add --no-cache python3 make g++ >/dev/null 2>&1 || true; npx prisma generate --schema=../prisma/schema.prisma; [ -d node_modules ] || npm ci; npm run build && node dist/mcp-servers/entry.js"
 
   mcp-api:
     profiles: [ "mcp" ]
@@ -96,12 +88,9 @@ services:
       - .:/app
       - /app/node_modules
       - /app/server/node_modules
-      # Keep build artifacts inside container to prevent root-owned files on host
       - /app/server/dist
-      - /app/shared/dist
-    # Run as the host user to avoid root-owned files on bind mounts
-    user: "${UID:-1000}:${GID:-1000}"
-    command: sh -c "apk add --no-cache --virtual .deps openssl ca-certificates >/dev/null 2>&1 || true; npx prisma generate --schema=../prisma/schema.prisma && (npm ci || npm i) && npm run build && node dist/mcp-servers/entry.js"
+    user: "0:0"
+    command: sh -c "apk add --no-cache --virtual .deps openssl ca-certificates >/dev/null 2>&1 || true; apk add --no-cache python3 make g++ >/dev/null 2>&1 || true; npx prisma generate --schema=../prisma/schema.prisma; [ -d node_modules ] || npm ci; npm run build && node dist/mcp-servers/entry.js"
 
   # Frontend client
   client:
@@ -122,18 +111,15 @@ services:
     ports:
       - "5173:5173"
     working_dir: /app/client
+    command: sh -c "[ -d node_modules ] || npm ci; npm run dev"
     volumes:
-      # Mount entire workspace for development
       - .:/app
-      # Preserve node_modules to avoid overwriting
       - /app/node_modules
       - /app/client/node_modules
       - /app/shared/node_modules
-      # Keep client build artifacts inside container
       - /app/client/dist
       - /app/client/node_modules/.vite
-    # Run as the host user to avoid root-owned files on bind mounts
-    user: "${UID:-1000}:${GID:-1000}"
+    user: "0:0"
 
 volumes:
   db-data:

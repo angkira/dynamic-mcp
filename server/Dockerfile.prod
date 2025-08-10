@@ -14,7 +14,8 @@ COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY prisma/ ./prisma/
 
 # Install dependencies with memory optimizations
-RUN --mount=type=cache,target=/root/.npm \
+RUN apk add --no-cache python3 make g++ libc6-compat && \
+    --mount=type=cache,target=/root/.npm \
     npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && \
     npm cache clean --force
 
@@ -45,7 +46,8 @@ COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY prisma/ ./prisma/
 
-RUN --mount=type=cache,target=/root/.npm \
+RUN apk add --no-cache python3 make g++ libc6-compat && \
+    --mount=type=cache,target=/root/.npm \
     npm ci --only=production --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && \
     npm cache clean --force
 

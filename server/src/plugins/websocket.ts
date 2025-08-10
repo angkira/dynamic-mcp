@@ -118,6 +118,15 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
         email: authResult.userEmail
       });
 
+      // Join a user-specific room for targeted events (utility only, no business logic)
+      try {
+        const userRoom = `user:${authResult.userId}`;
+        authenticatedSocket.join(userRoom);
+        fastify.log.debug(`Socket ${socket.id} joined room ${userRoom}`);
+      } catch (e) {
+        fastify.log.warn(`Failed to join user room for socket ${socket.id}:`, e);
+      }
+
       // Register authenticated event handlers
       registerSocketHandlers(authenticatedSocket, messageHandler, fastify);
     }).catch((error) => {

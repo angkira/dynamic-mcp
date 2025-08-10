@@ -1,5 +1,6 @@
 # Clean development Dockerfile for server
 FROM node:22-alpine
+RUN apk add --no-cache python3 make g++ libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV=development
@@ -11,7 +12,9 @@ COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 
 # Install dependencies once at root level (monorepo style)
-RUN npm install
+ENV npm_config_cache=/tmp/.npm \
+  npm_config_unsafe_perm=true
+RUN npm ci || npm install
 
 EXPOSE 3000
 

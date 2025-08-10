@@ -21,13 +21,20 @@
         </transition>
       </div>
 
-      <!-- User Profile Section -->
+      <!-- User Profile Section with Notifications -->
       <div class="user-section">
-        <UserInfo :name="user.user?.name" :email="user.user?.email || ''" :initials="user.userInitials"
-          :expanded="ui.sidebarState === 'open'" />
+        <div class="user-and-bell">
+          <UserInfo :name="user.user?.name" :email="user.user?.email || ''" :initials="user.userInitials"
+            :expanded="ui.sidebarState === 'open'" />
+          <button class="notif-bell" title="Notifications" @click="togglePanel">
+            <FontAwesomeIcon icon="bell" />
+          </button>
+        </div>
         <button v-if="ui.sidebarState === 'open'" @click="handleLogout" class="logout-btn" title="Logout">
           <FontAwesomeIcon icon="arrow-right-from-bracket" />
         </button>
+        <NotificationPanel :open="panelOpen" :expanded-ids="expandedIds" @toggle-expand="toggleExpand"
+          @remove="remove" />
       </div>
     </aside>
     <ChatSettings v-model:show="showSettingsModal" />
@@ -44,11 +51,42 @@ import ChatList from './ChatList.vue'
 import ChatSettings from '../settings/Settings.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import UserInfo from '@/components/user/UserInfo.vue'
+import { useNotifyStore } from '@/stores/notify'
+import type { NotifyItem } from '@/stores/notify'
+import { NotificationLevel } from '@/types'
+import NotificationPanel from '@/components/NotificationPanel.vue'
 
 const ui = useUIStore()
 const user = useUserStore()
 const chats = useChatsStore()
 const router = useRouter()
+const notify = useNotifyStore()
+const panelOpen = ref(false)
+const expandedIds = ref<Set<number>>(new Set())
+const displayQueue = computed<NotifyItem[]>(() => notify.queue.slice(-10))
+
+function togglePanel() {
+  panelOpen.value = !panelOpen.value
+}
+
+function toggleExpand(id: number) {
+  const set = new Set(expandedIds.value)
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
+  expandedIds.value = set
+}
+
+function remove(id: number) {
+  const idx = notify.queue.findIndex((i: NotifyItem) => i.id === id)
+  if (idx > -1) notify.queue.splice(idx, 1)
+}
+
+function kindIcon(kind: NotificationLevel) {
+  if (kind === NotificationLevel.Error) return 'triangle-exclamation'
+  if (kind === NotificationLevel.Warning) return 'circle-exclamation'
+  if (kind === NotificationLevel.Success) return 'circle-check'
+  return 'circle-info'
+}
 
 const showSettingsModal = ref(false)
 // Determine if sidebar is collapsed
@@ -142,6 +180,107 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
+}
+
+.user-and-bell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.notif-bell {
+  @include button-secondary;
+  padding: var(--spacing-xs);
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+
+  &:hover {
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface);
+  }
+}
+
+.notif-panel-enter-active,
+.notif-panel-leave-active {
+  transition: all 0.2s ease;
+}
+
+.notif-panel-enter-from,
+.notif-panel-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.notif-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  /* stick to left bottom corner above user section */
+  width: 320px;
+  max-height: 40vh;
+  overflow: auto;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+}
+
+.notif-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  background: var(--color-surface);
+}
+
+.notif-item.success {
+  border-left: 3px solid var(--color-success);
+}
+
+.notif-item.warning {
+  border-left: 3px solid var(--color-warning);
+}
+
+.notif-item.error {
+  border-left: 3px solid var(--color-danger);
+}
+
+.notif-item.info {
+  border-left: 3px solid var(--color-primary);
+}
+
+.notif-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.notif-icon {
+  @include icon-sm;
+  color: var(--color-text-muted);
+}
+
+.notif-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.notif-close {
+  @include button-ghost;
+  color: var(--color-text-muted);
+}
+
+.notif-content {
+  padding: 0 8px 8px 32px;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
 }
 
 /* user styles moved to UserInfo component */

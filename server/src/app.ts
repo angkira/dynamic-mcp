@@ -60,12 +60,15 @@ export const options = {
 };
 
 export default (async function (fastify: FastifyInstance, opts: FastifyPluginOptions) {
-  // Initialize JWT service and demo user
-  const initService = new InitializationService();
-  const { token, user } = await initService.initialize();
-
-  console.log(`🔐 Demo user auto-authenticated: ${user.email}`);
-  console.log(`🎟️ Demo token: ${token.substring(0, 20)}...`);
+  // Initialize JWT service and demo user (non-fatal)
+  try {
+    const initService = new InitializationService();
+    const { token, user } = await initService.initialize();
+    console.log(`🔐 Demo user auto-authenticated: ${user.email}`);
+    console.log(`🎟️ Demo token: ${token.substring(0, 20)}...`);
+  } catch (err) {
+    fastify.log.error({ err }, 'Initialization failed; continuing without demo bootstrap');
+  }
 
   // Create JWT middleware instance
   const jwtMiddleware = new JWTMiddleware();
@@ -131,7 +134,7 @@ if (require.main === module) {
       // Apply the app configuration
       await exports.default(app, {});
 
-      const port = parseInt(process.env.PORT || '3000');
+      const port = parseInt(process.env.PORT || '8080');
       const host = process.env.HOST || '0.0.0.0';
 
       await app.listen({ port, host });

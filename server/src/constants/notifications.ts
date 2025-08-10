@@ -1,30 +1,9 @@
-export enum ClientWebSocketEvent {
-  SendMessage = 'sendMessage',
-}
+// Local server-side enums and payload types mirroring shared constants
 
-export enum ServerWebSocketEvent {
-  ChatId = 'chatId',
-  UserMessage = 'userMessage',
-  Reasoning = 'reasoning',
-  Code = 'code',
-  MessageChunk = 'messageChunk',
-  ToolCall = 'toolCall',
-  ToolResult = 'toolResult',
-  Title = 'title',
-  MessageComplete = 'messageComplete',
-  Error = 'error',
-  // Generic domain event channel for app-level state sync (e.g., MCP server changes)
-  DomainEvent = 'domainEvent',
-  // Lightweight GUI notification event (uses existing notification system on client)
-  Notification = 'notification',
-}
-
-// Domain event scopes
 export enum DomainEventScope {
   MCP = 'MCP',
 }
 
-// MCP-specific domain events
 export enum MCPDomainEventType {
   ServerCreated = 'MCP_SERVER_CREATED',
   ServerUpdated = 'MCP_SERVER_UPDATED',
@@ -40,7 +19,6 @@ export interface MCPDomainEventPayload {
 
 export type DomainEventPayload = MCPDomainEventPayload;
 
-// Notification scopes and levels
 export enum NotificationScope {
   MCP = 'MCP',
   System = 'SYSTEM',
@@ -61,3 +39,5 @@ export interface NotificationEventPayload {
   message?: string;
   meta?: Record<string, unknown>;
 }
+
+

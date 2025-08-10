@@ -11,7 +11,11 @@ onMounted(() => {
     let item = notify.take()
     while (item) {
       const { kind, title, content, duration } = item
-      notification[kind]({ title, content, duration: duration ?? (kind === 'error' ? 5000 : 3000), keepAliveOnHover: true })
+      const isError = kind === 'error' || kind === 'Error'
+      const isWarn = kind === 'warning' || kind === 'Warning'
+      const dur = duration ?? (isError ? 5000 : 3000)
+      const method = (String(kind).toLowerCase() as any)
+      notification[method]({ title, content, duration: dur, keepAliveOnHover: true })
       item = notify.take()
     }
     requestAnimationFrame(pump)

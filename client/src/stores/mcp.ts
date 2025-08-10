@@ -3,7 +3,9 @@ import { ref, computed } from 'vue'
 import { mcpApi } from '@/services/api/mcp'
 import { useSettingsStore } from '@/stores/settings'
 import type { MCPServer, MCPSettings } from '@/types'
-import { MCPServerStatus, MCPTransportType, MCPAuthType } from '@/types'
+import { MCPServerStatus, MCPTransportType, MCPAuthType, ServerWebSocketEvent, MCPDomainEventType, NotificationLevel } from '@/types'
+import { socketService } from '@/services/socket'
+import { useNotifyStore } from '@/stores/notify'
 
 export const useMcpStore = defineStore('mcp', () => {
   // State
@@ -36,6 +38,40 @@ export const useMcpStore = defineStore('mcp', () => {
   )
 
   // Actions
+  // Subscribe to socket events for MCP domain updates and notifications
+  function subscribeSocketEvents() {
+    const notify = useNotifyStore()
+
+    socketService.on(ServerWebSocketEvent.DomainEvent, (event: { scope: string; type: MCPDomainEventType; payload: any }) => {
+      // Guard: ensure scope is MCP
+      if (!event || event.scope !== 'MCP') return
+      const { type, payload } = event
+      // Apply state updates optimistically without HTTP
+      if (type === MCPDomainEventType.ServerCreated) {
+        // Normalize and add if not exists
+        const exists = servers.value.find(s => s.id === String(payload.id))
+        if (!exists) servers.value.push(payload as MCPServer)
+      } else if (type === MCPDomainEventType.ServerUpdated) {
+        const idx = servers.value.findIndex(s => s.id === String(payload.id))
+        if (idx > -1) servers.value[idx] = { ...servers.value[idx], ...(payload as Partial<MCPServer>) }
+      } else if (type === MCPDomainEventType.ServerDeleted) {
+        const idx = servers.value.findIndex(s => s.id === String(payload.id))
+        if (idx > -1) servers.value.splice(idx, 1)
+      } else if (type === MCPDomainEventType.ServerStatusChanged) {
+        const idx = servers.value.findIndex(s => s.id === String(payload.id))
+        if (idx > -1) servers.value[idx].status = payload.status
+      }
+    })
+
+    socketService.on(ServerWebSocketEvent.Notification, (n: { level: NotificationLevel; title: string; message?: string }) => {
+      if (!n) return
+      const { level, title, message } = n
+      if (level === NotificationLevel.Error) notify.error(title, message)
+      else if (level === NotificationLevel.Warning) notify.warning(title, message)
+      else if (level === NotificationLevel.Success) notify.success(title, message)
+      else notify.info(title, message)
+    })
+  }
   const fetchServers = async () => {
     isLoading.value = true
     error.value = null
@@ -270,6 +306,7 @@ export const useMcpStore = defineStore('mcp', () => {
     // Ensure settings are loaded first so global config is available
     await settingsStore.fetchSettings()
     await fetchServers()
+    subscribeSocketEvents()
   }
 
   return {
