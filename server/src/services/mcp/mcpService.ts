@@ -504,7 +504,7 @@ export class McpService {
         }
       })
 
-      let foundServer = null;
+      let foundServer: { name: string } | null = null;
       for (const server of servers) {
         const capabilities = server.capabilities as unknown as { tools?: Array<{ name: string }> };
         if (capabilities?.tools) {
