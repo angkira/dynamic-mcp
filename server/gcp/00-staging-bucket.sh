@@ -50,6 +50,14 @@ gcloud storage buckets add-iam-policy-binding "$STAGING_BUCKET" \
   --member="serviceAccount:${CLOUD_BUILD_SA}" \
   --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
 
+# Best-effort: also grant to the currently authenticated identity if it's a service account
+if [[ "$ACTIVE_IDENTITY" == *"@"*"gserviceaccount.com" ]]; then
+  gcloud storage buckets add-iam-policy-binding "$STAGING_BUCKET" \
+    --project "$PROJECT_ID" \
+    --member="serviceAccount:${ACTIVE_IDENTITY}" \
+    --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
+fi
+
 echo "✅ Staging bucket ready: ${STAGING_BUCKET}"
 
 

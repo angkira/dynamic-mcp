@@ -25,12 +25,16 @@ fi
 TMP_OBJ="${STAGING_BUCKET}/_ci_perm_check_${TAG}.txt"
 ALLOW_DEFAULT_STAGING_FALLBACK="${ALLOW_DEFAULT_STAGING_FALLBACK:-false}"
 USE_CUSTOM_STAGING=true
-if ! printf "ok" | gcloud storage cp - "$TMP_OBJ" >/dev/null 2>&1; then
+if ! printf "ok" | gcloud storage cp - "$TMP_OBJ" >/dev/null 2>"$SCRIPT_DIR/.cp_err_${TAG}.log"; then
   ACTIVE_IDENTITY=$(gcloud config get-value account 2>/dev/null || true)
   echo "❌ Cannot write to $STAGING_BUCKET as $ACTIVE_IDENTITY" >&2
   echo "   Ensure the bucket exists and that this identity has at least object write on the bucket." >&2
   echo "   Tip: grant roles/storage.objectAdmin on the bucket to both the deploy SA and Cloud Build SA." >&2
   echo "   Bucket suggestion: gs://${PROJECT_ID}-build-staging (pre-create and set repo secret STAGING_BUCKET)." >&2
+  if [[ -s "$SCRIPT_DIR/.cp_err_${TAG}.log" ]]; then
+    # Print the underlying cp error for root-cause visibility
+    echo "   Error: $(tr -d '\r' <"$SCRIPT_DIR/.cp_err_${TAG}.log")" >&2
+  fi
   if [[ "$ALLOW_DEFAULT_STAGING_FALLBACK" == "true" ]]; then
     echo "⚠️  Falling back to Cloud Build default staging bucket (requested by ALLOW_DEFAULT_STAGING_FALLBACK=true)." >&2
     USE_CUSTOM_STAGING=false
