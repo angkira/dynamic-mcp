@@ -16,7 +16,7 @@ HTTPS_PROXY_NAME="${HTTPS_PROXY_NAME:-chat-https-proxy}"
 CERT_NAME="${CERT_NAME:-chat-managed-cert}"
 HTTP_RULE_NAME="${HTTP_RULE_NAME:-chat-http-fr}"
 HTTPS_RULE_NAME="${HTTPS_RULE_NAME:-chat-https-fr}"
-SERVICE_NAME="${SERVICE_NAME:-chat-backend}"
+SERVICE_NAME="${SERVICE_NAME:-dynamic-mcp-server}"
 DOMAIN_NAME="${DOMAIN_NAME:-}"
 
 echo "📡 Ensuring global static IP (${LB_IP_NAME})..."

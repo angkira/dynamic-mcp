@@ -1,85 +1,42 @@
-# GCP-optimized Dockerfile for Cloud Build/Run (no BuildKit mounts)
-FROM node:22-alpine AS base
+## Simple, robust single-stage build for Cloud Run
+FROM node:22.18.0-alpine
+
 ARG APP_UID=10001
 ARG APP_GID=10001
-RUN addgroup -g ${APP_GID} -S app && adduser -S app -u ${APP_UID} -G app
 WORKDIR /app
-RUN chown -R app:app /app
-ENV HOME=/home/app \
-  NPM_CONFIG_CACHE=/home/app/.npm
+RUN addgroup -g ${APP_GID} -S app && adduser -S app -u ${APP_UID} -G app \
+  && chown -R app:app /app
 
-# Dependencies stage (compatible with Cloud Build)
-FROM base AS deps
-# Install repo-level deps (workspace-aware)
-USER root
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ libc6-compat && \
-  npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
+ENV NODE_ENV=production \
+  NODE_PATH=/app/node_modules:/app/server/node_modules \
+  HOME=/home/app \
+  NPM_CONFIG_CACHE=/home/app/.npm \
+  PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 
-# Ensure server workspace deps are present (including fastify types)
-COPY server/package.json ./server/
-RUN cd server && npm install --package-lock-only && npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force || true
-
-# Bring in other workspace manifests so node_modules hoisting is correct
-COPY shared/package.json ./shared/
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-COPY prisma/ ./prisma/
-# Generate Prisma client once here for build to use
-ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
-RUN npx prisma generate --schema=./prisma/schema.prisma
-
-# Build stage
-FROM base AS builder
-USER root
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package*.json ./
-COPY server/ ./server/
-COPY shared/ ./shared/
-COPY packages/ ./packages/
-COPY prisma/ ./prisma/
-
-# Install server-only dev deps needed for build (types), then build
-RUN cd server && npm install --no-audit --no-fund --include=dev && cd .. \
-  && rm -rf /app/shared/dist /tmp/server-dist \
-  && mkdir -p /app/shared/dist /tmp/server-dist \
-  && chmod -R 777 /app/shared/dist /tmp/server-dist \
-  && cd shared && npm run build && cd ../server && npx tsc -p tsconfig.json --outDir /tmp/server-dist
-
-# Production deps only
-FROM base AS prod-deps
-USER root
-COPY package*.json ./
-RUN apk add --no-cache python3 make g++ libc6-compat && \
-  npm ci --omit=dev --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && npm cache clean --force
-COPY server/package.json ./server/
-COPY shared/package.json ./shared/
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-COPY prisma/ ./prisma/
-RUN npx prisma generate --schema=./prisma/schema.prisma
-
-# Runtime image
-FROM base AS runner
-USER root
-ENV NODE_ENV=production
-
-# Tini as PID 1 for better signal handling
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini python3 make g++ libc6-compat
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Copy prod deps and built code
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/package*.json ./
-COPY --from=builder /tmp/server-dist ./dist
-COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/prisma ./prisma
-COPY server/start-prod.sh ./start-prod.sh
+# Copy manifests and install all workspaces (dev included) to build
+COPY package*.json ./
+COPY server/package.json ./server/
+COPY shared/package.json ./shared/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
+RUN npm ci --workspaces --include-workspace-root --omit=dev=false --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000
 
-# Drop privileges and set perms
+# Copy source and build in correct order
+COPY shared/ ./shared/
+COPY server/ ./server/
+COPY packages/ ./packages/
+COPY prisma/ ./prisma/
+RUN npm -w @dynamic-mcp/shared run build --ignore-scripts \
+  && cd server \
+  && npx tsc -p tsconfig.json --outDir /app/dist \
+  && cd /app
+
+COPY server/start-prod.sh ./start-prod.sh
 RUN chmod +x ./start-prod.sh && chown -R app:app /app
 USER app
-
-EXPOSE 3000
+EXPOSE 8080
 CMD ["./start-prod.sh"]
 
 

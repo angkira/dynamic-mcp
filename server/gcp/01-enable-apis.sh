@@ -13,9 +13,11 @@ gcloud services enable \
   secretmanager.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
+  containeranalysis.googleapis.com \
   servicenetworking.googleapis.com \
   compute.googleapis.com \
-  vpcaccess.googleapis.com >/dev/null
+  vpcaccess.googleapis.com \
+  redis.googleapis.com >/dev/null
 
 echo "✅ APIs enabled"
 

@@ -15,17 +15,13 @@ if [ -z "${DATABASE_URL:-}" ]; then
   fi
 fi
 
-# Apply Prisma migrations in production (idempotent). Do not block startup on failure.
-if [ -z "${SKIP_MIGRATIONS:-}" ]; then
-  echo "📊 Applying database migrations..."
-  npx prisma migrate deploy --schema=./prisma/schema.prisma || echo "⚠️  Migrations failed or already applied; continuing startup"
+# Start migrations in background (best-effort) to avoid delaying port binding
+if [ -z "${SKIP_MIGRATIONS:-}" ] && [ -n "${DATABASE_URL:-}" ]; then
+  (
+    echo "📊 Applying database migrations in background..."
+    npx prisma migrate deploy --schema=./prisma/schema.prisma || echo "⚠️  Migrations failed or already applied; continuing"
+  ) &
 fi
 
-# Optional: Generate Prisma client if schema present; non-fatal
-if [ -f ./prisma/schema.prisma ]; then
-  echo "🔧 Generating Prisma client (non-fatal)..."
-  npx prisma generate --schema=./prisma/schema.prisma || true
-fi
-
-echo "🚀 Starting application..."
-exec node dist/app.js
+echo "🚀 Starting application on PORT=${PORT:-8080}..."
+exec node -r ./dist/register-aliases.js ./dist/app.js

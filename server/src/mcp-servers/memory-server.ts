@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { PrismaClient } from '@shared-prisma';
+import Redis from 'ioredis';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import * as jwt from 'jsonwebtoken';
@@ -37,7 +37,7 @@ interface ResetArgs {
 
 class MemoryMCPServer {
   private server: Server;
-  private prisma: PrismaClient;
+  private redis: Redis;
   private jwtSecret: string;
 
   constructor() {
@@ -54,7 +54,10 @@ class MemoryMCPServer {
       }
     );
 
-    this.prisma = new PrismaClient();
+    const host = process.env.REDIS_HOST || '127.0.0.1'
+    const port = parseInt(process.env.REDIS_PORT || '6379')
+    const password = process.env.REDIS_PASSWORD
+    this.redis = new Redis({ host, port, password, lazyConnect: true, enableReadyCheck: true })
     this.setupToolHandlers();
   }
 
@@ -205,14 +208,10 @@ class MemoryMCPServer {
       throw new Error("Content is required");
     }
 
-    const memory = await this.prisma.memory.create({
-      data: {
-        userId,
-        content,
-        key: key || null,
-        metadata: metadata || null,
-      },
-    });
+    const id = Date.now();
+    const item = { id, userId, content, key: key || null, metadata: metadata || null, createdAt: new Date().toISOString() };
+    const listKey = key ? `user:${userId}:memories:key:${key}` : `user:${userId}:memories:all`;
+    await this.redis.lpush(listKey, JSON.stringify(item));
 
     return {
       content: [
@@ -220,12 +219,7 @@ class MemoryMCPServer {
           type: "text",
           text: JSON.stringify({
             success: true,
-            memory: {
-              id: memory.id,
-              content: memory.content,
-              key: memory.key,
-              createdAt: memory.createdAt,
-            },
+            memory: item,
             message: "Memory stored successfully",
           }, null, 2),
         },
@@ -235,37 +229,20 @@ class MemoryMCPServer {
 
   private async handleRecall(args: RecallArgs, userId: number) {
     const { key, search, limit = 50, offset = 0 } = args;
-
-    const where: any = { userId };
-    if (key) where.key = key;
+    const listKey = key ? `user:${userId}:memories:key:${key}` : `user:${userId}:memories:all`;
+    const end = offset + limit - 1;
+    const raw = await this.redis.lrange(listKey, offset, end);
+    let items = raw.map((r) => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
     if (search) {
-      where.content = {
-        contains: search,
-        mode: 'insensitive',
-      };
+      const s = search.toLowerCase();
+      items = items.filter((m: any) => String(m.content).toLowerCase().includes(s));
     }
-
-    const [memories, total] = await Promise.all([
-      this.prisma.memory.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      this.prisma.memory.count({ where }),
-    ]);
-
+    const total = await this.redis.llen(listKey);
     return {
       content: [
         {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            memories,
-            total,
-            hasMore: offset + limit < total,
-            message: `Retrieved ${memories.length} memories`,
-          }, null, 2),
+          type: 'text',
+          text: JSON.stringify({ success: true, memories: items, total, hasMore: offset + limit < total, message: `Retrieved ${items.length} memories` }, null, 2),
         },
       ],
     };
@@ -273,25 +250,20 @@ class MemoryMCPServer {
 
   private async handleReset(args: ResetArgs, userId: number) {
     const { key } = args;
-
-    const where: any = { userId };
-    if (key) where.key = key;
-
-    const result = await this.prisma.memory.deleteMany({ where });
-
+    const listKeys = key ? [`user:${userId}:memories:key:${key}`] : [`user:${userId}:memories:all`];
+    let deleted = 0;
+    for (const lk of listKeys) {
+      deleted += await this.redis.llen(lk);
+      await this.redis.del(lk);
+    }
     const message = key
-      ? `Deleted ${result.count} memories with key '${key}' for user ${userId}`
-      : `Deleted all ${result.count} memories for user ${userId}`;
-
+      ? `Deleted ${deleted} memories with key '${key}' for user ${userId}`
+      : `Deleted all ${deleted} memories for user ${userId}`;
     return {
       content: [
         {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            deletedCount: result.count,
-            message,
-          }, null, 2),
+          type: 'text',
+          text: JSON.stringify({ success: true, deletedCount: deleted, message }, null, 2),
         },
       ],
     };
@@ -479,7 +451,7 @@ class MemoryMCPServer {
   }
 
   async cleanup() {
-    await this.prisma.$disconnect();
+    try { await this.redis.quit(); } catch { }
   }
 }
 

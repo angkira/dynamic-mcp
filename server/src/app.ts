@@ -7,8 +7,9 @@ const moduleAlias = require('module-alias');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const path = require('node:path');
 moduleAlias.addAliases({
-  '@shared-prisma': path.join(__dirname, '..', '..', 'shared', 'prisma-client'),
-  '@shared': path.join(__dirname, '..', '..', 'shared', 'dist')
+  // At runtime __dirname === /app/dist → one level up is repo root (/app)
+  '@shared-prisma': path.join(__dirname, '..', 'shared', 'prisma-client'),
+  '@shared': path.join(__dirname, '..', 'shared', 'dist')
 });
 
 import { join } from 'node:path';
@@ -60,15 +61,19 @@ export const options = {
 };
 
 export default (async function (fastify: FastifyInstance, opts: FastifyPluginOptions) {
-  // Initialize JWT service and demo user (non-fatal)
-  try {
-    const initService = new InitializationService();
-    const { token, user } = await initService.initialize();
-    console.log(`🔐 Demo user auto-authenticated: ${user.email}`);
-    console.log(`🎟️ Demo token: ${token.substring(0, 20)}...`);
-  } catch (err) {
-    fastify.log.error({ err }, 'Initialization failed; continuing without demo bootstrap');
-  }
+  // Defer DB-heavy initialization to after server starts listening
+  fastify.addHook('onReady', async () => {
+    setTimeout(async () => {
+      try {
+        const initService = new InitializationService();
+        const { token, user } = await initService.initialize();
+        fastify.log.info(`🔐 Demo user auto-authenticated: ${user.email}`);
+        fastify.log.info(`🎟️ Demo token: ${token.substring(0, 20)}...`);
+      } catch (err) {
+        fastify.log.error({ err }, 'Initialization failed; continuing without demo bootstrap');
+      }
+    }, 0);
+  });
 
   // Create JWT middleware instance
   const jwtMiddleware = new JWTMiddleware();
@@ -121,7 +126,7 @@ export default (async function (fastify: FastifyInstance, opts: FastifyPluginOpt
 
   await fastify.register(mcpRoute, { prefix: '/api/mcp' });
 
-  await fastify.register(memoryRoute, { prefix: '/api/memory' });
+  // Memory API removed in favor of Redis-backed MCP memory server
 }) satisfies FastifyPluginAsync
 
 // Start the server if this file is run directly

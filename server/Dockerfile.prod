@@ -1,78 +1,45 @@
-# Optimized production Dockerfile for server
-FROM node:22-alpine AS base
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
+# Optimized production Dockerfile for server (pinned Node version, multi-stage)
+FROM node:22.18.0-alpine AS builder
+ARG APP_UID=10001
+ARG APP_GID=10001
 WORKDIR /app
+RUN addgroup -g ${APP_GID} -S app && adduser -S app -u ${APP_UID} -G app && chown -R app:app /app
+RUN apk add --no-cache python3 make g++ libc6-compat
 
-# Dependencies stage - cache layer for faster rebuilds
-FROM base AS deps
-# Copy package files first (better caching)
 COPY package*.json ./
 COPY server/package.json ./server/
 COPY shared/package.json ./shared/
 COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY prisma/ ./prisma/
 
-# Install dependencies with memory optimizations
-RUN apk add --no-cache python3 make g++ libc6-compat && \
-    --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && \
-    npm cache clean --force
+RUN npm ci -w @dynamic-mcp/shared -w @dynamic-mcp/server --include-workspace-root --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000
 
-# Generate Prisma separately to avoid memory pressure
-RUN PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x npx prisma generate --schema=./prisma/schema.prisma
-
-# Build stage
-FROM base AS builder
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package*.json ./
-
-# Copy source code
-COPY server/ ./server/
 COPY shared/ ./shared/
+COPY server/ ./server/
 COPY packages/ ./packages/
-COPY prisma/ ./prisma/
+RUN npm -w @dynamic-mcp/shared run build && cd server && npx tsc -p tsconfig.json --outDir /tmp/server-dist
 
-# Build with proper order: use pre-generated Prisma, then TypeScript
-RUN cd shared && npm run build && \
-    cd ../server && npm run build:all
+FROM node:22.18.0-alpine AS runner
+ARG APP_UID=10001
+ARG APP_GID=10001
+WORKDIR /app
+RUN addgroup -g ${APP_GID} -S app && adduser -S app -u ${APP_UID} -G app && chown -R app:app /app
+ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=768 HOME=/home/app NPM_CONFIG_CACHE=/home/app/.npm
+RUN apk add --no-cache tini
+ENTRYPOINT ["/sbin/tini", "--"]
 
-# Production dependencies only
-FROM base AS prod-deps
-COPY package*.json ./
-COPY server/package.json ./server/
-COPY shared/package.json ./shared/
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-COPY prisma/ ./prisma/
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/server/package.json ./server/
+COPY --from=builder /app/shared/package.json ./shared/
+COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --omit=dev && npm cache clean --force
 
-RUN apk add --no-cache python3 make g++ libc6-compat && \
-    --mount=type=cache,target=/root/.npm \
-    npm ci --only=production --prefer-offline --no-audit --no-fund --maxsockets=15 --fetch-timeout=300000 && \
-    npm cache clean --force
-
-# Generate Prisma separately
-RUN PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x npx prisma generate --schema=./prisma/schema.prisma
-
-# Production runtime
-FROM base AS runner
-ENV NODE_ENV=production
-
-# Copy production dependencies
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=prod-deps /app/package*.json ./
-
-# Copy built applications and shared library
-COPY --from=builder /app/server/dist ./dist
-COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /tmp/server-dist ./dist
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/shared/prisma-client ./shared/prisma-client
 COPY --from=builder /app/prisma ./prisma
 COPY server/start-prod.sh ./start-prod.sh
-
-# Set proper permissions
-RUN chmod +x ./start-prod.sh && chown -R nextjs:nodejs /app
-USER nextjs
-
-EXPOSE 3000
-ENTRYPOINT ["./start-prod.sh"]
+RUN chmod +x ./start-prod.sh && chown -R app:app /app
+USER app
+EXPOSE 8080
 CMD ["./start-prod.sh"]

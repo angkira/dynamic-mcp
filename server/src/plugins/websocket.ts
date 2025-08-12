@@ -18,12 +18,6 @@ interface SendMessagePayload {
   isThinking?: boolean;
 }
 
-declare module 'fastify' {
-  interface FastifyInstance {
-    io: Server;
-  }
-}
-
 async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
   const messageHandler = new WebSocketMessageHandlerService(fastify);
 
@@ -56,7 +50,7 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket']
   })
 
   // Decorate instance

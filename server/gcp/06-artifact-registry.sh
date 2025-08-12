@@ -7,7 +7,7 @@ ensure_tools gcloud
 gcloud_configure_project
 
 REGION="${REGION:-us-central1}"
-AR_REPO="${AR_REPO:-chat-docker}"
+AR_REPO="${AR_REPO:-dynamic-mcp}"
 
 echo "📦 Ensuring Artifact Registry repo ${AR_REPO} in ${REGION}..."
 gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" >/dev/null 2>&1 || \

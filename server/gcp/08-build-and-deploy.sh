@@ -7,13 +7,14 @@ ensure_tools gcloud jq
 gcloud_configure_project
 
 REGION="${REGION:-us-central1}"
-AR_REPO="${AR_REPO:-chat-docker}"
-SERVICE_NAME="${SERVICE_NAME:-chat-backend}"
+AR_REPO="${AR_REPO:-dynamic-mcp}"
+SERVICE_NAME="${SERVICE_NAME:-dynamic-mcp-server}"
+SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
 
 echo "🏗️  Building container image with Cloud Build..."
 TAG=$(date -u +%Y%m%d-%H%M%S)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
-gcloud builds submit --config="$SCRIPT_DIR/../cloudbuild-server.yaml" --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+gcloud beta builds submit --config="$SCRIPT_DIR/../cloudbuild-server.yaml" --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
 
 echo "🚢 Deploying Cloud Run service ${SERVICE_NAME}..."
 # Read DB_CONN_NAME exported by 04-cloudsql.sh if available
@@ -27,24 +28,36 @@ DB_CONN_NAME="${DB_CONN_NAME:-}"
 DB_USER="${DB_USER:-appuser}"
 DB_NAME="${DB_NAME:-appdb}"
 
-SECRET_BINDINGS="JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,CHATGPT_API_KEY=CHATGPT_API_KEY:latest,MCP_API_KEY=MCP_API_KEY:latest,APP_DB_PASSWORD=APP_DB_PASSWORD:latest"
-# Include OAuth secrets if present
-SECRET_BINDINGS+="$(gcloud secrets describe GOOGLE_OAUTH_CLIENT_ID >/dev/null 2>&1 && echo ",GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest" || true)"
-SECRET_BINDINGS+="$(gcloud secrets describe GOOGLE_OAUTH_CLIENT_SECRET >/dev/null 2>&1 && echo ",GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest" || true)"
-SECRET_BINDINGS+="$(gcloud secrets describe GOOGLE_OAUTH_REDIRECT_URI >/dev/null 2>&1 && echo ",GOOGLE_OAUTH_REDIRECT_URI=GOOGLE_OAUTH_REDIRECT_URI:latest" || true)"
-SECRET_BINDINGS+="$(gcloud secrets describe GITHUB_OAUTH_CLIENT_ID >/dev/null 2>&1 && echo ",GITHUB_OAUTH_CLIENT_ID=GITHUB_OAUTH_CLIENT_ID:latest" || true)"
-SECRET_BINDINGS+="$(gcloud secrets describe GITHUB_OAUTH_CLIENT_SECRET >/dev/null 2>&1 && echo ",GITHUB_OAUTH_CLIENT_SECRET=GITHUB_OAUTH_CLIENT_SECRET:latest" || true)"
+SECRET_BINDINGS=""
+maybe_add_secret() {
+  local key="$1"
+  if gcloud secrets describe "$key" >/dev/null 2>&1; then
+    if [[ -n "$SECRET_BINDINGS" ]]; then SECRET_BINDINGS+=","; fi
+    SECRET_BINDINGS+="${key}=${key}:latest"
+  fi
+}
+
+for key in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY APP_DB_PASSWORD \
+           GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_OAUTH_REDIRECT_URI \
+           GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET; do
+  maybe_add_secret "$key"
+done
 
 RUN_ARGS=(
   --image "$IMAGE"
   --region "$REGION"
+  --port 8080
   --min-instances=1
   --timeout=3600
-  --concurrency=250
+  --concurrency=50
   --cpu=1
   --memory=2Gi
-  --set-secrets "$SECRET_BINDINGS"
+  --cpu-boost
 )
+
+if [[ -n "$SECRET_BINDINGS" ]]; then
+  RUN_ARGS+=(--set-secrets "$SECRET_BINDINGS")
+fi
 
 if [[ -z "$DB_CONN_NAME" && -n "${DB_INSTANCE_NAME:-}" ]]; then
   # Resolve connectionName from instance if not provided in .out.env
@@ -58,14 +71,24 @@ if [[ -n "$DB_CONN_NAME" ]]; then
 fi
 
 if [[ -n "${CONNECTOR_NAME:-}" ]]; then
-  RUN_ARGS+=(--vpc-connector "$CONNECTOR_NAME" --vpc-egress=private-ranges-only)
+  RUN_ARGS+=(--vpc-connector "$CONNECTOR_NAME" --vpc-egress=all-traffic)
 fi
 
-# Provide DB_USER/DB_NAME defaults so start script can construct DATABASE_URL when not supplied
+# Provide DB defaults; do NOT set PORT (reserved by Cloud Run). Use --port flag instead.
 if [[ -n "$SET_ENV_VARS" ]]; then
   SET_ENV_VARS+="," 
 fi
-SET_ENV_VARS+="DB_USER=$DB_USER,DB_NAME=$DB_NAME"
+SET_ENV_VARS+="DB_USER=$DB_USER,DB_NAME=$DB_NAME,NODE_ENV=production,NODE_OPTIONS=--max-old-space-size=1536"
+
+# Optional: attach dedicated service account if provided
+if [[ -n "$SERVICE_ACCOUNT_EMAIL" ]]; then
+  RUN_ARGS+=(--service-account "$SERVICE_ACCOUNT_EMAIL")
+fi
+
+# Optional: enable session affinity to help WebSocket reconnect stickiness (best-effort)
+if [[ "${SESSION_AFFINITY:-true}" == "true" ]]; then
+  RUN_ARGS+=(--session-affinity)
+fi
 
 # Apply all non-secret env vars in a single flag to satisfy gcloud constraints
 RUN_ARGS+=(--set-env-vars "$SET_ENV_VARS")

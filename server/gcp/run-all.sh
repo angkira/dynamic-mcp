@@ -23,5 +23,10 @@ if [[ "${WITH_LB:-false}" == "true" ]]; then
   bash "$SCRIPT_DIR/09-load-balancer.sh"
 fi
 
+if [[ "${WITH_REDIS:-false}" == "true" ]]; then
+  echo "\n==> Running optional 10-memorystore.sh"
+  bash "$SCRIPT_DIR/10-memorystore.sh"
+fi
+
 echo "\n✅ All steps completed"
 

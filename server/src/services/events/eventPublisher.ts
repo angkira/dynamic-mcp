@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify'
+import type { Server as SocketIOServer } from 'socket.io'
 import { ServerWebSocketEvent } from '@dynamic-mcp/shared'
 import { DomainEventScope, MCPDomainEventType, type NotificationEventPayload, type MCPDomainEventPayload } from '../../constants/notifications'
+
+declare module 'fastify' {
+  export interface FastifyInstance {
+    io: SocketIOServer
+  }
+}
 
 export class EventPublisher {
   private fastify: FastifyInstance
@@ -34,5 +41,3 @@ export class EventPublisher {
     }
   }
 }
-
-
