@@ -18,6 +18,10 @@ IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
 # Prefer a dedicated, pre-created staging bucket to avoid default bucket/org policy issues
 # IMPORTANT: we do not create the bucket in CI. We test object-level access instead of buckets.get
 STAGING_BUCKET="${STAGING_BUCKET:-gs://${PROJECT_ID}-build-staging}"
+# Normalize bucket value if user passed without gs://
+if [[ "$STAGING_BUCKET" != gs://* ]]; then
+  STAGING_BUCKET="gs://${STAGING_BUCKET}"
+fi
 TMP_OBJ="${STAGING_BUCKET}/_ci_perm_check_${TAG}.txt"
 if ! printf "ok" | gcloud storage cp - "$TMP_OBJ" >/dev/null 2>&1; then
   echo "❌ Cannot write to $STAGING_BUCKET. Ensure the bucket exists and grant objectAdmin to the deploy SA." >&2
