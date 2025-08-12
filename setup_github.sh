@@ -168,6 +168,7 @@ enable_api iamcredentials.googleapis.com
 enable_api run.googleapis.com
 enable_api artifactregistry.googleapis.com
 enable_api cloudbuild.googleapis.com
+enable_api secretmanager.googleapis.com
 
 # Helpers for provider lifecycle
 wait_for_provider_absence() {
@@ -306,11 +307,19 @@ else
   fi
 fi
 
-# Provider resource names
+# Provider resource names (compute deterministically; best-effort describe with retry, non-fatal)
 PROVIDER_RESOURCE_FULL="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
-PROVIDER_RESOURCE_API="$(gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
-  --project="${PROJECT_ID}" --location=global --workload-identity-pool="${POOL_ID}" \
-  --format='value(name)')"
+{
+  set +e
+  for i in {1..30}; do
+    PROVIDER_RESOURCE_API="$(gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
+      --project="${PROJECT_ID}" --location=global --workload-identity-pool="${POOL_ID}" \
+      --format='value(name)' 2>/dev/null)"
+    if [[ -n "${PROVIDER_RESOURCE_API}" ]]; then break; fi
+    sleep 2
+  done
+  set -e
+} || true
 
 # Create SA if missing
 DEPLOY_SA="${DEPLOY_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
