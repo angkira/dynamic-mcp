@@ -15,14 +15,14 @@ echo "🏗️  Building container image with Cloud Build..."
 TAG=$(date -u +%Y%m%d-%H%M%S)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
 
-# Prefer a dedicated staging bucket to avoid default bucket permission issues
+# Prefer a dedicated, pre-created staging bucket to avoid default bucket/org policy issues
+# IMPORTANT: Do NOT try to create the bucket here (CI may lack perms). Require it to exist.
 STAGING_BUCKET="${STAGING_BUCKET:-gs://${PROJECT_ID}-build-staging}"
 if ! gcloud storage buckets describe "$STAGING_BUCKET" --project="$PROJECT_ID" >/dev/null 2>&1; then
-  # Use the project's REGION if set; otherwise default to US multi-region for portability
-  STAGING_LOC="${REGION:-US}"
-  gcloud storage buckets create "$STAGING_BUCKET" \
-    --project="$PROJECT_ID" --location="$STAGING_LOC" --uniform-bucket-level-access
-fi
+  echo "❌ Staging bucket $STAGING_BUCKET does not exist or cannot be accessed. Pre-create it or pass STAGING_BUCKET env." >&2
+  echo "   Example: gcloud storage buckets create $STAGING_BUCKET --location=US --uniform-bucket-level-access" >&2
+  exit 1
+}
 
 gcloud builds submit --quiet \
   --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \

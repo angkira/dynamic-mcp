@@ -52,6 +52,7 @@ jobs:
           REGION: ${{ secrets.GCP_REGION }}
           AR_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
           SERVICE_NAME: ${{ secrets.GCP_RUN_SERVICE }}
+          STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
           CLIENT_URL: ${{ secrets.CLIENT_URL }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
           CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
