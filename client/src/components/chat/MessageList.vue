@@ -15,20 +15,13 @@
     </Transition>
 
     <!-- Messages -->
-    <div
-      v-if="
-        messages.allMessages.length ||
-        (messages.isStreaming && (messages.currentStreamingMessage?.chunkCount ?? 0) > 0)
-      "
-      class="messages-wrapper"
-    >
+    <div v-if="
+      messages.allMessages.length ||
+      (messages.isStreaming && (messages.currentStreamingMessage?.chunkCount ?? 0) > 0)
+    " class="messages-wrapper">
       <div class="messages-container">
-        <MessageItem
-          v-for="message in messages.allMessages"
-          :key="`message-${message.id}-${message.role}`"
-          :message="message"
-          :is-streaming="message.id === -1 && messages.isStreaming"
-        />
+        <MessageItem v-for="message in messages.allMessages" :key="`message-${message.id}-${message.role}`"
+          :message="message" :is-streaming="message.id === -1 && messages.isStreaming" />
       </div>
     </div>
 
@@ -195,6 +188,7 @@ onUnmounted(() => {
   scroll-behavior: smooth;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(to bottom right, var(--color-primary-light), var(--color-secondary-light));
 }
 
 .empty-chat {

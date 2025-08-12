@@ -236,7 +236,8 @@ function regenerateResponse() {
   }
 
   .message-text {
-    background-color: var(--color-primary-light);
+    text-align: justify;
+    background-color: var(--color-secondary-light);
     margin-left: auto;
     border-bottom-right-radius: var(--radius-sm);
   }

@@ -146,7 +146,7 @@ function handleLogout() {
   top: 0;
   height: 100%;
   z-index: var(--z-fixed);
-  background-color: var(--color-background);
+  background: linear-gradient(to bottom right, var(--color-secondary-light), #eeeeee);
   border-right: 1px solid var(--color-border);
   transition: all var(--transition-normal);
   display: flex;
