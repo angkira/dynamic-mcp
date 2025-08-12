@@ -335,6 +335,7 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/iam.serviceAccountUser" --quiet >/dev/null || true
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/artifactregistry.writer" --quiet >/dev/null || true
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/cloudbuild.builds.editor" --quiet >/dev/null || true
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/secretmanager.admin" --quiet >/dev/null || true
 
 echo
 echo "Created/updated Workload Identity Federation for GitHub Actions."
