@@ -14,7 +14,20 @@ SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
 echo "🏗️  Building container image with Cloud Build..."
 TAG=$(date -u +%Y%m%d-%H%M%S)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
-gcloud builds submit --quiet --config="$SCRIPT_DIR/../cloudbuild-server.yaml" --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+
+# Prefer a dedicated staging bucket to avoid default bucket permission issues
+STAGING_BUCKET="${STAGING_BUCKET:-gs://${PROJECT_ID}-build-staging}"
+if ! gcloud storage buckets describe "$STAGING_BUCKET" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  # Use the project's REGION if set; otherwise default to US multi-region for portability
+  STAGING_LOC="${REGION:-US}"
+  gcloud storage buckets create "$STAGING_BUCKET" \
+    --project="$PROJECT_ID" --location="$STAGING_LOC" --uniform-bucket-level-access
+fi
+
+gcloud builds submit --quiet \
+  --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \
+  --config="$SCRIPT_DIR/../cloudbuild-server.yaml" \
+  --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
 
 echo "🚢 Deploying Cloud Run service ${SERVICE_NAME}..."
 # Read DB_CONN_NAME exported by 04-cloudsql.sh if available
