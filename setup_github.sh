@@ -391,6 +391,24 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/serviceusage.serviceUsageConsumer" --quiet >/dev/null || true
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/storage.admin" --quiet >/dev/null || true
 
+# Ensure Cloud Build staging bucket exists and grant access
+CLOUDBUILD_BUCKET="gs://${PROJECT_ID}_cloudbuild"
+if ! gcloud storage buckets describe "${CLOUDBUILD_BUCKET}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  # Create in US multi-region to match Cloud Build defaults
+  gcloud storage buckets create "${CLOUDBUILD_BUCKET}" \
+    --project="${PROJECT_ID}" --location=US --uniform-bucket-level-access >/dev/null 2>&1 || true
+fi
+# Allow deploy SA to stage sources
+gcloud storage buckets add-iam-policy-binding "${CLOUDBUILD_BUCKET}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${DEPLOY_SA}" \
+  --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
+# Ensure Cloud Build default SA can access bucket if needed
+gcloud storage buckets add-iam-policy-binding "${CLOUDBUILD_BUCKET}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin" >/dev/null 2>&1 || true
+
 echo
 echo "Created/updated Workload Identity Federation for GitHub Actions."
 echo "Use these in .github/workflows:"
