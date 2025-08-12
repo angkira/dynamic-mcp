@@ -21,8 +21,8 @@ export class OAuthService {
 
     this.googleClient = new OAuth2Client(googleClientId, googleClientSecret, googleRedirectUri)
 
-    const githubClientId = process.env.GITHUB_OAUTH_CLIENT_ID
-    const githubClientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET
+    const githubClientId = process.env.GH_OAUTH_CLIENT_ID || process.env.GITHUB_OAUTH_CLIENT_ID
+    const githubClientSecret = process.env.GH_OAUTH_CLIENT_SECRET || process.env.GITHUB_OAUTH_CLIENT_SECRET
     if (!githubClientId || !githubClientSecret) {
       throw new Error('Missing GitHub OAuth configuration')
     }

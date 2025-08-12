@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$SERVER_DIR/.." && pwd)"
 
-# Load environment file
-# Priority: ENV_FILE env var -> repo root server.env -> server/.env
+# Load environment file and also import GitHub Actions env if present
+# Priority: ENV_FILE env var -> repo root server.env -> server/.env -> GitHub Actions env (for secrets available as env)
 ENV_FILE_DEFAULT="${REPO_ROOT}/server.env"
 ALT_ENV_FILE="${SERVER_DIR}/.env"
 ENV_FILE="${ENV_FILE:-$ENV_FILE_DEFAULT}"
@@ -34,6 +34,9 @@ elif [[ -f "$ALT_ENV_FILE" ]]; then
 else
   echo "ℹ️ No env file found. You can create ${REPO_ROOT}/server.env or set ENV_FILE to a custom path."
 fi
+
+# In GitHub Actions, required inputs often come via env. Nothing to do here except ensure they are exported already.
+:
 
 ensure_tools() {
   local missing=()

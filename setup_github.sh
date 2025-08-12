@@ -439,6 +439,18 @@ if [[ "${SET_GH_SECRETS}" == "true" ]]; then
     [[ -n "${REGION:-}" ]] && gh secret set GCP_REGION --repo "${REPO}" --app actions --body "${REGION}" >/dev/null || true
     [[ -n "${AR_REPO:-}" ]] && gh secret set GCP_ARTIFACT_REPO --repo "${REPO}" --app actions --body "${AR_REPO}" >/dev/null || true
     [[ -n "${SERVICE_NAME:-}" ]] && gh secret set GCP_RUN_SERVICE --repo "${REPO}" --app actions --body "${SERVICE_NAME}" >/dev/null || true
+    # App/runtime secrets (set only if non-empty in current env)
+    set_gh_secret_if() {
+      local name="$1"; local val="${!1-}"
+      if [[ -n "$val" ]]; then gh secret set "$name" --repo "${REPO}" --app actions --body "$val" >/dev/null; fi
+    }
+    for s in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY \
+             GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_OAUTH_REDIRECT_URI \
+             GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET \
+             APP_DB_PASSWORD DB_PASS DB_USER DB_NAME DATABASE_URL \
+             CLIENT_URL CORS_ORIGINS CORS_ORIGIN; do
+      set_gh_secret_if "$s"
+    done
     echo "GitHub secrets set."
   else
     echo "gh CLI not found; skipping secret creation."
