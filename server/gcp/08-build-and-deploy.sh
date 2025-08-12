@@ -23,18 +23,36 @@ if [[ "$STAGING_BUCKET" != gs://* ]]; then
   STAGING_BUCKET="gs://${STAGING_BUCKET}"
 fi
 TMP_OBJ="${STAGING_BUCKET}/_ci_perm_check_${TAG}.txt"
+ALLOW_DEFAULT_STAGING_FALLBACK="${ALLOW_DEFAULT_STAGING_FALLBACK:-false}"
+USE_CUSTOM_STAGING=true
 if ! printf "ok" | gcloud storage cp - "$TMP_OBJ" >/dev/null 2>&1; then
-  echo "❌ Cannot write to $STAGING_BUCKET. Ensure the bucket exists and grant objectAdmin to the deploy SA." >&2
+  ACTIVE_IDENTITY=$(gcloud config get-value account 2>/dev/null || true)
+  echo "❌ Cannot write to $STAGING_BUCKET as $ACTIVE_IDENTITY" >&2
+  echo "   Ensure the bucket exists and that this identity has at least object write on the bucket." >&2
+  echo "   Tip: grant roles/storage.objectAdmin on the bucket to both the deploy SA and Cloud Build SA." >&2
   echo "   Bucket suggestion: gs://${PROJECT_ID}-build-staging (pre-create and set repo secret STAGING_BUCKET)." >&2
-  exit 1
+  if [[ "$ALLOW_DEFAULT_STAGING_FALLBACK" == "true" ]]; then
+    echo "⚠️  Falling back to Cloud Build default staging bucket (requested by ALLOW_DEFAULT_STAGING_FALLBACK=true)." >&2
+    USE_CUSTOM_STAGING=false
+  else
+    exit 1
+  fi
+else
+  # best-effort cleanup
+  gcloud storage rm "$TMP_OBJ" >/dev/null 2>&1 || true
 fi
-# best-effort cleanup
-gcloud storage rm "$TMP_OBJ" >/dev/null 2>&1 || true
 
-gcloud builds submit --quiet \
-  --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \
-  --config="$SCRIPT_DIR/../cloudbuild-server.yaml" \
-  --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+if [[ "$USE_CUSTOM_STAGING" == "true" ]]; then
+  gcloud builds submit --quiet \
+    --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \
+    --config="$SCRIPT_DIR/../cloudbuild-server.yaml" \
+    --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+else
+  # Let Cloud Build select/create its default staging bucket
+  gcloud builds submit --quiet \
+    --config="$SCRIPT_DIR/../cloudbuild-server.yaml" \
+    --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+fi
 
 echo "🚢 Deploying Cloud Run service ${SERVICE_NAME}..."
 # Read DB_CONN_NAME exported by 04-cloudsql.sh if available

@@ -10,6 +10,7 @@ steps=(
   05-secrets.sh
   06-artifact-registry.sh
   07-iam.sh
+  00-staging-bucket.sh
   08-build-and-deploy.sh
 )
 

@@ -24,6 +24,15 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Ensure staging bucket and grant access
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
+          # The setup script detects the deploy SA from SERVICE_ACCOUNT_EMAIL or defaults to deploy-sa@proj
+          SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_DEPLOY_SA }}
+        run: bash server/gcp/00-staging-bucket.sh
+
       - name: Provision secrets in Secret Manager
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -53,6 +62,8 @@ jobs:
           AR_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
           SERVICE_NAME: ${{ secrets.GCP_RUN_SERVICE }}
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
+          # Optional: permit fallback to Cloud Build default if bucket perms are not yet consistent
+          ALLOW_DEFAULT_STAGING_FALLBACK: ${{ vars.ALLOW_DEFAULT_STAGING_FALLBACK || 'false' }}
           CLIENT_URL: ${{ secrets.CLIENT_URL }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
           CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
