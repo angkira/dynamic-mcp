@@ -78,6 +78,24 @@
   }
 }
 
+// Ghost button (subtle icon/text button without background)
+@mixin button-ghost {
+  @include button-base;
+  background-color: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid transparent;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-surface);
+    color: var(--color-text-secondary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border);
+    outline-offset: 0;
+  }
+}
+
 // Input mixins
 @mixin input-base {
   width: 100%;
