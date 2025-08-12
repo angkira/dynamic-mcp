@@ -48,7 +48,10 @@ export class OAuthService {
     if (!code) throw new Error('Missing Google authorization code')
     const { tokens } = await this.googleClient.getToken(code)
     if (!tokens.id_token) throw new Error('Missing Google id_token')
-    const ticket = await this.googleClient.verifyIdToken({ idToken: tokens.id_token })
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
+    })
     const payload = (ticket.getPayload() || {}) as { email?: string; name?: string; sub?: string }
     const email = payload.email
     if (!email) throw new Error('Google token missing email')

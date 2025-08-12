@@ -16,7 +16,11 @@ export class JWTService {
   private prisma: PrismaClient;
 
   constructor(secret?: string, expiresIn: string = '30d') {
-    this.secret = secret || process.env.JWT_SECRET || 'demo-secret-key-for-mvp';
+    this.secret =
+      secret ||
+      process.env.JWT_SECRET ||
+      process.env.JWT_SIGNING_KEY ||
+      'demo-secret-key-for-mvp';
     this.expiresIn = expiresIn;
     this.prisma = new PrismaClient();
   }

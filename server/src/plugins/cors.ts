@@ -4,22 +4,37 @@ import type { FastifyPluginAsync } from 'fastify'
 
 const corsPlugin: FastifyPluginAsync = async (fastify) => {
   // Get allowed origins from environment variables
-  const envOrigins = process.env.CORS_ORIGINS || '';
-  const additionalOrigins: string[] = envOrigins
-    .split(',')
+  const envOriginsMulti = process.env.CORS_ORIGINS || '';
+  const envOriginSingle = process.env.CORS_ORIGIN || '';
+  const clientUrl = process.env.CLIENT_URL || '';
+
+  const additionalOrigins: string[] = [envOriginsMulti, envOriginSingle, clientUrl]
+    .flatMap(v => v.split(','))
     .map(origin => origin.trim())
     .filter(origin => origin.length > 0);
 
   // Default allowed origins for development and local production
   const defaultOrigins: string[] = [
-    'http://localhost:5173',  // Development Vite server
-    'http://localhost:3000',  // Server
-    'http://localhost:80',    // Production client (nginx)
-    'http://localhost',       // Production client (nginx) without port
+    // Development Vite server
+    'http://localhost:5173',
+    'https://localhost:5173',
+    // Local server
+    'http://localhost:3000',
+    'https://localhost:3000',
+    // Production client (nginx / CF worker)
+    'http://localhost:80',
+    'https://localhost:443',
+    'http://localhost',
+    'https://localhost',
+    // Loopback fallbacks
     'http://127.0.0.1:5173',
+    'https://127.0.0.1:5173',
     'http://127.0.0.1:3000',
+    'https://127.0.0.1:3000',
     'http://127.0.0.1:80',
-    'http://127.0.0.1'
+    'https://127.0.0.1:443',
+    'http://127.0.0.1',
+    'https://127.0.0.1'
   ];
 
   // Combine default and additional origins

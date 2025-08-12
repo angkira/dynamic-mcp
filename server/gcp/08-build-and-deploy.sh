@@ -80,6 +80,17 @@ if [[ -n "$SET_ENV_VARS" ]]; then
 fi
 SET_ENV_VARS+="DB_USER=$DB_USER,DB_NAME=$DB_NAME,NODE_ENV=production,NODE_OPTIONS=--max-old-space-size=1536"
 
+# Optionally propagate client origin settings for CORS and OAuth redirects
+if [[ -n "${CLIENT_URL:-}" ]]; then
+  SET_ENV_VARS+=",CLIENT_URL=$CLIENT_URL"
+fi
+if [[ -n "${CORS_ORIGINS:-}" ]]; then
+  SET_ENV_VARS+=",CORS_ORIGINS=$CORS_ORIGINS"
+fi
+if [[ -n "${CORS_ORIGIN:-}" ]]; then
+  SET_ENV_VARS+=",CORS_ORIGIN=$CORS_ORIGIN"
+fi
+
 # Optional: attach dedicated service account if provided
 if [[ -n "$SERVICE_ACCOUNT_EMAIL" ]]; then
   RUN_ARGS+=(--service-account "$SERVICE_ACCOUNT_EMAIL")
