@@ -19,6 +19,8 @@
     "cypress.config.*",
     "nightwatch.conf.*",
     "playwright.config.*",
-    "eslint.config.*"
+    "eslint.config.*",
+    "../shared/types/**/*",
+    "../shared/constants/**/*"
   ]
 }

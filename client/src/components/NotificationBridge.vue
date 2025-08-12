@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useNotification } from 'naive-ui'
 import { useNotifyStore } from '@/stores/notify'
+import { NotificationLevel } from '@dynamic-mcp/shared'
 
 const notification = useNotification()
 const notify = useNotifyStore()
@@ -11,11 +12,19 @@ onMounted(() => {
     let item = notify.take()
     while (item) {
       const { kind, title, content, duration } = item
-      const isError = kind === 'error' || kind === 'Error'
-      const isWarn = kind === 'warning' || kind === 'Warning'
+      const isError = kind === NotificationLevel.Error
       const dur = duration ?? (isError ? 5000 : 3000)
-      const method = (String(kind).toLowerCase() as any)
-      notification[method]({ title, content, duration: dur, keepAliveOnHover: true })
+
+      if (kind === NotificationLevel.Error) {
+        notification.error({ title, content, duration: dur, keepAliveOnHover: true })
+      } else if (kind === NotificationLevel.Warning) {
+        notification.warning({ title, content, duration: dur, keepAliveOnHover: true })
+      } else if (kind === NotificationLevel.Success) {
+        notification.success({ title, content, duration: dur, keepAliveOnHover: true })
+      } else {
+        notification.info({ title, content, duration: dur, keepAliveOnHover: true })
+      }
+
       item = notify.take()
     }
     requestAnimationFrame(pump)

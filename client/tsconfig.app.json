@@ -1,6 +1,7 @@
 {
   "extends": "../packages/typescript-config/vite.json",
   "compilerOptions": {
+    "allowJs": false,
     "paths": {
       "@/*": ["./src/*"],
       "@dynamic-mcp/shared": ["../shared"],
@@ -11,6 +12,12 @@
     "env.d.ts",
     "src/**/*",
     "src/**/*.vue",
-    "../shared/**/*"
+    "../shared/types/**/*",
+    "../shared/constants/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../shared/prisma-client/runtime/**"
   ]
 }
