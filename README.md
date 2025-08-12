@@ -407,14 +407,21 @@ npm run build:server
 | `VITE_SOCKET_URL` | Socket URL (falls back to API URL) | `http://localhost:3000` |
 
 ## 🚀 Production Deployment
+There are two supported ways to run in production:
 
-```bash
-# Build and start production containers
-docker-compose -f docker-compose.prod.yml up -d
+- Local docker-compose (single host)
+  ```bash
+  docker-compose -f docker-compose.prod.yml up -d
+  ```
 
-# Scale MCP daemons if needed
-docker-compose -f docker-compose.prod.yml up -d --scale mcp-memory=2
-```
+- Cloud Run (recommended)
+  - Single-stage image (`server/Dockerfile.gcp`) builds shared + server and runs from `/app/dist`
+  - Build + deploy with:
+    ```bash
+    PROJECT_ID=... REGION=europe-west3 SERVICE_NAME=dynamic-mcp-server \
+    bash server/gcp/08-build-and-deploy.sh
+    ```
+  - Optional HTTPS LB + custom domain: see `server/gcp/README.md`
 
 ## 🛠️ MCP Server Types
 
@@ -538,3 +545,28 @@ SELECT name, status, "transportType", "transportBaseUrl" FROM "MCPServer";
 - Confirm JWT token is valid for WebSocket connections
 
 For more help, check the logs or open an issue in the repository.
+
+---
+
+## ⚙️ CI/CD (GitHub → Cloud Run)
+
+- Workflow: `.github/workflows/deploy-gcp.yml`
+- Auth: Google Workload Identity Federation (WIF)
+  - GitHub secret `GCP_WIF_PROVIDER` must be set to the provider resource, e.g.:
+    `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-actions`
+  - GitHub secret `GCP_DEPLOY_SA` is the deploy service account email that has `roles/run.admin`, `roles/cloudbuild.builds.editor`, `roles/artifactregistry.writer`, `roles/secretmanager.secretAccessor` (and `roles/cloudsql.client` if needed)
+- Required repo secrets: `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPO`, `GCP_RUN_SERVICE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`
+
+## 🌐 Cloudflare Worker proxy (client)
+
+- Worker proxies `/api` and `/socket.io` to `env.BACKEND_URL` (see `client/src/worker.ts`)
+- Set Worker secret `BACKEND_URL` to your origin:
+  - Temporary: Cloud Run URL (e.g., `https://...run.app`)
+  - Final: your LB domain (e.g., `https://api.mcp-test.dev`) once the GCP managed cert is ACTIVE
+- Client build should use `VITE_API_URL=/api` so the browser talks only to the Worker
+
+## 🧠 Memory storage
+
+- Memory MCP server now uses Redis (with password auth) via envs: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+- Docker compose includes a Redis service in both dev and prod files
+
