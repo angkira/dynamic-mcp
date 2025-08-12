@@ -16,13 +16,16 @@ TAG=$(date -u +%Y%m%d-%H%M%S)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
 
 # Prefer a dedicated, pre-created staging bucket to avoid default bucket/org policy issues
-# IMPORTANT: Do NOT try to create the bucket here (CI may lack perms). Require it to exist.
+# IMPORTANT: we do not create the bucket in CI. We test object-level access instead of buckets.get
 STAGING_BUCKET="${STAGING_BUCKET:-gs://${PROJECT_ID}-build-staging}"
-if ! gcloud storage buckets describe "$STAGING_BUCKET" --project="$PROJECT_ID" >/dev/null 2>&1; then
-  echo "❌ Staging bucket $STAGING_BUCKET does not exist or cannot be accessed. Pre-create it or pass STAGING_BUCKET env." >&2
-  echo "   Example: gcloud storage buckets create $STAGING_BUCKET --location=US --uniform-bucket-level-access" >&2
+TMP_OBJ="${STAGING_BUCKET}/_ci_perm_check_${TAG}.txt"
+if ! printf "ok" | gcloud storage cp - "$TMP_OBJ" >/dev/null 2>&1; then
+  echo "❌ Cannot write to $STAGING_BUCKET. Ensure the bucket exists and grant objectAdmin to the deploy SA." >&2
+  echo "   Bucket suggestion: gs://${PROJECT_ID}-build-staging (pre-create and set repo secret STAGING_BUCKET)." >&2
   exit 1
 fi
+# best-effort cleanup
+gcloud storage rm "$TMP_OBJ" >/dev/null 2>&1 || true
 
 gcloud builds submit --quiet \
   --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \
@@ -52,6 +55,7 @@ maybe_add_secret() {
 
 for key in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY APP_DB_PASSWORD \
            GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GOOGLE_OAUTH_REDIRECT_URI \
+           GH_OAUTH_CLIENT_ID GH_OAUTH_CLIENT_SECRET \
            GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET; do
   maybe_add_secret "$key"
 done
