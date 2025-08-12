@@ -24,6 +24,12 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Who am I (gcloud)
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          gcloud config get-value account
+          gcloud config list --format 'value(core.project)'
+
       - name: Ensure staging bucket and grant access
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -31,6 +37,8 @@ jobs:
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
           # The setup script detects the deploy SA from SERVICE_ACCOUNT_EMAIL or defaults to deploy-sa@proj
           SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_DEPLOY_SA }}
+          # Do not attempt creation in CI unless explicitly allowed
+          ALLOW_BUCKET_CREATE: ${{ vars.ALLOW_BUCKET_CREATE || 'false' }}
         run: bash server/gcp/00-staging-bucket.sh
 
       - name: Provision secrets in Secret Manager

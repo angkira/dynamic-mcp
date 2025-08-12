@@ -10,6 +10,7 @@ REGION="${REGION:-us-central1}"
 # Default to a stable, project-scoped bucket so org policies can be satisfied explicitly
 STAGING_BUCKET="${STAGING_BUCKET:-gs://${PROJECT_ID}-build-staging}"
 BUCKET_LOCATION="${BUCKET_LOCATION:-US}"
+ALLOW_BUCKET_CREATE="${ALLOW_BUCKET_CREATE:-false}"
 
 # Normalize bucket value if user passed without gs://
 if [[ "$STAGING_BUCKET" != gs://* ]]; then
@@ -18,14 +19,20 @@ fi
 
 BUCKET_NAME="${STAGING_BUCKET#gs://}"
 
-echo "🪣 Ensuring staging bucket ${STAGING_BUCKET} in ${BUCKET_LOCATION}..."
+ACTIVE_IDENTITY="$(gcloud config get-value account 2>/dev/null || true)"
+echo "🪣 Staging bucket target: ${STAGING_BUCKET} (acting as: ${ACTIVE_IDENTITY})"
 if ! gcloud storage buckets describe "$STAGING_BUCKET" --project "$PROJECT_ID" >/dev/null 2>&1; then
-  gcloud storage buckets create "$STAGING_BUCKET" \
-    --project "$PROJECT_ID" \
-    --location "$BUCKET_LOCATION"
-  # Add helpful labels for traceability
-  gcloud storage buckets update "$STAGING_BUCKET" \
-    --update-labels "purpose=cloud-build-staging,owner=github-actions" >/dev/null 2>&1 || true
+  if [[ "$ALLOW_BUCKET_CREATE" == "true" ]]; then
+    echo "➕ Creating ${STAGING_BUCKET} in ${BUCKET_LOCATION}..."
+    gcloud storage buckets create "$STAGING_BUCKET" \
+      --project "$PROJECT_ID" \
+      --location "$BUCKET_LOCATION"
+    # Add helpful labels for traceability
+    gcloud storage buckets update "$STAGING_BUCKET" \
+      --update-labels "purpose=cloud-build-staging,owner=github-actions" >/dev/null 2>&1 || true
+  else
+    echo "ℹ️  Bucket describe failed or insufficient perms. Skipping creation (set ALLOW_BUCKET_CREATE=true to create)." >&2
+  fi
 fi
 
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
