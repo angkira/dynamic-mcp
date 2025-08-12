@@ -56,6 +56,25 @@ for key in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY APP_DB_PAS
   maybe_add_secret "$key"
 done
 
+# If DATABASE_URL secret exists, bind it; else compose from DB envs + APP_DB_PASSWORD
+if gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
+  maybe_add_secret DATABASE_URL
+else
+  DB_PASSWORD=""
+  if gcloud secrets describe APP_DB_PASSWORD >/dev/null 2>&1; then
+    DB_PASSWORD=$(gcloud secrets versions access latest --secret=APP_DB_PASSWORD 2>/dev/null || true)
+  fi
+  if [[ -n "$DB_PASSWORD" ]]; then
+    DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
+    if [[ -n "$DB_CONN_NAME" ]]; then
+      DB_URL+="?host=/cloudsql/${DB_CONN_NAME}"
+    fi
+    gcloud secrets create DATABASE_URL --replication-policy=automatic >/dev/null 2>&1 || true
+    printf "%s" "$DB_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
+    maybe_add_secret DATABASE_URL
+  fi
+fi
+
 RUN_ARGS=(
   --image "$IMAGE"
   --region "$REGION"

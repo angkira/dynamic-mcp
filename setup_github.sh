@@ -49,6 +49,8 @@ EOF
 POOL_ID_DEFAULT="github-pool"
 PROVIDER_ID_DEFAULT="github-provider"
 DEPLOY_SA_NAME_DEFAULT="deploy-sa"
+DEPLOY_SA_DISPLAY_NAME_DEFAULT="GitHub Deploy SA"
+DEPLOY_SA_DESCRIPTION_DEFAULT="GitHub Actions deploy service account for Cloud Run, Cloud Build, Artifact Registry, and Secret Manager"
 
 # Load env from server/server.env if present, else from ./server.env (unless --env-file is passed)
 ENV_FILE="${ENV_FILE:-}"
@@ -69,6 +71,8 @@ PROJECT_ID="${PROJECT_ID:-}"
 POOL_ID="${POOL_ID:-${POOL_ID_DEFAULT}}"
 PROVIDER_ID="${PROVIDER_ID:-${PROVIDER_ID_DEFAULT}}"
 DEPLOY_SA_NAME="${DEPLOY_SA_NAME:-${DEPLOY_SA_NAME_DEFAULT}}"
+DEPLOY_SA_DISPLAY_NAME="${DEPLOY_SA_DISPLAY_NAME:-${DEPLOY_SA_DISPLAY_NAME_DEFAULT}}"
+DEPLOY_SA_DESCRIPTION="${DEPLOY_SA_DESCRIPTION:-${DEPLOY_SA_DESCRIPTION_DEFAULT}}"
 REPO="${REPO:-}"
 SET_GH_SECRETS=false
 SET_CONDITION=true
@@ -252,7 +256,8 @@ try_update_provider() {
 if ! gcloud iam workload-identity-pools describe "${POOL_ID}" --project="${PROJECT_ID}" --location=global >/dev/null 2>&1; then
   gcloud iam workload-identity-pools create "${POOL_ID}" \
     --project="${PROJECT_ID}" --location=global \
-    --display-name="GitHub Actions"
+    --display-name="GitHub Actions" \
+    --description="Workload Identity Pool for GitHub Actions OIDC"
 fi
 
 # No pre-checks: handle both create/update paths deterministically
@@ -368,8 +373,16 @@ PROVIDER_RESOURCE_FULL="projects/${PROJECT_NUMBER}/locations/global/workloadIden
 DEPLOY_SA="${DEPLOY_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "${DEPLOY_SA}" >/dev/null 2>&1; then
   gcloud iam service-accounts create "${DEPLOY_SA_NAME}" \
-    --project="${PROJECT_ID}" --display-name="GitHub Deploy SA" >/dev/null
+    --project="${PROJECT_ID}" \
+    --display-name="${DEPLOY_SA_DISPLAY_NAME}" \
+    --description="${DEPLOY_SA_DESCRIPTION}" >/dev/null
 fi
+
+# Ensure SA display-name/description are set (idempotent)
+gcloud iam service-accounts update "${DEPLOY_SA}" \
+  --project="${PROJECT_ID}" \
+  --display-name="${DEPLOY_SA_DISPLAY_NAME}" \
+  --description="${DEPLOY_SA_DESCRIPTION}" >/dev/null 2>&1 || true
 
 # Rebind principalSet for this repo
 PRINCIPAL_SET_MEMBER="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPO}"
