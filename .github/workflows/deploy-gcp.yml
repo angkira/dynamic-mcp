@@ -24,10 +24,28 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Provision secrets in Secret Manager
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
+          GITHUB_OAUTH_CLIENT_ID: ${{ secrets.GITHUB_OAUTH_CLIENT_ID }}
+          GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.GITHUB_OAUTH_CLIENT_SECRET }}
+          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CHATGPT_API_KEY: ${{ secrets.CHATGPT_API_KEY }}
+          MCP_API_KEY: ${{ secrets.MCP_API_KEY }}
+        run: bash server/gcp/05-secrets.sh
+
       - name: Build + Deploy via script
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_REGION }}
           AR_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
           SERVICE_NAME: ${{ secrets.GCP_RUN_SERVICE }}
+          CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
         run: bash server/gcp/08-build-and-deploy.sh
