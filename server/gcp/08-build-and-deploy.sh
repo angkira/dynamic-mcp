@@ -22,7 +22,7 @@ if ! gcloud storage buckets describe "$STAGING_BUCKET" --project="$PROJECT_ID" >
   echo "❌ Staging bucket $STAGING_BUCKET does not exist or cannot be accessed. Pre-create it or pass STAGING_BUCKET env." >&2
   echo "   Example: gcloud storage buckets create $STAGING_BUCKET --location=US --uniform-bucket-level-access" >&2
   exit 1
-}
+fi
 
 gcloud builds submit --quiet \
   --gcs-source-staging-dir="${STAGING_BUCKET}/sources" \
