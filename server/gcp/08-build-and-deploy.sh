@@ -14,7 +14,7 @@ SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-}"
 echo "🏗️  Building container image with Cloud Build..."
 TAG=$(date -u +%Y%m%d-%H%M%S)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/$SERVICE_NAME:$TAG"
-gcloud beta builds submit --config="$SCRIPT_DIR/../cloudbuild-server.yaml" --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
+gcloud builds submit --quiet --config="$SCRIPT_DIR/../cloudbuild-server.yaml" --substitutions=_IMAGE="$IMAGE" "$REPO_ROOT"
 
 echo "🚢 Deploying Cloud Run service ${SERVICE_NAME}..."
 # Read DB_CONN_NAME exported by 04-cloudsql.sh if available
