@@ -169,8 +169,24 @@ enable_api run.googleapis.com
 enable_api artifactregistry.googleapis.com
 enable_api cloudbuild.googleapis.com
 enable_api secretmanager.googleapis.com
+enable_api storage.googleapis.com
+enable_api serviceusage.googleapis.com
+
+# Ensure caller has required admin/view roles to manage and read WIF resources
+CURRENT_ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
+if [[ -n "${CURRENT_ACCOUNT}" ]]; then
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="user:${CURRENT_ACCOUNT}" --role="roles/iam.workloadIdentityPoolAdmin" --quiet >/dev/null 2>&1 || true
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="user:${CURRENT_ACCOUNT}" --role="roles/iam.workloadIdentityPoolViewer" --quiet >/dev/null 2>&1 || true
+fi
 
 # Helpers for provider lifecycle
+provider_exists() {
+  gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
+    --project="${PROJECT_ID}" --location=global --workload-identity-pool="${POOL_ID}" \
+    >/dev/null 2>&1
+}
 wait_for_provider_absence() {
   local max_attempts=${WIF_DELETE_MAX_ATTEMPTS:-60}
   local sleep_secs=${WIF_DELETE_SLEEP_SECS:-5}
@@ -198,7 +214,7 @@ try_create_provider() {
     --display-name="GitHub OIDC" \
     --issuer-uri="https://token.actions.githubusercontent.com" \
     --attribute-mapping="${ATTRIBUTE_MAPPING}" \
-    ${CREATE_CONDITION_FLAG:-} 2>&1 >/dev/null)
+    ${CREATE_CONDITION_FLAG:-} 2>&1)
   local status=$?
   set -e
   if [[ $status -eq 0 ]]; then
@@ -219,7 +235,7 @@ try_update_provider() {
     --project="${PROJECT_ID}" --location=global --workload-identity-pool="${POOL_ID}" \
     --display-name="GitHub OIDC" \
     --attribute-mapping="${ATTRIBUTE_MAPPING}" \
-    ${CREATE_CONDITION_FLAG:-} 2>&1 >/dev/null)
+    ${CREATE_CONDITION_FLAG:-} 2>&1)
   local status=$?
   set -e
   if [[ $status -eq 0 ]]; then
@@ -236,7 +252,7 @@ try_update_provider() {
 if ! gcloud iam workload-identity-pools describe "${POOL_ID}" --project="${PROJECT_ID}" --location=global >/dev/null 2>&1; then
   gcloud iam workload-identity-pools create "${POOL_ID}" \
     --project="${PROJECT_ID}" --location=global \
-    --display-name="GitHub Actions" >/dev/null
+    --display-name="GitHub Actions"
 fi
 
 # No pre-checks: handle both create/update paths deterministically
@@ -272,8 +288,8 @@ if [[ "${FORCE_RECREATE}" == "true" ]]; then
     exit 1
   fi
 else
-  # Idempotent: try create first, then update if it already exists; loop for races
-  attempts=20
+  # Idempotent: try create first, then update if it already exists; quick fallback to fresh if races
+  attempts=6
   attempt=1
   while (( attempt <= attempts )); do
     rc=0
@@ -290,7 +306,7 @@ else
         rc=$?
         if [[ $rc -eq 3 ]]; then
           # NOT_FOUND after ALREADY_EXISTS: race; retry
-          sleep $(( attempt < 5 ? 2 : 5 ))
+          sleep 2
         else
           exit 1
         fi
@@ -302,8 +318,35 @@ else
     ((attempt++))
   done
   if (( attempt > attempts )); then
-    echo "Failed to converge provider ${PROVIDER_ID} via create/update after retries" >&2
-    exit 1
+    echo "Failed to converge provider ${PROVIDER_ID} via create/update after retries; falling back to suffixed provider id." >&2
+    # Fallback: auto-suffix provider id to avoid soft-delete races
+    OLD_PROVIDER_ID="${PROVIDER_ID}"
+    SUFFIX_FALLBACK="$(date -u +%Y%m%d%H%M%S)"
+    PROVIDER_ID="$(sanitize_id "${OLD_PROVIDER_ID}-${SUFFIX_FALLBACK}" 32)"
+    echo "Using fallback provider id: ${PROVIDER_ID}" >&2
+    # Try create-only with extended retries
+    attempts_fb=60
+    attempt=1
+    while (( attempt <= attempts_fb )); do
+      rc=0
+      if try_create_provider; then
+        break
+      else
+        rc=$?
+      fi
+      if [[ $rc -eq 2 ]]; then
+        # Somehow exists; try update
+        if try_update_provider; then
+          break
+        fi
+      fi
+      sleep $(( attempt < 10 ? 2 : (attempt < 30 ? 5 : 10) ))
+      ((attempt++))
+    done
+    if (( attempt > attempts_fb )); then
+      echo "Failed to establish fallback provider ${PROVIDER_ID}" >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -345,6 +388,8 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/artifactregistry.writer" --quiet >/dev/null || true
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/cloudbuild.builds.editor" --quiet >/dev/null || true
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/secretmanager.admin" --quiet >/dev/null || true
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/serviceusage.serviceUsageConsumer" --quiet >/dev/null || true
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" --member="serviceAccount:${DEPLOY_SA}" --role="roles/storage.admin" --quiet >/dev/null || true
 
 echo
 echo "Created/updated Workload Identity Federation for GitHub Actions."
