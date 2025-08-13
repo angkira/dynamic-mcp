@@ -65,6 +65,6 @@
   },
   "_moduleAliases": {
     "@shared": "../shared/dist",
-    "@shared/prisma": "../shared/prisma-client"
+    "@shared/prisma": "../shared/prisma"
   }
 }

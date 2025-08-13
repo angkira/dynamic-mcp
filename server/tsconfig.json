@@ -11,15 +11,15 @@
     "composite": false,
     "baseUrl": ".",
     "paths": {
-      "@shared/prisma": ["../shared/prisma-client"],
-      "@shared/prisma/*": ["../shared/prisma-client/*"]
+      "@shared/prisma": ["../shared/prisma"],
+      "@shared/prisma/*": ["../shared/prisma/*"]
     }
   },
   "include": ["src"],
   "exclude": [
     "node_modules",
     "dist",
-    "../shared/prisma-client/**/*.js",
-    "../shared/prisma-client/runtime/**"
+    "../shared/prisma/**/*.js",
+    "../shared/prisma/runtime/**"
   ]
 }

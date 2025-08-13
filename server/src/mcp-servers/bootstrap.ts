@@ -8,7 +8,7 @@ var path: any = require('node:path');
 
 var repoRoot = path.join(process.cwd(), '..'); // /app/server -> /app
 moduleAlias.addAliases({
-  '@shared/prisma': path.join(repoRoot, 'shared', 'prisma-client'),
+  '@shared/prisma': path.join(repoRoot, 'shared', 'prisma'),
   '@shared': path.join(repoRoot, 'shared', 'dist')
 });
 

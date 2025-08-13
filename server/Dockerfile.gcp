@@ -30,7 +30,7 @@ COPY packages/ ./packages/
 COPY prisma/ ./prisma/
 # Build shared first so server can import types. Also ensure server's TS type shim is included.
 RUN npm -w @dynamic-mcp/shared run build --ignore-scripts \
-  && npx prisma generate --schema=shared/prisma-client/schema.prisma \
+  && npx prisma generate --schema=shared/prisma/schema.prisma \
   && cd server \
   && mkdir -p src/types \
   && if [ -f src/types/@shared-prisma.d.ts ]; then echo "type shim present"; else echo "// added at build time" > src/types/@shared-prisma.d.ts; fi \

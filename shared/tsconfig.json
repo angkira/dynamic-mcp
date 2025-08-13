@@ -7,8 +7,8 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@shared-prisma": ["./prisma-client"],
-      "@shared-prisma/*": ["./prisma-client/*"]
+      "@shared-prisma": ["./prisma"],
+      "@shared-prisma/*": ["./prisma/*"]
     }
   },
   "include": ["types/**/*", "constants/**/*", "esm/**/*", "index.ts"],

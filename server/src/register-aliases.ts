@@ -10,8 +10,17 @@ const path = require('node:path')
 const repoRoot = path.join(__dirname, '..') // => /app
 
 moduleAlias.addAliases({
-  '@shared/prisma': path.join(repoRoot, 'shared', 'prisma-client'),
+  '@shared/prisma': path.join(repoRoot, 'shared', 'prisma'),
   '@shared': path.join(repoRoot, 'shared', 'dist')
 })
+// Ensure Prisma client exists; fail fast with clear error if missing
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require(path.join(repoRoot, 'shared', 'prisma', 'index.js'))
+} catch (e) {
+  // eslint-disable-next-line no-console
+  console.error('Prisma client not found at shared/prisma. Ensure `npx prisma generate --schema shared/prisma/schema.prisma` ran during the image build.');
+  process.exit(1);
+}
 
 

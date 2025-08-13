@@ -36,7 +36,7 @@ RUN npm prune --omit=dev && npm cache clean --force
 
 COPY --from=builder /tmp/server-dist ./dist
 COPY --from=builder /app/shared/dist ./shared/dist
-COPY --from=builder /app/shared/prisma-client ./shared/prisma-client
+COPY --from=builder /app/shared/prisma ./shared/prisma
 COPY --from=builder /app/prisma ./prisma
 COPY server/start-prod.sh ./start-prod.sh
 RUN chmod +x ./start-prod.sh && chown -R app:app /app
