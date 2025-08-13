@@ -200,7 +200,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
       return reply.redirect(redirectTo, 302);
     } catch (error) {
-      fastify.log.error('Google OAuth callback error:', error);
+      fastify.log.error({ err: error }, 'Google OAuth callback error');
       return reply.status(500).send({ message: 'Google OAuth failed' });
     }
   });
@@ -250,7 +250,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       const redirectTo = `${clientUrl}/login?token=${encodeURIComponent(token)}`;
       return reply.redirect(redirectTo, 302);
     } catch (error) {
-      fastify.log.error('GitHub OAuth callback error:', error);
+      fastify.log.error({ err: error }, 'GitHub OAuth callback error');
       return reply.status(500).send({ message: 'GitHub OAuth failed' });
     }
   });

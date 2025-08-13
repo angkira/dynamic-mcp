@@ -66,6 +66,11 @@ if [[ -f "$SCRIPT_DIR/.out.env" ]]; then
 fi
 DB_CONN_NAME="${DB_CONN_NAME:-}"
 
+# Try to resolve DB_CONN_NAME from instance if not provided in .out.env
+if [[ -z "$DB_CONN_NAME" && -n "${DB_INSTANCE_NAME:-}" ]]; then
+  DB_CONN_NAME=$(gcloud sql instances describe "$DB_INSTANCE_NAME" --format='value(connectionName)' || true)
+fi
+
 # Database-related envs for app startup (used to construct DATABASE_URL if not provided)
 DB_USER="${DB_USER:-appuser}"
 DB_NAME="${DB_NAME:-appdb}"
@@ -86,22 +91,36 @@ for key in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY APP_DB_PAS
   maybe_add_secret "$key"
 done
 
-# If DATABASE_URL secret exists, bind it; else compose from DB envs + APP_DB_PASSWORD
+# Handle DATABASE_URL secret robustly
 if gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
+  # Repair existing secret if it lacks Cloud SQL socket host and we know the connection name
+  if [[ -n "$DB_CONN_NAME" ]]; then
+    EXISTING_URL=$(gcloud secrets versions access latest --secret=DATABASE_URL 2>/dev/null || true)
+    if [[ -n "$EXISTING_URL" ]] && [[ "$EXISTING_URL" != *"host=/cloudsql/"* ]]; then
+      # Append host param, preserving existing query string
+      if [[ "$EXISTING_URL" == *"?"* ]]; then
+        REPAIRED_URL="${EXISTING_URL}&host=/cloudsql/${DB_CONN_NAME}"
+      else
+        REPAIRED_URL="${EXISTING_URL}?host=/cloudsql/${DB_CONN_NAME}"
+      fi
+      printf "%s" "$REPAIRED_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
+      echo "🔧 Updated DATABASE_URL secret to include Cloud SQL socket host"
+    fi
+  fi
   maybe_add_secret DATABASE_URL
 else
+  # Create DATABASE_URL only if we have both app password and Cloud SQL connection name
   DB_PASSWORD=""
   if gcloud secrets describe APP_DB_PASSWORD >/dev/null 2>&1; then
     DB_PASSWORD=$(gcloud secrets versions access latest --secret=APP_DB_PASSWORD 2>/dev/null || true)
   fi
-  if [[ -n "$DB_PASSWORD" ]]; then
-    DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
-    if [[ -n "$DB_CONN_NAME" ]]; then
-      DB_URL+="?host=/cloudsql/${DB_CONN_NAME}"
-    fi
+  if [[ -n "$DB_PASSWORD" && -n "$DB_CONN_NAME" ]]; then
+    DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}?host=/cloudsql/${DB_CONN_NAME}"
     gcloud secrets create DATABASE_URL --replication-policy=automatic >/dev/null 2>&1 || true
     printf "%s" "$DB_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
     maybe_add_secret DATABASE_URL
+  else
+    echo "ℹ️ Skipping creation of DATABASE_URL secret (missing APP_DB_PASSWORD or DB_CONN_NAME). Runtime will construct it."
   fi
 fi
 
@@ -121,10 +140,7 @@ if [[ -n "$SECRET_BINDINGS" ]]; then
   RUN_ARGS+=(--set-secrets "$SECRET_BINDINGS")
 fi
 
-if [[ -z "$DB_CONN_NAME" && -n "${DB_INSTANCE_NAME:-}" ]]; then
-  # Resolve connectionName from instance if not provided in .out.env
-  DB_CONN_NAME=$(gcloud sql instances describe "$DB_INSTANCE_NAME" --format='value(connectionName)' || true)
-fi
+# DB_CONN_NAME resolution already attempted above
 
 SET_ENV_VARS=""
 if [[ -n "$DB_CONN_NAME" ]]; then

@@ -15,17 +15,9 @@ for s in JWT_SIGNING_KEY GEMINI_API_KEY CHATGPT_API_KEY MCP_API_KEY \
   create_or_update_secret_from_env "$s"
 done
 
-# If DATABASE_URL not provided, compose it from DB envs + APP_DB_PASSWORD (if present)
+# Do not derive a localhost DATABASE_URL here; deploy step will construct a Cloud SQL socket URL.
 if ! gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
-  DB_PASSWORD="${APP_DB_PASSWORD:-${DB_PASS:-}}"
-  DB_USER_VAL="${DB_USER:-appuser}"
-  DB_NAME_VAL="${DB_NAME:-appdb}"
-  if [[ -n "$DB_PASSWORD" ]]; then
-    DB_URL="postgresql://${DB_USER_VAL}:${DB_PASSWORD}@localhost:5432/${DB_NAME_VAL}"
-    gcloud secrets create DATABASE_URL --replication-policy=automatic >/dev/null 2>&1 || true
-    printf "%s" "$DB_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
-    echo "🔐 Derived DATABASE_URL secret from DB_USER/APP_DB_PASSWORD/DB_NAME"
-  fi
+  echo "ℹ️ DATABASE_URL not provided; will be created during deploy with Cloud SQL settings"
 fi
 
 echo "✅ Secrets provisioned"
