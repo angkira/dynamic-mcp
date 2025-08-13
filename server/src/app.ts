@@ -127,6 +127,15 @@ export default (async function (fastify: FastifyInstance, opts: FastifyPluginOpt
   await fastify.register(mcpRoute, { prefix: '/api/mcp' });
 
   // Memory API removed in favor of Redis-backed MCP memory server
+  // Global error handler to avoid leaking internal error details
+  fastify.setErrorHandler((error, request, reply) => {
+    fastify.log.error({ err: error }, 'Unhandled error');
+    const status = (error as any)?.statusCode ?? 500;
+    // Preserve 401/400 semantics when explicitly thrown; otherwise generic 500
+    if (status === 401) return reply.status(401).send({ message: 'Unauthorized' });
+    if (status === 400) return reply.status(400).send({ message: 'Bad request' });
+    return reply.status(500).send({ message: 'Internal server error' });
+  });
 }) satisfies FastifyPluginAsync
 
 // Start the server if this file is run directly

@@ -33,7 +33,7 @@ export default async function authRoute(fastify: FastifyInstance) {
       return result;
     } catch (error: any) {
       fastify.log.warn('Signup error:', error?.message || error);
-      return reply.status(400).send({ message: error?.message || 'Failed to sign up' });
+      return reply.status(400).send({ message: 'Failed to sign up' });
     }
   });
 
@@ -89,10 +89,9 @@ export default async function authRoute(fastify: FastifyInstance) {
       const result = await fastify.authService.login(email, password);
       return result;
     } catch (error: any) {
-      const msg = error?.message || 'An error occurred during login'
-      const status = msg === 'Invalid credentials' ? 401 : 500
+      const isAuth = (error?.message === 'Invalid credentials')
       fastify.log.error('Login error:', error);
-      return reply.status(status).send({ message: msg });
+      return reply.status(isAuth ? 401 : 500).send({ message: isAuth ? 'Invalid credentials' : 'Login failed' });
     }
   });
 

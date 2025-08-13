@@ -70,6 +70,7 @@ jobs:
           AR_REPO: ${{ secrets.GCP_ARTIFACT_REPO }}
           SERVICE_NAME: ${{ secrets.GCP_RUN_SERVICE }}
           DB_INSTANCE_NAME: ${{ secrets.DB_INSTANCE_NAME }}
+          DB_CONN_NAME: ${{ secrets.DB_CONN_NAME }}
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
           # Optional: permit fallback to Cloud Build default if bucket perms are not yet consistent
           ALLOW_DEFAULT_STAGING_FALLBACK: ${{ vars.ALLOW_DEFAULT_STAGING_FALLBACK || 'false' }}
