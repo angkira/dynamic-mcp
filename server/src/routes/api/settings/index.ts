@@ -1,4 +1,4 @@
-import { Settings } from '@shared-prisma';
+import { Settings } from '@shared/prisma';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { SettingsService } from '../../../services/settingsService'
 

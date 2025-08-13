@@ -1,5 +1,5 @@
 import JWTService from './auth/jwtService';
-import { PrismaClient } from '@shared-prisma';
+import { PrismaClient } from '@shared/prisma';
 
 export class InitializationService {
   private jwtService: JWTService;

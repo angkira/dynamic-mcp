@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { PrismaClient } from '@shared-prisma';
+import { PrismaClient } from '@shared/prisma';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import * as jwt from 'jsonwebtoken';

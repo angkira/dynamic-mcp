@@ -5,7 +5,7 @@ import type { ConversationMessage } from '@dynamic-mcp/shared';
 import { LlmProvider, ServerWebSocketEvent, MessageRole } from '@dynamic-mcp/shared';
 import { MessagingService } from '../messaging';
 import { McpService } from '../mcp/mcpService';
-import type { Prisma } from '@shared-prisma';
+import type { Prisma } from '@shared/prisma';
 import { getMCPSystemInfo, isMCPAvailable } from '../../utils/mcpIntegration';
 
 export class WebSocketMessageHandlerService {

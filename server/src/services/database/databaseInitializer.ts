@@ -1,4 +1,4 @@
-import { PrismaClient } from '@shared-prisma'
+import { PrismaClient } from '@shared/prisma'
 import { promises as fs } from 'fs'
 import * as path from 'path'
 

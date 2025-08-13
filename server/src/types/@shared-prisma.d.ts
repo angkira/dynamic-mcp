@@ -1,6 +1,15 @@
 // Type shim to make TypeScript resolve the Prisma client from shared during build
-declare module '@shared-prisma' {
-  export * from '../../shared/prisma-client';
+// Path from server/src/types → repo root shared/prisma-client
+declare module '@shared/prisma' {
+  export {
+    PrismaClient,
+    Prisma,
+    Settings,
+    MCPServer,
+    MCPServerStatus,
+    MCPTransportType,
+    MCPAuthType
+  } from '../../../shared/prisma-client';
 }
 
 

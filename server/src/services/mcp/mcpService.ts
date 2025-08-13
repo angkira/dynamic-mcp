@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma, type MCPServer, type MCPServerStatus, type MCPTransportType, type MCPAuthType } from '@shared-prisma'
+import { PrismaClient, Prisma, type MCPServer, type MCPServerStatus, type MCPTransportType, type MCPAuthType } from '@shared/prisma'
 import type { FastifyInstance } from 'fastify'
 import McpConnectionManager from './mcpConnectionManager'
 import { EventPublisher } from '../events/eventPublisher'

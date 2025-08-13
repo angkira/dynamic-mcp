@@ -10,7 +10,7 @@ const path = require('node:path')
 const repoRoot = path.join(__dirname, '..') // => /app
 
 moduleAlias.addAliases({
-  '@shared-prisma': path.join(repoRoot, 'shared', 'prisma-client'),
+  '@shared/prisma': path.join(repoRoot, 'shared', 'prisma-client'),
   '@shared': path.join(repoRoot, 'shared', 'dist')
 })
 

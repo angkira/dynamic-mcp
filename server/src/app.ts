@@ -8,7 +8,7 @@ const moduleAlias = require('module-alias');
 const path = require('node:path');
 moduleAlias.addAliases({
   // At runtime __dirname === /app/dist → one level up is repo root (/app)
-  '@shared-prisma': path.join(__dirname, '..', 'shared', 'prisma-client'),
+  '@shared/prisma': path.join(__dirname, '..', 'shared', 'prisma-client'),
   '@shared': path.join(__dirname, '..', 'shared', 'dist')
 });
 

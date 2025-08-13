@@ -1,10 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { PrismaClient, type MCPServer, type MCPServerStatus } from '@shared-prisma'
+import { PrismaClient, type MCPServer, type MCPServerStatus } from '@shared/prisma'
 import type { FastifyInstance } from 'fastify'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import type { Prisma } from '@shared-prisma'
+import type { Prisma } from '@shared/prisma'
 import type {
   MCPCapabilities,
   MCPToolForLLM,

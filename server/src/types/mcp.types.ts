@@ -1,4 +1,4 @@
-import type { MCPServerStatus } from '@shared-prisma';
+import type { MCPServerStatus } from '@shared/prisma';
 
 export interface MCPToolForLLM {
   name: string;

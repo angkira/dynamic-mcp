@@ -1,4 +1,4 @@
-import type { PrismaClient, Settings as SettingsModel } from '@shared-prisma'
+import type { PrismaClient, Settings as SettingsModel } from '@shared/prisma'
 import { llmServiceFactories } from '../services/llm'
 import { LlmProvider } from '@dynamic-mcp/shared'
 

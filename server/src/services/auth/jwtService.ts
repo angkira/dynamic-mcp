@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@shared-prisma';
+import { PrismaClient } from '@shared/prisma';
 
 export interface JWTPayload {
   userId: number;

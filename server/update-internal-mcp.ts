@@ -7,7 +7,7 @@
  * with the latest capabilities including memory tools.
  */
 
-import { PrismaClient } from '@shared-prisma'
+import { PrismaClient } from '@shared/prisma'
 import InternalMCPConfigLoader from './src/services/mcp/internalMCPConfigLoader'
 
 async function updateInternalMCPServer() {
