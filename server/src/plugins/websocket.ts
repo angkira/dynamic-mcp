@@ -28,7 +28,8 @@ async function websocketPlugin(fastify: FastifyInstance): Promise<void> {
     "http://localhost:80",   // Production client (nginx) with port
     "http://localhost:5173", // Development fallback
     "http://127.0.0.1",      // Alternative localhost
-    "http://127.0.0.1:80"    // Alternative with port
+    "http://127.0.0.1:80",    // Alternative with port
+    "http://127.0.0.1:8080"    // Alternative with port
   ];
 
   // Parse additional origins from environment
