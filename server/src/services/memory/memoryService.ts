@@ -163,7 +163,7 @@ export class MemoryService {
         })
       ])
 
-      const uniqueKeys = [...new Set(
+      const uniqueKeys = [...new Set<string>(
         memories
           .map((m: { key: string | null }) => m.key)
           .filter((key: string | null): key is string => key !== null)
