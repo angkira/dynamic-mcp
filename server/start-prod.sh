@@ -7,6 +7,7 @@ echo "🚀 Starting production server..."
 CONN_NAME="${DB_CONN_NAME:-${INSTANCE_CONNECTION_NAME:-}}"
 if [ -z "${DATABASE_URL:-}" ]; then
   if [ -n "${DB_USER:-}" ] && [ -n "${APP_DB_PASSWORD:-}" ] && [ -n "${DB_NAME:-}" ] && [ -n "$CONN_NAME" ]; then
+    # Use Unix domain socket for Cloud SQL. Keep localhost in authority and supply socket via query param.
     export DATABASE_URL="postgresql://${DB_USER}:${APP_DB_PASSWORD}@localhost/${DB_NAME}?host=/cloudsql/${CONN_NAME}&connection_limit=5"
     echo "🔗 DATABASE_URL constructed for Cloud SQL Unix socket"
   else

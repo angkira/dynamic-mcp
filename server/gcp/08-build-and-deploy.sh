@@ -73,7 +73,7 @@ fi
 
 # Database-related envs for app startup (used to construct DATABASE_URL if not provided)
 DB_USER="${DB_USER:-appuser}"
-DB_NAME="${DB_NAME:-appdb}"
+DB_NAME="${DB_NAME:-dynamicmcp}"
 
 SECRET_BINDINGS=""
 maybe_add_secret() {
@@ -96,15 +96,20 @@ if gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
   # Repair existing secret if it lacks Cloud SQL socket host and we know the connection name
   if [[ -n "$DB_CONN_NAME" ]]; then
     EXISTING_URL=$(gcloud secrets versions access latest --secret=DATABASE_URL 2>/dev/null || true)
-    if [[ -n "$EXISTING_URL" ]] && [[ "$EXISTING_URL" != *"host=/cloudsql/"* ]]; then
-      # Append host param, preserving existing query string
-      if [[ "$EXISTING_URL" == *"?"* ]]; then
-        REPAIRED_URL="${EXISTING_URL}&host=/cloudsql/${DB_CONN_NAME}"
-      else
-        REPAIRED_URL="${EXISTING_URL}?host=/cloudsql/${DB_CONN_NAME}"
+    if [[ -n "$EXISTING_URL" ]]; then
+      # Ensure Cloud SQL socket host is present; keep localhost authority
+      NORMALIZED_URL="$EXISTING_URL"
+      if [[ "$NORMALIZED_URL" != *"host=/cloudsql/"* && -n "$DB_CONN_NAME" ]]; then
+        if [[ "$NORMALIZED_URL" == *"?"* ]]; then
+          NORMALIZED_URL="${NORMALIZED_URL}&host=/cloudsql/${DB_CONN_NAME}"
+        else
+          NORMALIZED_URL="${NORMALIZED_URL}?host=/cloudsql/${DB_CONN_NAME}"
+        fi
       fi
-      printf "%s" "$REPAIRED_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
-      echo "🔧 Updated DATABASE_URL secret to include Cloud SQL socket host"
+      if [[ "$NORMALIZED_URL" != "$EXISTING_URL" ]]; then
+        printf "%s" "$NORMALIZED_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
+        echo "🔧 Normalized DATABASE_URL for Cloud SQL socket"
+      fi
     fi
   fi
   maybe_add_secret DATABASE_URL
@@ -115,7 +120,7 @@ else
     DB_PASSWORD=$(gcloud secrets versions access latest --secret=APP_DB_PASSWORD 2>/dev/null || true)
   fi
   if [[ -n "$DB_PASSWORD" && -n "$DB_CONN_NAME" ]]; then
-    DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}?host=/cloudsql/${DB_CONN_NAME}"
+    DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost/${DB_NAME}?host=/cloudsql/${DB_CONN_NAME}"
     gcloud secrets create DATABASE_URL --replication-policy=automatic >/dev/null 2>&1 || true
     printf "%s" "$DB_URL" | gcloud secrets versions add DATABASE_URL --data-file=- >/dev/null
     maybe_add_secret DATABASE_URL

@@ -11,7 +11,7 @@ VPC_NAME="${VPC_NAME:-chat-vpc}"
 DB_INSTANCE_NAME="${DB_INSTANCE_NAME:-chat-pg}"
 DB_VERSION="${DB_VERSION:-POSTGRES_17}"
 DB_TIER="${DB_TIER:-db-custom-1-3840}"
-DB_NAME="${DB_NAME:-appdb}"
+DB_NAME="${DB_NAME:-dynamicmcp}"
 DB_USER="${DB_USER:-appuser}"
 
 echo "🗄️  Creating Cloud SQL instance ${DB_INSTANCE_NAME} (private IP only) if missing..."
