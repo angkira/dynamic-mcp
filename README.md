@@ -1,4 +1,6 @@
 # Dynamic MCP - Model Context Protocol Management System
+[![Deploy server to Cloud Run](https://github.com/angkira/dynamic-mcp/actions/workflows/deploy-gcp.yml/badge.svg?branch=main)](https://github.com/angkira/dynamic-mcp/actions/workflows/deploy-gcp.yml)
+[![Deploy server to Cloud Run](https://github.com/angkira/dynamic-mcp/actions/workflows/deploy-gcp.yml/badge.svg)](https://github.com/angkira/dynamic-mcp/actions/workflows/deploy-gcp.yml)
 
 Dynamic MCP is an innovative system that allows you to **register and manage MCP (Model Context Protocol) servers directly through chat conversations**. This revolutionary approach eliminates the need for complex configuration files or manual server setup.
 
